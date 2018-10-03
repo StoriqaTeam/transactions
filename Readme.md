@@ -30,6 +30,7 @@ __Accounts__
 When a 9 `wei` deposit from blockchain arrives, the following transaction is created
 
 __Transactions__
+
 | id | dr_account_id | cr_account_id | value | status  | blockchain_tx_id |
 |----|---------------|---------------|-------|---------|------------------|
 | 1  | 35            | 36            | 9     | done    | 0xcdef76796      |
@@ -40,6 +41,7 @@ __Transactions__
 2) User makes a 3 `wei` withdrawal
 
 __Transactions__
+
 | id | dr_account_id | cr_account_id | value | status  | blockchain_tx_id |
 |----|---------------|---------------|-------|---------|------------------|
 | 2  | 36            | 35            | 3     | done    | 0xc58dae555      |
@@ -50,6 +52,7 @@ __Transactions__
 3) User makes a 5 `wei` transfer from own account to other user's account with id `49`
 
 __Transactions__
+
 | id | dr_account_id | cr_account_id | value | status  | blockchain_tx_id |
 |----|---------------|---------------|-------|---------|------------------|
 | 3  | 36            | 49            | 5     | done    |                  |
@@ -87,6 +90,7 @@ __Accounts__
 And a user wants to withdraw 5 `wei` from account `36`, and we know that both of these accounts have enough balance. Then we create a transaction in blockchain (meaning now we have a blockchain tx_id, e.g. `0x4f78cf324`) and send it to blockchain. At the same time we create a transaction in out system:
 
 __Transactions__
+
 | id | dr_account_id | cr_account_id | value | status  | blockchain_tx_id |
 |----|---------------|---------------|-------|---------|------------------|
 | 55 | 36            | 67            | 5     | pending | 0x4f78cf324      |
@@ -97,6 +101,7 @@ Once our system picks this tx_id from blockchain as confirmed, we switch this tr
 3) Withdrawal fees - in reality blockchain transaction will also have fees. That means that we also need to impose fees on transactions. Let's say we're using previous example and our fee is 2 `wei` and blockchain fee is 1 `wei` (that will be known at the time of blockchain confirmation). Let's say we the following accounts (incl. special `fees` account)
 
 __Accounts__
+
 | id | kind | currency | blockchain_address | name                  |
 |----|------|----------|--------------------|-----------------------|
 | 1  | cr   | eth      | 0xfad678           | System fees acc       |
@@ -110,6 +115,7 @@ Note that `fees` acc generally don't need a blockchain address, but if we screwe
 Then on step 1 we have
 
 __Transactions__
+
 | id | dr_account_id | cr_account_id | value | status  | blockchain_tx_id |
 |----|---------------|---------------|-------|---------|------------------|
 | 55 | 36            | 67            | 5     | pending | 0x4f78cf324      |
@@ -119,6 +125,7 @@ __Transactions__
 Once the tx `0x4f78cf324` arrives we learn that actual fee is 1 `wei`, we update the transactions table in the following way.
 
 __Transactions__
+
 | id | dr_account_id | cr_account_id | value | status  | blockchain_tx_id |
 |----|---------------|---------------|-------|---------|------------------|
 | 55 | 36            | 67            | 5     | done    | 0x4f78cf324      |
@@ -138,6 +145,7 @@ Each transfer to account with different currency is decomposed into
 So the transfer basically boils down to converting between own accounts. Let's consider a case with `BTC` and `ETH`. We need to have 4 special accounts in out system:
 
 __Accounts__
+
 | id | kind | currency | blockchain_address | name                      |
 |----|------|----------|--------------------|---------------------------|
 | 2  | cr   | eth      | 0xfad678           | System eth liquidity acc  |
@@ -150,6 +158,7 @@ __Accounts__
 Assuming current exchange rate is 5 ETH/BTC, we need have some balances, e.g. 10 btc and 50 eth. Same amounts must be stored on our exchange. Let's consider a user with two accounts
 
 __Accounts__
+
 | id | kind | currency | blockchain_address | name                      |
 |----|------|----------|--------------------|---------------------------|
 | 88 | cr   | eth      | 0xfad678           | My eth account            |
@@ -158,6 +167,7 @@ __Accounts__
 Once a user tries to make an exchange, a fixed exchange rate is given to him with expiration time, e.g. 4 ETH / BTC expiring in 5 minutes. Then if a user is making a transfer before expiration of 4 ETH into 1 BTC, we have the following trancations:
 
 __Transactions__
+
 | id | dr_account_id | cr_account_id | value | status  | blockchain_tx_id |
 |----|---------------|---------------|-------|---------|------------------|
 | 90 | 88            | 2             | 4     | done    |                  |
