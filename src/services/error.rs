@@ -69,7 +69,6 @@ impl From<ClientErrorKind> for ErrorKind {
         match err {
             ClientErrorKind::Internal => ErrorKind::Internal,
             ClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
-            ClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
         }
     }
 }

@@ -12,12 +12,15 @@ use models::AuthError;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use utils::read_body;
+use diesel::pg::PgConnection;
+use diesel::r2d2::ConnectionManager;
+use futures_cpupool::CpuPool;
+use r2d2::Pool;
 
 mod auth;
 mod controllers;
 mod error;
 mod requests;
-mod responses;
 mod utils;
 
 use self::auth::{Authenticator, AuthenticatorImpl};
@@ -30,6 +33,8 @@ pub struct ApiService {
     authenticator: Arc<dyn Authenticator>,
     server_address: SocketAddr,
     config: Config,
+    db_pool: Pool<ConnectionManager<PgConnection>>,
+    cpu_pool: CpuPool,
 }
 
 impl ApiService {
@@ -44,10 +49,20 @@ impl ApiService {
                 config.server.port
             ))?;
         let authenticator = AuthenticatorImpl::default();
+        let database_url = config.database.url.clone();
+        let manager = ConnectionManager::<PgConnection>::new(database_url.clone());
+        let db_pool: Result<Pool<ConnectionManager<PgConnection>>, Error> = r2d2::Pool::builder().build(manager).map_err(ectx!(raw_err
+            ErrorContext::Config,
+            ErrorKind::Internal =>
+            database_url
+        ))?;
+        let cpu_pool = CpuPool::new(config.cpu_pool.size);
         Ok(ApiService {
             config: config.clone(),
             authenticator: Arc::new(authenticator),
             server_address,
+            db_pool,
+            cpu_pool,
         })
     }
 }

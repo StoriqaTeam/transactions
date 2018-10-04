@@ -1,69 +1,23 @@
-mod error;
-mod users;
-
-pub use self::error::*;
-pub use self::users::*;
-
 use diesel::connection::AnsiTransactionManager;
 use diesel::pg::Pg;
 use diesel::Connection;
-use failure::Error as FailureError;
-use failure::Fail;
-use futures::Future;
-use r2d2::{ManageConnection, PooledConnection};
 
-use repos::ReposFactory;
+use repos::*;
 
-/// Service
-pub struct Service<T, M, F>
-where
-    T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static,
-    M: ManageConnection<Connection = T>,
-    F: ReposFactory<T>,
+pub trait ReposFactory<C: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static>:
+    Clone + Send + Sync + 'static
 {
-    pub static_context: StaticContext<T, M, F>,
-    pub dynamic_context: DynamicContext,
+    fn create_users_repo<'a>(&self, db_conn: &'a C) -> Box<UsersRepo + 'a>;
 }
 
-impl<
-        T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static,
-        M: ManageConnection<Connection = T>,
-        F: ReposFactory<T>,
-    > Service<T, M, F>
-{
-    /// Create a new service
-    pub fn new(static_context: StaticContext<T, M, F>, dynamic_context: DynamicContext) -> Self {
-        Self {
-            static_context,
-            dynamic_context,
-        }
-    }
+#[derive(Default, Copy, Clone, Debug)]
+pub struct ReposFactoryImpl;
 
-    pub fn spawn_on_pool<R, Func>(&self, f: Func) -> ServiceFuture<R>
-    where
-        Func: FnOnce(PooledConnection<M>) -> Result<R, FailureError> + Send + 'static,
-        R: Send + 'static,
-    {
-        let db_pool = self.static_context.db_pool.clone();
-        let cpu_pool = self.static_context.cpu_pool.clone();
-        Box::new(cpu_pool.spawn_fn(move || db_pool.get().map_err(|e| e.context(Error::Connection).into()).and_then(f)))
+impl<C: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static> ReposFactory<C> for ReposFactoryImpl {
+    fn create_users_repo<'a>(&self, db_conn: &'a C) -> Box<UsersRepo + 'a> {
+        Box::new(UsersRepoImpl::new(db_conn)) as Box<UsersRepo>
     }
 }
-
-impl<
-        T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static,
-        M: ManageConnection<Connection = T>,
-        F: ReposFactory<T>,
-    > Clone for Service<T, M, F>
-{
-    fn clone(&self) -> Self {
-        Self {
-            static_context: self.static_context.clone(),
-            dynamic_context: self.dynamic_context.clone(),
-        }
-    }
-}
-
 
 #[cfg(test)]
 pub mod tests {
@@ -115,6 +69,47 @@ pub mod tests {
     use repos::types::RepoResult;
     use repos::users::UsersRepo;
     use services::Service;
+
+    pub const MOCK_REPO_FACTORY: ReposFactoryMock = ReposFactoryMock {};
+    pub const MOCK_USERS: UsersRepoMock = UsersRepoMock {};
+
+    #[derive(Default, Copy, Clone)]
+    pub struct ReposFactoryMock;
+
+    impl<C: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static> ReposFactory<C> for ReposFactoryMock {
+        fn create_users_repo<'a>(&self, _db_conn: &'a C) -> Box<UsersRepo + 'a> {
+            Box::new(UsersRepoMock::default()) as Box<UsersRepo>
+        }
+    }
+
+    #[derive(Clone, Default)]
+    pub struct UsersRepoMock;
+
+    pub fn create_user(id: UserId, name: String) -> User {
+        User {
+            id,
+            name,
+            ..Default::default()
+        }
+    }
+
+    impl UsersRepo for UsersRepoMock {
+        fn read(&self, user_id: UserId) -> RepoResult<Option<User>> {
+            let user = create_user(user_id, MOCK_EMAIL.to_string());
+            Ok(Some(user))
+        }
+
+        fn create(&self, payload: NewUser) -> RepoResult<User> {
+            let user = create_user(UserId(1), payload.email);
+            Ok(user)
+        }
+
+        fn delete(&self, user_id: UserId) -> RepoResult<User> {
+            let mut user = create_user(user_id, MOCK_EMAIL.to_string());
+            user.is_active = false;
+            Ok(user)
+        }
+    }
 
     pub fn create_service(
         user_id: Option<UserId>,

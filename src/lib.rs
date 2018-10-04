@@ -2,7 +2,9 @@ extern crate futures;
 #[macro_use]
 extern crate failure;
 extern crate diesel;
+extern crate futures_cpupool;
 extern crate hyper;
+extern crate r2d2;
 extern crate serde;
 extern crate serde_json;
 #[macro_use]
@@ -20,6 +22,7 @@ extern crate jsonwebtoken;
 extern crate regex;
 #[macro_use]
 extern crate validator_derive;
+extern crate num;
 extern crate validator;
 #[macro_use]
 extern crate sentry;
@@ -27,6 +30,7 @@ extern crate sentry;
 #[macro_use]
 mod macros;
 mod api;
+mod repos;
 mod client;
 mod config;
 mod models;

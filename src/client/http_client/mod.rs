@@ -9,7 +9,7 @@ use hyper::{client::HttpConnector, Body, Request, Response};
 use hyper_tls::HttpsConnector;
 use log::{self, Level};
 
-use self::error::*;
+pub use self::error::*;
 use utils::read_body;
 
 pub trait HttpClient: Send + Sync + 'static {
