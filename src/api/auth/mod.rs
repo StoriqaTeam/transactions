@@ -24,7 +24,7 @@ impl Authenticator for AuthenticatorImpl {
         let len = "Bearer ".len();
         if (header.len() > len) && header.starts_with("Bearer ") {
             Ok(Auth {
-                user_id: UserId::new(header[len..].to_string()),
+                token: AuthenticationToken::new(header[len..].to_string()),
             })
         } else {
             Err(ectx!(err ErrorContext::InvalidBearer, ErrorKind::Unauthorized => header))

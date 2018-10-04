@@ -1,36 +1,39 @@
+use std::time::SystemTime;
+
 use validator::Validate;
 
-use models::Password;
+use models::{AuthenticationToken, UserId};
+use schema::users;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Queryable, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
-    pub email: String,
-    pub first_name: String,
-    pub last_name: String,
-    pub phone: Option<String>,
+    pub id: UserId,
+    pub name: String,
+    pub authentication_token: AuthenticationToken,
+    pub created_at: SystemTime,
+    pub updated_at: SystemTime,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
+#[derive(Debug, Deserialize, Insertable, Validate, Clone)]
 #[serde(rename_all = "camelCase")]
+#[table_name = "users"]
 pub struct NewUser {
-    #[validate(email(message = "Invalid email format"))]
-    pub email: String,
-    #[validate(length(min = "1", message = "First name must not be empty"))]
-    pub first_name: String,
-    #[validate(length(min = "1", message = "Last name must not be empty"))]
-    pub last_name: String,
+    pub id: UserId,
+    #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
+    pub name: String,
     #[validate]
-    pub password: Password,
+    pub authentication_token: AuthenticationToken,
+    pub created_at: SystemTime,
+    pub updated_at: SystemTime,
 }
 
-impl NewUser {
-    pub fn new(email: String, first_name: String, last_name: String, password: Password) -> Self {
-        Self {
-            email,
-            first_name,
-            last_name,
-            password,
-        }
-    }
+/// Payload for updating users
+#[derive(Debug, Deserialize, Insertable, Validate, AsChangeset, Clone)]
+#[table_name = "users"]
+pub struct UpdateUser {
+    #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
+    pub name: Option<String>,
+    #[validate]
+    pub authentication_token: Option<AuthenticationToken>,
 }

@@ -10,6 +10,7 @@ pub struct Config {
     pub database: Database,
     pub client: Client,
     pub auth: Auth,
+    pub cpu_pool: CpuPool,
     pub sentry: Option<SentryConfig>,
 }
 
@@ -34,6 +35,11 @@ pub struct Server {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Database {
     pub url: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct CpuPool {
+    pub size: usize,
 }
 
 impl Config {

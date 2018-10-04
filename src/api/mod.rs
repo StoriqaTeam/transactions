@@ -3,30 +3,32 @@ use hyper::{service::Service, Body, Request, Response};
 
 use super::config::Config;
 use super::utils::{log_and_capture_error, log_error, log_warn};
-use client::{HttpClientImpl};
+use diesel::pg::PgConnection;
+use diesel::r2d2::ConnectionManager;
 use failure::{Compat, Fail};
 use futures::future;
 use futures::prelude::*;
+use futures_cpupool::CpuPool;
 use hyper::Server;
 use models::AuthError;
+use r2d2::Pool;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use utils::read_body;
-use diesel::pg::PgConnection;
-use diesel::r2d2::ConnectionManager;
-use futures_cpupool::CpuPool;
-use r2d2::Pool;
 
 mod auth;
 mod controllers;
 mod error;
+mod parse_query;
 mod requests;
 mod utils;
 
 use self::auth::{Authenticator, AuthenticatorImpl};
 use self::controllers::*;
 use self::error::*;
-use services::UsersServiceImpl;
+use models::UserId;
+use repos::ReposFactoryImpl;
+use services::Service as StqService;
 
 #[derive(Clone)]
 pub struct ApiService {
@@ -35,11 +37,11 @@ pub struct ApiService {
     config: Config,
     db_pool: Pool<ConnectionManager<PgConnection>>,
     cpu_pool: CpuPool,
+    repo_factory: ReposFactoryImpl,
 }
 
 impl ApiService {
     fn from_config(config: &Config) -> Result<Self, Error> {
-        let client = HttpClientImpl::new(config);
         let server_address = format!("{}:{}", config.server.host, config.server.port)
             .parse::<SocketAddr>()
             .map_err(ectx!(raw_err
@@ -51,18 +53,21 @@ impl ApiService {
         let authenticator = AuthenticatorImpl::default();
         let database_url = config.database.url.clone();
         let manager = ConnectionManager::<PgConnection>::new(database_url.clone());
-        let db_pool: Result<Pool<ConnectionManager<PgConnection>>, Error> = r2d2::Pool::builder().build(manager).map_err(ectx!(raw_err
+        let db_pool = r2d2::Pool::builder().build(manager).map_err(ectx!(raw_err
             ErrorContext::Config,
             ErrorKind::Internal =>
             database_url
         ))?;
         let cpu_pool = CpuPool::new(config.cpu_pool.size);
+        let repo_factory = ReposFactoryImpl::default();
+
         Ok(ApiService {
             config: config.clone(),
             authenticator: Arc::new(authenticator),
             server_address,
             db_pool,
             cpu_pool,
+            repo_factory,
         })
     }
 }
@@ -76,21 +81,23 @@ impl Service for ApiService {
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let (parts, http_body) = req.into_parts();
         let authenticator = self.authenticator.clone();
+        let db_pool = self.db_pool.clone();
+        let cpu_pool = self.cpu_pool.clone();
+        let repo_factory = self.repo_factory.clone();
         Box::new(
             read_body(http_body)
                 .map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal))
                 .and_then(move |body| {
                     let router = router! {
-                        POST /v1/sessions => post_sessions,
-                        POST /v1/sessions/oauth => post_sessions_oauth,
                         POST /v1/users => post_users,
-                        POST /v1/users/confirm_email => post_users_confirm_email,
-                        GET /v1/users/me => get_users_me,
+                        GET /v1/users/{user_id: UserId} => get_users,
+                        PUT /v1/users/{user_id: UserId} => put_users,
+                        DELETE /v1/users/{user_id: UserId} => delete_users,
                         _ => not_found,
                     };
 
                     let auth_result = authenticator.authenticate(&parts.headers).map_err(AuthError::new);
-                    let users_service = UsersServiceImpl::new(auth_result.clone());
+                    let service = StqService::new(db_pool, cpu_pool, repo_factory);
 
                     let ctx = Context {
                         body,
@@ -98,7 +105,7 @@ impl Service for ApiService {
                         uri: parts.uri.clone(),
                         headers: parts.headers,
                         auth_result,
-                        users_service: Arc::new(users_service),
+                        users_service: Arc::new(service),
                     };
 
                     debug!("Received request {}", ctx);

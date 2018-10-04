@@ -135,7 +135,6 @@ pub mod tests {
         Service::new(static_context, dynamic_context)
     }
 
-    
     #[derive(Default)]
     pub struct MockConnection {
         tr: AnsiTransactionManager,

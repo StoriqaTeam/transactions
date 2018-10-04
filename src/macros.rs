@@ -19,7 +19,7 @@ macro_rules! ectx {
         let err = ectx!(err_contexts $e $(,$context)* $(=> $($arg),*)*);
         err.into()
     }};
-    
+
     (catch err $e:expr $(,$context:expr)* $(=> $($arg:expr),*)*) => {{
         let e = $e.kind().into();
         ectx!(err $e $(,$context)*, e $(=> $($arg),*)*)
@@ -30,7 +30,7 @@ macro_rules! ectx {
             ectx!(catch err e $(,$context)* $(=> $($arg),*)*)
         }
     }};
-    
+
     (raw_err $($context:expr),* $(=> $($arg:expr),*)*) => {{
         move |e| {
             ectx!(err_contexts e $(,$context)* $(=> $($arg),*)*)

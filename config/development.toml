@@ -12,3 +12,6 @@ storiqa_url = "https://stable.stq.cloud/graphql"
 
 [database]
 url = "postgresql://transactions:transactions@transactions-pg/transactions"
+
+[cpu_pool]
+size = 1

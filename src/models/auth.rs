@@ -1,12 +1,13 @@
-use super::user_id::UserId;
-use prelude::*;
 use std::{fmt, fmt::Display};
+
+use models::AuthenticationToken;
+use prelude::*;
 use utils::format_error;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Auth {
-    pub user_id: UserId,
+    pub token: AuthenticationToken,
 }
 
 pub type AuthResult = Result<Auth, AuthError>;

@@ -31,3 +31,4 @@ serde_derive = "1"
 serde_json = "1"
 validator = "0.8"
 validator_derive = "0.8"
+uuid = { version = "0.6", features = ["use_std", "v4", "serde"] }

@@ -7,12 +7,15 @@ pub use self::users::*;
 use diesel::connection::AnsiTransactionManager;
 use diesel::pg::Pg;
 use diesel::Connection;
-use failure::Error as FailureError;
 use failure::Fail;
 use futures::Future;
+use futures_cpupool::CpuPool;
+use r2d2::Pool;
 use r2d2::{ManageConnection, PooledConnection};
 
 use repos::ReposFactory;
+
+pub type ServiceFuture<T> = Box<Future<Item = T, Error = Error> + Send>;
 
 /// Service
 pub struct Service<T, M, F>
@@ -21,8 +24,9 @@ where
     M: ManageConnection<Connection = T>,
     F: ReposFactory<T>,
 {
-    pub static_context: StaticContext<T, M, F>,
-    pub dynamic_context: DynamicContext,
+    db_pool: Pool<M>,
+    cpu_pool: CpuPool,
+    repo_factory: F,
 }
 
 impl<
@@ -32,21 +36,22 @@ impl<
     > Service<T, M, F>
 {
     /// Create a new service
-    pub fn new(static_context: StaticContext<T, M, F>, dynamic_context: DynamicContext) -> Self {
+    pub fn new(db_pool: Pool<M>, cpu_pool: CpuPool, repo_factory: F) -> Self {
         Self {
-            static_context,
-            dynamic_context,
+            db_pool,
+            cpu_pool,
+            repo_factory,
         }
     }
 
     pub fn spawn_on_pool<R, Func>(&self, f: Func) -> ServiceFuture<R>
     where
-        Func: FnOnce(PooledConnection<M>) -> Result<R, FailureError> + Send + 'static,
+        Func: FnOnce(PooledConnection<M>) -> Result<R, Error> + Send + 'static,
         R: Send + 'static,
     {
-        let db_pool = self.static_context.db_pool.clone();
-        let cpu_pool = self.static_context.cpu_pool.clone();
-        Box::new(cpu_pool.spawn_fn(move || db_pool.get().map_err(|e| e.context(Error::Connection).into()).and_then(f)))
+        let db_pool = self.db_pool.clone();
+        let cpu_pool = self.cpu_pool.clone();
+        Box::new(cpu_pool.spawn_fn(move || db_pool.get().map_err(ectx!(ErrorKind::Internal)).and_then(f)))
     }
 }
 
@@ -58,12 +63,12 @@ impl<
 {
     fn clone(&self) -> Self {
         Self {
-            static_context: self.static_context.clone(),
-            dynamic_context: self.dynamic_context.clone(),
+            db_pool: self.db_pool.clone(),
+            cpu_pool: self.cpu_pool.clone(),
+            repo_factory: self.repo_factory.clone(),
         }
     }
 }
-
 
 #[cfg(test)]
 pub mod tests {
@@ -140,7 +145,6 @@ pub mod tests {
         Service::new(static_context, dynamic_context)
     }
 
-    
     #[derive(Default)]
     pub struct MockConnection {
         tr: AnsiTransactionManager,

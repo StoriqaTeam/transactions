@@ -1,12 +1,16 @@
-use super::error::*;
-use super::ControllerFuture;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::iter::FromIterator;
+
 use failure::Fail;
 use futures::prelude::*;
 use hyper::Response;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json;
-use std::fmt::Debug;
+
+use super::error::*;
+use super::ControllerFuture;
 
 pub fn parse_body<T>(body: Vec<u8>) -> impl Future<Item = T, Error = Error> + Send
 where
@@ -34,4 +38,13 @@ where
                     .unwrap()
             }),
     )
+}
+
+/// Splits query string to key-value pairs. See `macros::parse_query` for more sophisticated parsing.
+// TODO: Cover more complex cases, e.g. `from=count=10`
+pub fn query_params(query: &str) -> HashMap<&str, &str> {
+    HashMap::from_iter(query.split('&').map(|pair| {
+        let mut params = pair.split('=');
+        (params.next().unwrap(), params.next().unwrap_or(""))
+    }))
 }
