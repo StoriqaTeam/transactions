@@ -1,0 +1,30 @@
+[package]
+name = "transactions"
+version = "0.1.0"
+authors = ["Alexey Karasev <karasev.alexey@gmail.com>"]
+
+[lib]
+name = "transactions_lib"
+path = "src/lib.rs"
+
+[dependencies]
+base64 = "0.9"
+clap = {version = "2", features = ["yaml"]}
+config = "0.9"
+diesel = "1"
+env_logger = "0.5"
+failure = "0.1"
+futures = "0.1"
+http_router = "0.1"
+hyper = "0.12"
+hyper-tls = "0.3"
+jsonwebtoken = "5"
+lazy_static = "1.1.0"
+log = "0.4"
+regex = "1"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
+validator = "0.8"
+validator_derive = "0.8"
+sentry = "0.12"
