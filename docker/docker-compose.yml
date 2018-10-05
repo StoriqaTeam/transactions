@@ -1,0 +1,42 @@
+version: '3'
+services:
+  transactions:
+    image: transactions
+    build:
+      context: .
+      dockerfile: Dockerfile.default
+    container_name: transactions
+    working_dir: /app
+    command: ["sh", "-c", "/utils/wait_for_it.sh transactions-pg:5432 ; diesel migration run ; cargo run"]
+    volumes:
+      - ..:/app
+      - stq_cargo_cache:/usr/local/cargo
+    environment:
+      - DATABASE_URL=postgresql://transactions:transactions@transactions-pg/transactions
+      - "RUST_LOG=transactions=debug"
+    expose:
+      - 8000
+    stdin_open: true
+    depends_on:
+      - transactions-pg
+
+  transactions-pg:
+    image: postgres:10
+    container_name: transactions-pg
+    volumes:
+      - stq-transactions-postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=transactions
+      - POSTGRES_DB=transactions
+      - POSTGRES_PASSWORD=transactions
+    expose:
+      - 5432
+
+volumes:
+  stq_cargo_cache:
+  stq-transactions-postgres-data:
+
+networks:
+  default:
+    external:
+      name: payments

@@ -1,0 +1,15 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: transactions
+  labels:
+    stack: transactions
+spec:
+  selector:
+    stack: transactions
+    app: gateway
+  ports:
+  - name: main
+    protocol: TCP
+    port: 8000
+    targetPort: 8000

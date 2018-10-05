@@ -1,0 +1,45 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: transactions
+  labels:
+    stack: transactions
+    app: gateway
+spec:
+  selector:
+    matchLabels:
+      app: gateway
+      stack: transactions
+  replicas: 1
+  template:
+    metadata:
+      name: transactions
+      labels:
+        app: gateway
+        stack: transactions
+    spec:
+      imagePullSecrets:
+      - name: stq
+      containers:
+      - name: gateway
+        image: storiqateam/transactions
+        ports:
+        - containerPort: 8000
+        env:
+        - name: RUN_MODE
+          value: k8s
+        - name: RUST_BACKTRACE
+          value: "1"
+        - name: RUST_LOG
+          value: transactions=debug
+        - name: DATABASE_HOST
+          value: postgres
+        - name: DATABASE_URL
+          value: postgresql://gateway:gateway@postgres/gateway
+        volumeMounts:
+        - name: conf
+          mountPath: /app/config/
+      volumes:
+      - name: conf
+        configMap:
+          name: transactions
