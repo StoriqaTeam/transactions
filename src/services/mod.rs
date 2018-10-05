@@ -72,18 +72,12 @@ impl<
 
 #[cfg(test)]
 pub mod tests {
-    extern crate base64;
     extern crate diesel;
     extern crate futures;
     extern crate futures_cpupool;
-    extern crate hyper;
     extern crate r2d2;
-    extern crate rand;
-    extern crate serde_json;
-    extern crate sha3;
-    extern crate stq_http;
-    extern crate tokio_core;
 
+    use std::env;
     use std::error::Error;
     use std::fmt;
     use std::fs::File;
@@ -91,11 +85,11 @@ pub mod tests {
     use std::sync::Arc;
     use std::time::SystemTime;
 
-    use base64::encode;
     use diesel::connection::AnsiTransactionManager;
     use diesel::connection::SimpleConnection;
     use diesel::deserialize::QueryableByName;
     use diesel::pg::Pg;
+    use diesel::prelude::*;
     use diesel::query_builder::AsQuery;
     use diesel::query_builder::QueryFragment;
     use diesel::query_builder::QueryId;
@@ -106,43 +100,22 @@ pub mod tests {
     use diesel::Queryable;
     use futures_cpupool::CpuPool;
     use r2d2::ManageConnection;
-    use sha3::{Digest, Sha3_256};
-    use tokio_core::reactor::Handle;
-
-    use stq_static_resources::{Provider, TokenType};
-    use stq_types::{RoleId, UserId, UsersRole};
 
     use config::Config;
-    use controller::context::{DynamicContext, StaticContext};
     use models::*;
-    use repos::identities::IdentitiesRepo;
+    use repos::repo_factory::tests::ReposFactoryMock;
     use repos::repo_factory::ReposFactory;
     use repos::types::RepoResult;
     use repos::users::UsersRepo;
     use services::Service;
 
-    pub fn create_service(
-        user_id: Option<UserId>,
-        handle: Arc<Handle>,
-    ) -> Service<MockConnection, MockConnectionManager, ReposFactoryMock> {
+    pub const MOCK_REPO_FACTORY: ReposFactoryMock = ReposFactoryMock {};
+
+    pub fn create_service() -> Service<MockConnection, MockConnectionManager, ReposFactoryMock> {
         let manager = MockConnectionManager::default();
         let db_pool = r2d2::Pool::builder().build(manager).expect("Failed to create connection pool");
         let cpu_pool = CpuPool::new(1);
-
-        let config = Config::new().unwrap();
-        let client = stq_http::client::Client::new(&config.to_http_config(), &handle);
-        let client_handle = client.handle();
-        let static_context = StaticContext::new(
-            db_pool,
-            cpu_pool,
-            client_handle,
-            Arc::new(config),
-            MOCK_REPO_FACTORY,
-            jwt_private_key,
-        );
-        let dynamic_context = DynamicContext::new(user_id);
-
-        Service::new(static_context, dynamic_context)
+        Service::new(db_pool, cpu_pool, MOCK_REPO_FACTORY)
     }
 
     #[derive(Default)]

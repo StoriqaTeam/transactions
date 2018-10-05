@@ -12,7 +12,7 @@ use serde::{Serialize, Serializer};
 
 use validator::{Validate, ValidationErrors};
 
-#[derive(Deserialize, FromSqlRow, AsExpression, Clone)]
+#[derive(Deserialize, FromSqlRow, AsExpression, Clone, Default)]
 #[sql_type = "VarChar"]
 pub struct AuthenticationToken(String);
 

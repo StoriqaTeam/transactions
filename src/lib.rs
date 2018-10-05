@@ -27,11 +27,12 @@ extern crate num;
 extern crate validator;
 #[macro_use]
 extern crate sentry;
+extern crate tokio_core;
 extern crate uuid;
 
 #[macro_use]
 mod macros;
-mod api;
+pub mod api;
 mod client;
 mod config;
 mod models;

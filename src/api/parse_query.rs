@@ -11,7 +11,7 @@ macro_rules! get_and_parse {
 ///
 /// # Examples
 /// ```
-/// #[macro_use] extern crate users_lib;
+/// #[macro_use] extern crate transactions_lib;
 ///
 /// fn main() {
 ///     assert_eq!(parse_query!("from=12", "from" => i32), Some(12));

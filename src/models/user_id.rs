@@ -7,7 +7,7 @@ use diesel::serialize::{self, Output, ToSql};
 use diesel::sql_types::Uuid as SqlUuid;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Default)]
 #[sql_type = "SqlUuid"]
 pub struct UserId(Uuid);
 

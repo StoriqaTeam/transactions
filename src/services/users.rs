@@ -47,3 +47,33 @@ impl<
         })
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    extern crate diesel;
+    extern crate tokio_core;
+
+    use std::env;
+
+    use diesel::prelude::*;
+    use tokio_core::reactor::Core;
+
+    use super::*;
+    use models::*;
+    use services::tests::create_service;
+
+    #[test]
+    fn crud() {
+        let mut rt = Core::new().unwrap();
+        let service = create_service();
+        let new_user = NewUser::default();
+        assert!(rt.run(service.create_user(new_user.clone())).is_ok());
+        assert!(rt.run(service.get_user(new_user.id)).is_ok());
+        let payload = UpdateUser {
+            name: Some("test".to_string()),
+            authentication_token: None,
+        };
+        assert!(rt.run(service.update_user(new_user.id, payload)).is_ok());
+        assert!(rt.run(service.delete_user(new_user.id)).is_ok());
+    }
+}

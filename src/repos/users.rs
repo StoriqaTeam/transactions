@@ -19,16 +19,9 @@ pub struct UsersRepoImpl<'a, T: Connection<Backend = Pg, TransactionManager = An
 }
 
 pub trait UsersRepo {
-    /// Find specific user by ID
     fn get(&self, user_id: UserId) -> RepoResult<Option<User>>;
-
-    /// Creates new user
     fn create(&self, payload: NewUser) -> RepoResult<User>;
-
-    /// Updates specific user
     fn update(&self, user_id: UserId, payload: UpdateUser) -> RepoResult<User>;
-
-    /// Deactivates specific user
     fn delete(&self, user_id: UserId) -> RepoResult<User>;
 }
 
@@ -39,7 +32,6 @@ impl<'a, T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager
 }
 
 impl<'a, T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static> UsersRepo for UsersRepoImpl<'a, T> {
-    /// Find specific user by ID
     fn get(&self, user_id_arg: UserId) -> RepoResult<Option<User>> {
         let query = users.find(user_id_arg);
         query
@@ -48,7 +40,6 @@ impl<'a, T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager
             .map_err(ectx!(ErrorKind::Internal => user_id_arg))
     }
 
-    /// Creates new user
     fn create(&self, payload: NewUser) -> RepoResult<User> {
         diesel::insert_into(users)
             .values(payload.clone())
@@ -56,7 +47,6 @@ impl<'a, T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager
             .map_err(ectx!(ErrorKind::Internal => payload))
     }
 
-    /// Updates specific user
     fn update(&self, user_id_arg: UserId, payload: UpdateUser) -> RepoResult<User> {
         let filter = users.filter(id.eq(user_id_arg));
         diesel::update(filter)
@@ -65,11 +55,46 @@ impl<'a, T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager
             .map_err(ectx!(ErrorKind::Internal => user_id_arg, payload))
     }
 
-    /// Deactivates specific user
     fn delete(&self, user_id_arg: UserId) -> RepoResult<User> {
         let filtered = users.find(user_id_arg);
         diesel::delete(filtered)
             .get_result(self.db_conn)
             .map_err(ectx!(ErrorKind::Internal => user_id_arg))
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    extern crate diesel;
+
+    use std::env;
+
+    use diesel::prelude::*;
+
+    use super::*;
+    use models::*;
+    use config::Config;
+
+    pub fn connection() -> PgConnection {
+        let config = Config::new().unwrap();
+        let conn = PgConnection::establish(&config.database.url).unwrap();
+        conn.begin_test_transaction().unwrap();
+        conn
+    }
+
+    #[test]
+    fn crud() {
+        let test_connection = connection();
+        let repo = UsersRepoImpl::new(&test_connection);
+        let new_user = NewUser::default();
+
+        assert!(repo.create(new_user.clone()).is_ok());
+        assert!(repo.get(new_user.id).is_ok());
+        let payload = UpdateUser {
+            name: Some("test".to_string()),
+            authentication_token: None,
+        };
+        assert!(repo.update(new_user.id, payload).is_ok());
+        assert!(repo.delete(new_user.id).is_ok());
     }
 }

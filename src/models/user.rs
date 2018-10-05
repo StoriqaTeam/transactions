@@ -37,3 +37,27 @@ pub struct UpdateUser {
     #[validate]
     pub authentication_token: Option<AuthenticationToken>,
 }
+
+impl Default for User {
+    fn default() -> Self {
+        Self {
+            id: UserId::default(),
+            name: String::default(),
+            authentication_token: AuthenticationToken::default(),
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+        }
+    }
+}
+
+impl Default for NewUser {
+    fn default() -> Self {
+        Self {
+            id: UserId::default(),
+            name: String::default(),
+            authentication_token: AuthenticationToken::default(),
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+        }
+    }
+}

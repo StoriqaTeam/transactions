@@ -21,7 +21,7 @@ mod controllers;
 mod error;
 mod parse_query;
 mod requests;
-mod utils;
+pub mod utils;
 
 use self::auth::{Authenticator, AuthenticatorImpl};
 use self::controllers::*;
