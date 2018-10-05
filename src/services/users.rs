@@ -13,12 +13,7 @@ pub trait UsersService: Send + Sync + 'static {
     fn delete_user(&self, user_id: UserId) -> Box<Future<Item = User, Error = Error> + Send>;
 }
 
-impl<
-        T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static,
-        M: ManageConnection<Connection = T>,
-        F: ReposFactory<T>,
-    > UsersService for Service<T, M, F>
-{
+impl UsersService for Service {
     fn create_user(&self, input: NewUser) -> Box<Future<Item = User, Error = Error> + Send> {
         Box::new(
             input
@@ -80,13 +75,9 @@ pub mod tests {
     extern crate diesel;
     extern crate tokio_core;
 
-    use std::env;
-
-    use diesel::prelude::*;
     use tokio_core::reactor::Core;
 
     use super::*;
-    use models::*;
     use services::tests::create_service;
 
     #[test]

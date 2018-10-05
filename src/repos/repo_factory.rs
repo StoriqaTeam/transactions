@@ -1,18 +1,16 @@
-use diesel::connection::AnsiTransactionManager;
-use diesel::pg::Pg;
-use diesel::Connection;
+use diesel::pg::PgConnection;
 
 use repos::*;
 
-pub trait ReposFactory<C: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static>: Send + Sync + 'static {
-    fn create_users_repo<'a>(&self, db_conn: &'a C) -> Box<UsersRepo + 'a>;
+pub trait ReposFactory: Send + Sync + 'static {
+    fn create_users_repo<'a>(&self, db_conn: &'a PgConnection) -> Box<UsersRepo + 'a>;
 }
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct ReposFactoryImpl;
 
-impl<C: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static> ReposFactory<C> for ReposFactoryImpl {
-    fn create_users_repo<'a>(&self, db_conn: &'a C) -> Box<UsersRepo + 'a> {
+impl ReposFactory for ReposFactoryImpl {
+    fn create_users_repo<'a>(&self, db_conn: &'a PgConnection) -> Box<UsersRepo + 'a> {
         Box::new(UsersRepoImpl::new(db_conn)) as Box<UsersRepo>
     }
 }
@@ -27,41 +25,18 @@ pub mod tests {
     extern crate r2d2;
     extern crate serde_json;
 
-    use std::error::Error;
-    use std::fmt;
-    use std::fs::File;
-    use std::io::prelude::*;
-    use std::sync::Arc;
-    use std::time::SystemTime;
+    use diesel::pg::PgConnection;
 
-    use diesel::connection::AnsiTransactionManager;
-    use diesel::connection::SimpleConnection;
-    use diesel::deserialize::QueryableByName;
-    use diesel::pg::Pg;
-    use diesel::query_builder::AsQuery;
-    use diesel::query_builder::QueryFragment;
-    use diesel::query_builder::QueryId;
-    use diesel::sql_types::HasSqlType;
-    use diesel::Connection;
-    use diesel::ConnectionResult;
-    use diesel::QueryResult;
-    use diesel::Queryable;
-    use futures_cpupool::CpuPool;
-    use r2d2::ManageConnection;
-
-    use config::Config;
     use models::*;
     use repos::repo_factory::ReposFactory;
     use repos::types::RepoResult;
     use repos::users::UsersRepo;
 
-    pub const MOCK_USERS: UsersRepoMock = UsersRepoMock {};
-
     #[derive(Default, Copy, Clone)]
     pub struct ReposFactoryMock;
 
-    impl<C: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static> ReposFactory<C> for ReposFactoryMock {
-        fn create_users_repo<'a>(&self, _db_conn: &'a C) -> Box<UsersRepo + 'a> {
+    impl ReposFactory for ReposFactoryMock {
+        fn create_users_repo<'a>(&self, _db_conn: &'a PgConnection) -> Box<UsersRepo + 'a> {
             Box::new(UsersRepoMock::default()) as Box<UsersRepo>
         }
     }
@@ -85,7 +60,7 @@ pub mod tests {
         }
 
         fn delete(&self, user_id: UserId) -> RepoResult<User> {
-            let mut user = create_user(user_id);
+            let user = create_user(user_id);
             Ok(user)
         }
 

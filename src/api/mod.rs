@@ -11,7 +11,6 @@ use futures::prelude::*;
 use futures_cpupool::CpuPool;
 use hyper::Server;
 use models::AuthError;
-use r2d2::Pool;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use utils::read_body;
@@ -27,6 +26,7 @@ use self::auth::{Authenticator, AuthenticatorImpl};
 use self::controllers::*;
 use self::error::*;
 use models::UserId;
+use prelude::*;
 use repos::ReposFactoryImpl;
 use services::Service as StqService;
 
@@ -35,7 +35,7 @@ pub struct ApiService {
     authenticator: Arc<dyn Authenticator>,
     server_address: SocketAddr,
     config: Config,
-    db_pool: Pool<ConnectionManager<PgConnection>>,
+    db_pool: PgConnectionPool,
     cpu_pool: CpuPool,
     repo_factory: ReposFactoryImpl,
 }

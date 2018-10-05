@@ -1,10 +1,7 @@
 //! Users repo, presents CRUD operations with db for users
 use diesel;
-use diesel::connection::AnsiTransactionManager;
-use diesel::pg::Pg;
 use diesel::prelude::*;
 use diesel::query_dsl::RunQueryDsl;
-use diesel::Connection;
 use failure::Fail;
 
 use super::types::RepoResult;
@@ -14,8 +11,8 @@ use repos::ErrorKind;
 use schema::users::dsl::*;
 
 /// Users repository, responsible for handling users
-pub struct UsersRepoImpl<'a, T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static> {
-    pub db_conn: &'a T,
+pub struct UsersRepoImpl<'a> {
+    pub db_conn: &'a PgConnection,
 }
 
 pub trait UsersRepo {
@@ -25,13 +22,13 @@ pub trait UsersRepo {
     fn delete(&self, user_id: UserId) -> RepoResult<User>;
 }
 
-impl<'a, T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static> UsersRepoImpl<'a, T> {
-    pub fn new(db_conn: &'a T) -> Self {
+impl<'a> UsersRepoImpl<'a> {
+    pub fn new(db_conn: &'a PgConnection) -> Self {
         Self { db_conn }
     }
 }
 
-impl<'a, T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static> UsersRepo for UsersRepoImpl<'a, T> {
+impl<'a> UsersRepo for UsersRepoImpl<'a> {
     fn get(&self, user_id_arg: UserId) -> RepoResult<Option<User>> {
         let query = users.find(user_id_arg);
         query
@@ -66,8 +63,6 @@ impl<'a, T: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager
 #[cfg(test)]
 pub mod tests {
     extern crate diesel;
-
-    use std::env;
 
     use diesel::prelude::*;
 
