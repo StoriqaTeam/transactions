@@ -17,9 +17,9 @@ impl Authenticator for AuthenticatorImpl {
         let headers_clone = headers.clone();
         let header = headers
             .get(AUTHORIZATION)
-            .ok_or(ectx!(err_contexts ErrorContext::NoAuthHeader, ErrorKind::Unauthorized => headers_clone))?
+            .ok_or(ectx!(try err ErrorContext::NoAuthHeader, ErrorKind::Unauthorized => headers_clone))?
             .to_str()
-            .map_err(ectx!(raw_err ErrorContext::ParseAuthHeader, ErrorKind::Unauthorized))?;
+            .map_err(ectx!(try ErrorContext::ParseAuthHeader, ErrorKind::Unauthorized))?;
 
         let len = "Bearer ".len();
         if (header.len() > len) && header.starts_with("Bearer ") {

@@ -1,27 +1,12 @@
-use std::io::Write;
 use std::str::FromStr;
 
-use diesel::deserialize::{self, FromSql};
-use diesel::pg::Pg;
-use diesel::serialize::{self, Output, ToSql};
 use diesel::sql_types::Uuid as SqlUuid;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Default)]
 #[sql_type = "SqlUuid"]
 pub struct UserId(Uuid);
-
-impl FromSql<SqlUuid, Pg> for UserId {
-    fn from_sql(data: Option<&[u8]>) -> deserialize::Result<Self> {
-        FromSql::<SqlUuid, Pg>::from_sql(data).map(UserId)
-    }
-}
-
-impl ToSql<SqlUuid, Pg> for UserId {
-    fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
-        ToSql::<SqlUuid, Pg>::to_sql(&self.0, out)
-    }
-}
+derive_newtype_sql!(user_id, SqlUuid, UserId, UserId);
 
 impl UserId {
     pub fn new(id: Uuid) -> Self {

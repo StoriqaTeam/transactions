@@ -4,6 +4,8 @@ mod users;
 pub use self::error::*;
 pub use self::users::*;
 
+use std::sync::Arc;
+
 use diesel::connection::AnsiTransactionManager;
 use diesel::pg::Pg;
 use diesel::Connection;
@@ -26,7 +28,7 @@ where
 {
     db_pool: Pool<M>,
     cpu_pool: CpuPool,
-    repo_factory: F,
+    repo_factory: Arc<F>,
 }
 
 impl<
@@ -36,7 +38,7 @@ impl<
     > Service<T, M, F>
 {
     /// Create a new service
-    pub fn new(db_pool: Pool<M>, cpu_pool: CpuPool, repo_factory: F) -> Self {
+    pub fn new(db_pool: Pool<M>, cpu_pool: CpuPool, repo_factory: Arc<F>) -> Self {
         Self {
             db_pool,
             cpu_pool,

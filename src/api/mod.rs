@@ -19,8 +19,8 @@ use utils::read_body;
 mod auth;
 mod controllers;
 mod error;
-mod parse_query;
 mod requests;
+mod responses;
 pub mod utils;
 
 use self::auth::{Authenticator, AuthenticatorImpl};
@@ -44,7 +44,7 @@ impl ApiService {
     fn from_config(config: &Config) -> Result<Self, Error> {
         let server_address = format!("{}:{}", config.server.host, config.server.port)
             .parse::<SocketAddr>()
-            .map_err(ectx!(raw_err
+            .map_err(ectx!(try
                 ErrorContext::Config,
                 ErrorKind::Internal =>
                 config.server.host,
@@ -53,7 +53,7 @@ impl ApiService {
         let authenticator = AuthenticatorImpl::default();
         let database_url = config.database.url.clone();
         let manager = ConnectionManager::<PgConnection>::new(database_url.clone());
-        let db_pool = r2d2::Pool::builder().build(manager).map_err(ectx!(raw_err
+        let db_pool = r2d2::Pool::builder().build(manager).map_err(ectx!(try
             ErrorContext::Config,
             ErrorKind::Internal =>
             database_url
@@ -97,7 +97,7 @@ impl Service for ApiService {
                     };
 
                     let auth_result = authenticator.authenticate(&parts.headers).map_err(AuthError::new);
-                    let service = StqService::new(db_pool, cpu_pool, repo_factory);
+                    let service = StqService::new(db_pool, cpu_pool, Arc::new(repo_factory));
 
                     let ctx = Context {
                         body,

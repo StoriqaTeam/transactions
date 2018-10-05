@@ -1,48 +1,35 @@
 use models::*;
 
-#[derive(Debug, Deserialize, Clone, Copy)]
-#[serde(rename_all = "lowercase")]
-pub enum DeviceType {
-    Ios,
-    Android,
-    Web,
-    Other,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct PostSessionsRequest {
-    pub email: String,
-    pub password: Password,
-    pub device_type: DeviceType,
-    pub device_os: Option<String>,
-    pub device_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct PostSessionsOauthRequest {
-    pub oauth_token: OauthToken,
-    pub oauth_provider: Provider,
-    pub device_type: DeviceType,
-    pub device_os: Option<String>,
-    pub device_id: Option<String>,
-}
-
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PostUsersRequest {
-    pub email: String,
-    pub password: Password,
-    pub first_name: String,
-    pub last_name: String,
-    pub device_type: DeviceType,
-    pub device_os: Option<String>,
-    pub device_id: Option<String>,
+    pub id: UserId,
+    pub name: String,
+    pub authentication_token: AuthenticationToken,
+}
+
+impl From<PostUsersRequest> for NewUser {
+    fn from(req: PostUsersRequest) -> Self {
+        Self {
+            id: req.id,
+            name: req.name,
+            authentication_token: req.authentication_token,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct PostUsersConfirmEmailRequest {
-    pub email_confirm_token: EmailConfirmToken,
+pub struct PutUsersRequest {
+    pub name: Option<String>,
+    pub authentication_token: Option<AuthenticationToken>,
+}
+
+impl From<PutUsersRequest> for UpdateUser {
+    fn from(req: PutUsersRequest) -> Self {
+        Self {
+            name: req.name,
+            authentication_token: req.authentication_token,
+        }
+    }
 }

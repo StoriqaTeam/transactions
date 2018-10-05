@@ -72,8 +72,8 @@ pub mod tests {
     use diesel::prelude::*;
 
     use super::*;
-    use models::*;
     use config::Config;
+    use models::*;
 
     pub fn connection() -> PgConnection {
         let config = Config::new().unwrap();

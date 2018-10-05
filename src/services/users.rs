@@ -1,3 +1,6 @@
+use futures::IntoFuture;
+use validator::Validate;
+
 use super::error::*;
 use super::*;
 use models::*;
@@ -17,11 +20,23 @@ impl<
     > UsersService for Service<T, M, F>
 {
     fn create_user(&self, input: NewUser) -> Box<Future<Item = User, Error = Error> + Send> {
-        let repo_factory = self.repo_factory.clone();
-        self.spawn_on_pool(move |conn| {
-            let users_repo = repo_factory.create_users_repo(&conn);
-            users_repo.create(input.clone()).map_err(ectx!(ErrorKind::Internal => input))
-        })
+        Box::new(
+            input
+                .validate()
+                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
+                .into_future()
+                .and_then({
+                    let repo_factory = self.repo_factory.clone();
+                    let service = self.clone();
+                    move |_| {
+                        service.spawn_on_pool(move |conn| {
+                            let users_repo = repo_factory.create_users_repo(&conn);
+
+                            users_repo.create(input.clone()).map_err(ectx!(ErrorKind::Internal => input))
+                        })
+                    }
+                }),
+        )
     }
     fn get_user(&self, user_id: UserId) -> Box<Future<Item = Option<User>, Error = Error> + Send> {
         let repo_factory = self.repo_factory.clone();
@@ -31,13 +46,25 @@ impl<
         })
     }
     fn update_user(&self, user_id: UserId, payload: UpdateUser) -> Box<Future<Item = User, Error = Error> + Send> {
-        let repo_factory = self.repo_factory.clone();
-        self.spawn_on_pool(move |conn| {
-            let users_repo = repo_factory.create_users_repo(&conn);
-            users_repo
-                .update(user_id, payload.clone())
-                .map_err(ectx!(ErrorKind::Internal => user_id, payload))
-        })
+        Box::new(
+            payload
+                .validate()
+                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => payload))
+                .into_future()
+                .and_then({
+                    let repo_factory = self.repo_factory.clone();
+                    let service = self.clone();
+                    move |_| {
+                        service.spawn_on_pool(move |conn| {
+                            let users_repo = repo_factory.create_users_repo(&conn);
+
+                            users_repo
+                                .update(user_id, payload.clone())
+                                .map_err(ectx!(ErrorKind::Internal => user_id, payload))
+                        })
+                    }
+                }),
+        )
     }
     fn delete_user(&self, user_id: UserId) -> Box<Future<Item = User, Error = Error> + Send> {
         let repo_factory = self.repo_factory.clone();

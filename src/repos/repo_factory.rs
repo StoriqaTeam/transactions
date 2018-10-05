@@ -4,9 +4,7 @@ use diesel::Connection;
 
 use repos::*;
 
-pub trait ReposFactory<C: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static>:
-    Clone + Send + Sync + 'static
-{
+pub trait ReposFactory<C: Connection<Backend = Pg, TransactionManager = AnsiTransactionManager> + 'static>: Send + Sync + 'static {
     fn create_users_repo<'a>(&self, db_conn: &'a C) -> Box<UsersRepo + 'a>;
 }
 
