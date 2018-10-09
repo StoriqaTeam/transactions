@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use diesel;
 use diesel::associations::HasTable;
 use diesel::expression::operators::Eq;
 use diesel::expression::AsExpression;
@@ -9,17 +10,17 @@ use diesel::query_builder::{AsChangeset, InsertStatement, IntoUpdateTarget, Quer
 use diesel::query_dsl::methods::FilterDsl;
 use diesel::query_dsl::LoadQuery;
 use diesel::sql_types::HasSqlType;
-use diesel::{Expression, Insertable, OptionalExtension, QuerySource, Queryable, RunQueryDsl, Table};
+use diesel::{Expression, Insertable, OptionalExtension, QuerySource, Queryable, RunQueryDsl, Table, ExpressionMethods};
 use failure::Fail;
 
 use super::{ErrorKind, RepoResult};
 
 pub trait Select<Tbl, Expr, Filtered, Record>
 where
-    Expr: diesel::ExpressionMethods,
-    Filtered: AsExpression<<Expr as Expression>::SqlType> + std::fmt::Debug + Clone,
-    Tbl: FilterDsl<Eq<Expr, <Filtered as AsExpression<<Expr as diesel::Expression>::SqlType>>::Expression>>,
-    Filter<Tbl, Eq<Expr, <Filtered as AsExpression<<Expr as diesel::Expression>::SqlType>>::Expression>>: LoadQuery<PgConnection, Record>,
+    Expr: ExpressionMethods,
+    Filtered: AsExpression<<Expr as Expression>::SqlType> + Debug + Clone,
+    Tbl: FilterDsl<Eq<Expr, <Filtered as AsExpression<<Expr as Expression>::SqlType>>::Expression>>,
+    Filter<Tbl, Eq<Expr, <Filtered as AsExpression<<Expr as Expression>::SqlType>>::Expression>>: LoadQuery<PgConnection, Record>,
 {
     fn get(conn: &PgConnection, table: Tbl, expr: Expr, filter: Filtered) -> RepoResult<Option<Record>> {
         let query = table.filter(expr.eq(filter.clone()));
@@ -29,7 +30,7 @@ where
 
 pub trait Insert<Tbl, Payload, Record>
 where
-    Payload: Insertable<Tbl> + std::fmt::Debug + Clone,
+    Payload: Insertable<Tbl> + Debug + Clone,
     InsertStatement<Tbl, Payload::Values>: LoadQuery<PgConnection, Record>,
 {
     fn create(conn: &PgConnection, table: Tbl, payload: Payload) -> RepoResult<Record> {
@@ -42,14 +43,14 @@ where
 
 pub trait Update<Tbl, Expr, Filtered, Record, Payload>
 where
-    Expr: diesel::ExpressionMethods,
-    Filtered: AsExpression<<Expr as Expression>::SqlType> + std::fmt::Debug + Clone,
-    Payload: AsChangeset<Target = Tbl> + std::fmt::Debug + Clone,
+    Expr: ExpressionMethods,
+    Filtered: AsExpression<<Expr as Expression>::SqlType> + Debug + Clone,
+    Payload: AsChangeset<Target = Tbl> + Debug + Clone,
     <Payload as AsChangeset>::Changeset: QueryFragment<Pg>,
-    Tbl: FilterDsl<Eq<Expr, <Filtered as AsExpression<<Expr as diesel::Expression>::SqlType>>::Expression>>
+    Tbl: FilterDsl<Eq<Expr, <Filtered as AsExpression<<Expr as Expression>::SqlType>>::Expression>>
         + HasTable
         + Table,
-    Filter<Tbl, Eq<Expr, <Filtered as AsExpression<<Expr as diesel::Expression>::SqlType>>::Expression>>:
+    Filter<Tbl, Eq<Expr, <Filtered as AsExpression<<Expr as Expression>::SqlType>>::Expression>>:
         HasTable + IntoUpdateTarget<Table = Tbl>,
     <Tbl as QuerySource>::FromClause: QueryFragment<Pg>,
     <Tbl as Table>::AllColumns: QueryFragment<Pg>,
@@ -73,7 +74,7 @@ where
 
 pub trait Delete<Tbl, Expr, Filtered, Record>
 where
-    Expr: diesel::ExpressionMethods,
+    Expr: ExpressionMethods,
     Filtered: AsExpression<<Expr as Expression>::SqlType> + Debug + Clone,
     Tbl: FilterDsl<Eq<Expr, <Filtered as AsExpression<<Expr as Expression>::SqlType>>::Expression>>
         + HasTable

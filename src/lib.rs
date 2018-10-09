@@ -1,5 +1,6 @@
 #![allow(proc_macro_derive_resolution_fallback)]
 
+#[macro_use]
 extern crate failure;
 extern crate futures;
 #[macro_use]
@@ -18,7 +19,6 @@ extern crate config as config_crate;
 extern crate http_router;
 extern crate base64;
 extern crate hyper_tls;
-extern crate jsonwebtoken;
 extern crate regex;
 #[macro_use]
 extern crate validator_derive;

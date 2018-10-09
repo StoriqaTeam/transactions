@@ -6,7 +6,7 @@ use std::fmt::{Debug, Display};
 use diesel::sql_types::VarChar;
 use serde::{Serialize, Serializer};
 
-use validator::{Validate, ValidationErrors};
+use validator::{Validate, ValidationErrors, ValidationError};
 
 #[derive(Deserialize, FromSqlRow, AsExpression, Clone, Default, PartialEq, Eq, Hash)]
 #[sql_type = "VarChar"]
@@ -30,7 +30,7 @@ impl Validate for AuthenticationToken {
         let token_len = self.0.len();
         let mut errors = ValidationErrors::new();
         if token_len < 1 || token_len > 40 {
-            let error = validator::ValidationError {
+            let error = ValidationError {
                 code: Cow::from("len"),
                 message: Some(Cow::from("Authentication Token should be between 8 and 30 symbols")),
                 params: HashMap::new(),

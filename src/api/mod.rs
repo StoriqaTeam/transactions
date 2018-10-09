@@ -1,8 +1,8 @@
+use std::net::SocketAddr;
+use std::sync::Arc;
+
 use hyper;
 use hyper::{service::Service, Body, Request, Response};
-
-use super::config::Config;
-use super::utils::{log_and_capture_error, log_error, log_warn};
 use diesel::pg::PgConnection;
 use diesel::r2d2::ConnectionManager;
 use failure::{Compat, Fail};
@@ -10,9 +10,11 @@ use futures::future;
 use futures::prelude::*;
 use futures_cpupool::CpuPool;
 use hyper::Server;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use r2d2;
+
 use utils::read_body;
+use super::config::Config;
+use super::utils::{log_and_capture_error, log_error, log_warn};
 
 mod controllers;
 mod error;

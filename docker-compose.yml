@@ -10,7 +10,7 @@ services:
     entrypoint:
       - sh
       - -c
-      - sleep 10; diesel migration run; /usr/local/cargo/bin/cargo run
+      - sleep 10; diesel migration run; /usr/local/cargo/bin/cargo run server
     volumes:
       - .:/app
     environment:
