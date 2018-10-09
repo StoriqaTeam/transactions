@@ -1,5 +1,7 @@
 FROM debian:stable-slim
 
+ARG env=debug
+
 RUN mkdir -p /app/config \
   && mkdir -p /app/migrations \
   && mkdir -p /usr/local/cargo/bin/ \
@@ -18,7 +20,7 @@ RUN mkdir -p /app/config \
   && adduser --disabled-password --gecos "" --home /app --no-create-home -u 5000 app \
   && chown -R app: /app
 
-COPY target/release/transactions /app
+COPY target/$env/transactions /app
 COPY config /app/config
 COPY migrations /app/migrations
 COPY Cargo.toml /app/Cargo.toml

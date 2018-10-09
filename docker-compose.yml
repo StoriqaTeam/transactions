@@ -4,13 +4,12 @@ services:
     image: transactions
     build:
       context: .
-      dockerfile: Dockerfile.default
+      dockerfile: Dockerfile
     container_name: transactions
-    working_dir: /app
-    command: ["sh", "-c", "/utils/wait_for_it.sh transactions-pg:5432 ; diesel migration run ; cargo run"]
-    volumes:
-      - ..:/app
-      - stq_cargo_cache:/usr/local/cargo
+    entrypoint:
+      - sh
+      - -c
+      - sleep 10; diesel migration run; /app/transactions server
     environment:
       - DATABASE_URL=postgresql://transactions:transactions@transactions-pg/transactions
       - "RUST_LOG=transactions=debug"

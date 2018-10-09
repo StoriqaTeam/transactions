@@ -1,3 +1,8 @@
+## Local testing with Docker Compose
+
+- Build transactions binary: `cargo build`
+- Fire up Docker: `docker-compose up`
+
 ## Accounts and transactions
 
 Each account has one of two `kinds` - either `Dr` (debit) or `Cr` (credit). When a user creates an account - two accounts of types `Dr` and `Cr` are created for the same wallet. `Cr` account tracks user's balance, `Dr` account tracks out payment system balance on the blockchain.
@@ -14,7 +19,7 @@ __Transactions__
 
 ### Transaction example cases
 
-1) User creates an ETH account and makes a deposit. 
+1) User creates an ETH account and makes a deposit.
 
 When a user creates an account, blockchain address is generated `0x26df8a` and two accounts are created.
 
@@ -35,7 +40,7 @@ __Transactions__
 |----|---------------|---------------|-------|---------|------------------|
 | 1  | 35            | 36            | 9     | done    | 0xcdef76796      |
 |    |               |               |       |         |                  |
- 
+
 &nbsp;
 
 2) User makes a 3 `wei` withdrawal
@@ -47,7 +52,7 @@ __Transactions__
 | 2  | 36            | 35            | 3     | done    | 0xc58dae555      |
 |    |               |               |       |         |                  |
 
-&nbsp; 
+&nbsp;
 
 3) User makes a 5 `wei` transfer from own account to other user's account with id `49`
 
@@ -61,9 +66,9 @@ __Transactions__
 
 ### Operations example cases
 
-1) User's account balance with id `36` 
+1) User's account balance with id `36`
 
-Balance 
+Balance
 
 `=`
 
@@ -73,11 +78,11 @@ sum of transactions values with cr_account_id == `36`
 
 sum of transactions values with dr_account_id == `36`
 
-&nbsp; 
+&nbsp;
 
 2) Withdrawal. Once a user picks up an amount for withdrawal you pick any `dr` account that has this amount (or several accounts that is summed to total withdrawal value) and make a blockchain transaction + `pending` transaction in our system. Once blockchain transaction is confirmed, you change the status of our transaction to `done`.
 
-E.g. we have accounts 
+E.g. we have accounts
 
 __Accounts__
 
@@ -138,8 +143,8 @@ TODO: We need to address here the case of having transaction from 2 and more wal
 
 #### Transfers with different currencies
 
-Each transfer to account with different currency is decomposed into 
-  1. Conversion between own accounts 
+Each transfer to account with different currency is decomposed into
+  1. Conversion between own accounts
   2. Transfer with the same currency
 
 So the transfer basically boils down to converting between own accounts. Let's consider a case with `BTC` and `ETH`. We need to have 4 special accounts in out system:
