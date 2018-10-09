@@ -4,6 +4,7 @@ pub use futures::prelude::*;
 
 use diesel::r2d2::ConnectionManager;
 use diesel::PgConnection;
-use r2d2::Pool;
+use r2d2::{Pool, PooledConnection};
 
-pub type PgConnectionPool = Pool<ConnectionManager<PgConnection>>;
+pub type PgPool = Pool<ConnectionManager<PgConnection>>;
+pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;

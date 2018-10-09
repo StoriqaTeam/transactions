@@ -8,7 +8,7 @@ use serde::{Serialize, Serializer};
 
 use validator::{Validate, ValidationErrors};
 
-#[derive(Deserialize, FromSqlRow, AsExpression, Clone, Default)]
+#[derive(Deserialize, FromSqlRow, AsExpression, Clone, Default, PartialEq, Eq, Hash)]
 #[sql_type = "VarChar"]
 pub struct AuthenticationToken(String);
 derive_newtype_sql!(authentication_token, VarChar, AuthenticationToken, AuthenticationToken);
@@ -48,5 +48,9 @@ impl Validate for AuthenticationToken {
 impl AuthenticationToken {
     pub fn new(token: String) -> Self {
         AuthenticationToken(token)
+    }
+
+    pub fn raw(&self) -> &str {
+        &self.0
     }
 }

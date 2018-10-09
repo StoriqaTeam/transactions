@@ -1,4 +1,4 @@
-use failure::Error as FailureError;
+use super::Error;
 
 /// Repos layer Future
-pub type RepoResult<T> = Result<T, FailureError>;
+pub type RepoResult<T> = Result<T, Error>;

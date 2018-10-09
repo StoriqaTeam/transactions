@@ -10,34 +10,28 @@ use futures::future;
 use futures::prelude::*;
 use futures_cpupool::CpuPool;
 use hyper::Server;
-use models::AuthError;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use utils::read_body;
 
-mod auth;
 mod controllers;
 mod error;
 mod requests;
 mod responses;
 pub mod utils;
 
-use self::auth::{Authenticator, AuthenticatorImpl};
 use self::controllers::*;
 use self::error::*;
-use models::UserId;
 use prelude::*;
-use repos::ReposFactoryImpl;
-use services::Service as StqService;
+use repos::{DbExecutorImpl, UsersRepoImpl};
+use services::{AuthServiceImpl, UsersServiceImpl};
 
 #[derive(Clone)]
 pub struct ApiService {
-    authenticator: Arc<dyn Authenticator>,
     server_address: SocketAddr,
     config: Config,
-    db_pool: PgConnectionPool,
+    db_pool: PgPool,
     cpu_pool: CpuPool,
-    repo_factory: ReposFactoryImpl,
 }
 
 impl ApiService {
@@ -50,7 +44,6 @@ impl ApiService {
                 config.server.host,
                 config.server.port
             ))?;
-        let authenticator = AuthenticatorImpl::default();
         let database_url = config.database.url.clone();
         let manager = ConnectionManager::<PgConnection>::new(database_url.clone());
         let db_pool = r2d2::Pool::builder().build(manager).map_err(ectx!(try
@@ -59,15 +52,12 @@ impl ApiService {
             database_url
         ))?;
         let cpu_pool = CpuPool::new(config.cpu_pool.size);
-        let repo_factory = ReposFactoryImpl::default();
 
         Ok(ApiService {
             config: config.clone(),
-            authenticator: Arc::new(authenticator),
             server_address,
             db_pool,
             cpu_pool,
-            repo_factory,
         })
     }
 }
@@ -80,32 +70,35 @@ impl Service for ApiService {
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let (parts, http_body) = req.into_parts();
-        let authenticator = self.authenticator.clone();
         let db_pool = self.db_pool.clone();
         let cpu_pool = self.cpu_pool.clone();
-        let repo_factory = self.repo_factory.clone();
+        let db_executor = DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone());
         Box::new(
             read_body(http_body)
                 .map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal))
                 .and_then(move |body| {
                     let router = router! {
                         POST /v1/users => post_users,
-                        GET /v1/users/{user_id: UserId} => get_users,
-                        PUT /v1/users/{user_id: UserId} => put_users,
-                        DELETE /v1/users/{user_id: UserId} => delete_users,
+                        // GET /v1/users/{user_id: UserId} => get_users,
+                        GET /v1/users/me => get_users_me,
+                        // PUT /v1/users/{user_id: UserId} => put_users,
+                        // DELETE /v1/users/{user_id: UserId} => delete_users,
                         _ => not_found,
                     };
 
-                    let auth_result = authenticator.authenticate(&parts.headers).map_err(AuthError::new);
-                    let service = StqService::new(db_pool, cpu_pool, Arc::new(repo_factory));
+                    let auth_service = Arc::new(AuthServiceImpl::new(Arc::new(UsersRepoImpl), db_executor.clone()));
+                    let users_service = Arc::new(UsersServiceImpl::new(
+                        auth_service.clone(),
+                        Arc::new(UsersRepoImpl),
+                        db_executor.clone(),
+                    ));
 
                     let ctx = Context {
                         body,
                         method: parts.method.clone(),
                         uri: parts.uri.clone(),
                         headers: parts.headers,
-                        auth_result,
-                        users_service: Arc::new(service),
+                        users_service,
                     };
 
                     debug!("Received request {}", ctx);

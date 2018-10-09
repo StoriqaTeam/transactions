@@ -3,7 +3,7 @@ use std::str::FromStr;
 use diesel::sql_types::Uuid as SqlUuid;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Default)]
+#[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Default, PartialEq)]
 #[sql_type = "SqlUuid"]
 pub struct UserId(Uuid);
 derive_newtype_sql!(user_id, SqlUuid, UserId, UserId);

@@ -1,95 +1,136 @@
-//! Users repo, presents CRUD operations with db for users
 use diesel;
-use diesel::prelude::*;
-use diesel::query_dsl::RunQueryDsl;
-use failure::Fail;
 
-use super::types::RepoResult;
-use models::UserId;
-use models::{NewUser, UpdateUser, User};
-use repos::ErrorKind;
+use super::error::*;
+use super::executor::with_tls_connection;
+use super::*;
+use models::*;
+use prelude::*;
 use schema::users::dsl::*;
 
-/// Users repository, responsible for handling users
-pub struct UsersRepoImpl<'a> {
-    pub db_conn: &'a PgConnection,
-}
-
-pub trait UsersRepo {
-    fn get(&self, user_id: UserId) -> RepoResult<Option<User>>;
+pub trait UsersRepo: Send + Sync + 'static {
+    fn find_user_by_authentication_token(&self, token: AuthenticationToken) -> RepoResult<Option<User>>;
     fn create(&self, payload: NewUser) -> RepoResult<User>;
+    fn get(&self, user_id: UserId) -> RepoResult<Option<User>>;
     fn update(&self, user_id: UserId, payload: UpdateUser) -> RepoResult<User>;
     fn delete(&self, user_id: UserId) -> RepoResult<User>;
 }
 
-impl<'a> UsersRepoImpl<'a> {
-    pub fn new(db_conn: &'a PgConnection) -> Self {
-        Self { db_conn }
-    }
-}
+#[derive(Clone, Default)]
+pub struct UsersRepoImpl;
 
-impl<'a> UsersRepo for UsersRepoImpl<'a> {
-    fn get(&self, user_id_arg: UserId) -> RepoResult<Option<User>> {
-        let query = users.find(user_id_arg);
-        query
-            .get_result(self.db_conn)
-            .optional()
-            .map_err(ectx!(ErrorKind::Internal => user_id_arg))
+impl<'a> UsersRepo for UsersRepoImpl {
+    fn find_user_by_authentication_token(&self, token: AuthenticationToken) -> RepoResult<Option<User>> {
+        with_tls_connection(|conn| {
+            users
+                .filter(authentication_token.eq(token))
+                .limit(1)
+                .get_result(conn)
+                .optional()
+                .map_err(ectx!(ErrorKind::Internal))
+        })
     }
 
     fn create(&self, payload: NewUser) -> RepoResult<User> {
-        diesel::insert_into(users)
-            .values(payload.clone())
-            .get_result::<User>(self.db_conn)
-            .map_err(ectx!(ErrorKind::Internal => payload))
+        let payload_clone = payload.clone();
+        with_tls_connection(|conn| {
+            diesel::insert_into(users)
+                .values(payload.clone())
+                .get_result::<User>(conn)
+                .map_err(move |e| {
+                    let kind = ErrorKind::from_diesel(&e);
+                    ectx!(err e, kind => payload_clone)
+                })
+        })
     }
 
+    fn get(&self, user_id_arg: UserId) -> RepoResult<Option<User>> {
+        with_tls_connection(|conn| {
+            users
+                .filter(id.eq(user_id_arg))
+                .limit(1)
+                .get_result(conn)
+                .optional()
+                .map_err(ectx!(ErrorKind::Internal))
+        })
+    }
     fn update(&self, user_id_arg: UserId, payload: UpdateUser) -> RepoResult<User> {
-        let filter = users.filter(id.eq(user_id_arg));
-        diesel::update(filter)
-            .set(&payload)
-            .get_result(self.db_conn)
-            .map_err(ectx!(ErrorKind::Internal => user_id_arg, payload))
+        with_tls_connection(|conn| {
+            let f = users.filter(id.eq(user_id_arg));
+            diesel::update(f)
+                .set(payload.clone())
+                .get_result(conn)
+                .map_err(ectx!(ErrorKind::Internal))
+        })
     }
-
     fn delete(&self, user_id_arg: UserId) -> RepoResult<User> {
-        let filtered = users.find(user_id_arg);
-        diesel::delete(filtered)
-            .get_result(self.db_conn)
-            .map_err(ectx!(ErrorKind::Internal => user_id_arg))
+        with_tls_connection(|conn| {
+            let filtered = users.filter(id.eq(user_id_arg.clone()));
+            diesel::delete(filtered).get_result(conn).map_err(ectx!(ErrorKind::Internal))
+        })
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    extern crate diesel;
-
-    use diesel::prelude::*;
+    use diesel::r2d2::ConnectionManager;
+    use diesel::PgConnection;
+    use futures_cpupool::CpuPool;
+    use tokio_core::reactor::Core;
 
     use super::*;
     use config::Config;
-    use models::*;
+    use repos::DbExecutorImpl;
 
-    pub fn connection() -> PgConnection {
+    fn create_executor() -> DbExecutorImpl {
         let config = Config::new().unwrap();
-        let conn = PgConnection::establish(&config.database.url).unwrap();
-        conn.begin_test_transaction().unwrap();
-        conn
+        let manager = ConnectionManager::<PgConnection>::new(config.database.url);
+        let db_pool = r2d2::Pool::builder().build(manager).unwrap();
+        let cpu_pool = CpuPool::new(1);
+        DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone())
     }
 
     #[test]
-    fn crud() {
-        let test_connection = connection();
-        let repo = UsersRepoImpl::new(&test_connection);
+    fn users_create() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let res = core.run(db_executor.execute_test_transaction(move || repo.create(new_user)));
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn users_read() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let res = core.run(db_executor.execute_test_transaction(move || repo.get(new_user.id)));
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn users_update() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let repo = UsersRepoImpl::default();
         let new_user = NewUser::default();
 
-        assert!(repo.create(new_user.clone()).is_ok());
-        assert!(repo.get(new_user.id).is_ok());
         let payload = UpdateUser {
             name: Some("test".to_string()),
             authentication_token: None,
         };
-        assert!(repo.update(new_user.id, payload).is_ok());
-        assert!(repo.delete(new_user.id).is_ok());
+        let res = core.run(db_executor.execute_test_transaction(move || repo.update(new_user.id, payload)));
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn users_delete() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let res = core.run(db_executor.execute_test_transaction(move || repo.delete(new_user.id)));
+        assert!(res.is_ok());
     }
 }
