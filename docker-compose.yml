@@ -4,12 +4,15 @@ services:
     image: transactions
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.local
     container_name: transactions
+    working_dir: /app
     entrypoint:
       - sh
       - -c
-      - sleep 10; diesel migration run; /app/transactions server
+      - sleep 10; diesel migration run; /usr/local/cargo/bin/cargo run
+    volumes:
+      - .:/app
     environment:
       - DATABASE_URL=postgresql://transactions:transactions@transactions-pg/transactions
       - "RUST_LOG=transactions=debug"
@@ -32,7 +35,6 @@ services:
       - 5432
 
 volumes:
-  stq_cargo_cache:
   stq-transactions-postgres-data:
 
 networks:
