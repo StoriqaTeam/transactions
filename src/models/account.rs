@@ -2,7 +2,7 @@ use std::time::SystemTime;
 
 use validator::Validate;
 
-use models::{AccountId, Amount, Currency, UserId};
+use models::*;
 use schema::accounts;
 
 #[derive(Debug, Queryable, Clone)]
@@ -11,7 +11,7 @@ pub struct Account {
     pub user_id: UserId,
     pub balance: Amount,
     pub currency: Currency,
-    pub account_address: String,
+    pub account_address: AccountAddress,
     pub name: String,
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
@@ -25,7 +25,7 @@ impl Default for Account {
             user_id: UserId::default(),
             balance: Amount::default(),
             currency: Currency::Eth,
-            account_address: String::default(),
+            account_address: AccountAddress::default(),
             created_at: SystemTime::now(),
             updated_at: SystemTime::now(),
         }
@@ -41,8 +41,8 @@ pub struct NewAccount {
     pub user_id: UserId,
     pub balance: Amount,
     pub currency: Currency,
-    #[validate(length(min = "1", max = "40", message = "Account address must not be empty "))]
-    pub account_address: String,
+    #[validate]
+    pub account_address: AccountAddress,
 }
 
 impl Default for NewAccount {
@@ -53,7 +53,7 @@ impl Default for NewAccount {
             user_id: UserId::default(),
             balance: Amount::default(),
             currency: Currency::Eth,
-            account_address: String::default(),
+            account_address: AccountAddress::default(),
         }
     }
 }
@@ -64,8 +64,4 @@ impl Default for NewAccount {
 pub struct UpdateAccount {
     #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
     pub name: Option<String>,
-    pub balance: Option<Amount>,
-    pub currency: Option<Currency>,
-    #[validate(length(min = "1", max = "40", message = "Account address must not be empty "))]
-    pub account_address: Option<String>,
 }

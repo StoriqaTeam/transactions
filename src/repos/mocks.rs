@@ -1,11 +1,11 @@
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
+use super::accounts::*;
 use super::error::*;
 use super::executor::DbExecutor;
 use super::types::RepoResult;
 use super::users::*;
-use super::accounts::*;
 use models::*;
 use prelude::*;
 
@@ -96,15 +96,6 @@ impl AccountsRepo for AccountsRepoMock {
                     if let Some(ref name) = payload.name {
                         x.name = name.clone();
                     }
-                    if let Some(ref balance) = payload.balance {
-                        x.balance = balance.clone();
-                    }
-                    if let Some(ref currency) = payload.currency {
-                        x.currency = currency.clone();
-                    }
-                    if let Some(ref account_address) = payload.account_address {
-                        x.account_address = account_address.clone();
-                    }
                     Some(x)
                 } else {
                     None
@@ -117,11 +108,10 @@ impl AccountsRepo for AccountsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == account_id).nth(0).cloned().unwrap())
     }
-    fn list_for_user(&self, user_id: UserId, offset: AccountId, limit: i64) -> RepoResult<Vec<Account>> {
+    fn list_for_user(&self, user_id: UserId, _offset: AccountId, _limit: i64) -> RepoResult<Vec<Account>> {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id).collect())
     }
-
 }
 
 #[derive(Clone, Default)]

@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use diesel::sql_types::Uuid as SqlUuid;
-use uuid::{Uuid, ParseError};
+use uuid::{ParseError, Uuid};
 
 #[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Default, PartialEq)]
 #[sql_type = "SqlUuid"]

@@ -10,7 +10,7 @@ use diesel::query_builder::{AsChangeset, InsertStatement, IntoUpdateTarget, Quer
 use diesel::query_dsl::methods::FilterDsl;
 use diesel::query_dsl::LoadQuery;
 use diesel::sql_types::HasSqlType;
-use diesel::{Expression, Insertable, OptionalExtension, QuerySource, Queryable, RunQueryDsl, Table, ExpressionMethods};
+use diesel::{Expression, ExpressionMethods, Insertable, OptionalExtension, QuerySource, Queryable, RunQueryDsl, Table};
 use failure::Fail;
 
 use super::{ErrorKind, RepoResult};

@@ -8,6 +8,7 @@ use super::error::*;
 use models::*;
 use prelude::*;
 use repos::{DbExecutor, AccountsRepo, UsersRepo};
+use api::requests::*;
 
 #[derive(Clone)]
 pub struct AccountsServiceImpl<E: DbExecutor> {
@@ -29,14 +30,14 @@ impl<E: DbExecutor> AccountsServiceImpl<E> {
 }
 
 pub trait AccountsService: Send + Sync + 'static {
-    fn create_account(&self, maybe_token: Option<AuthenticationToken>, input: NewAccount) -> Box<Future<Item = Account, Error = Error> + Send>;
-    fn get_account(&self, maybe_token: Option<AuthenticationToken>, account_id: AccountId) -> Box<Future<Item = Option<Account>, Error = Error> + Send>;
-    fn update_account(&self, maybe_token: Option<AuthenticationToken>,  account_id: AccountId, payload: UpdateAccount) -> Box<Future<Item = Account, Error = Error> + Send>;
-    fn delete_account(&self, maybe_token: Option<AuthenticationToken>, account_id: AccountId) -> Box<Future<Item = Account, Error = Error> + Send>;
+    fn create_account(&self, maybe_token: AuthenticationToken, input: PostAccountsRequest) -> Box<Future<Item = Account, Error = Error> + Send>;
+    fn get_account(&self, maybe_token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Option<Account>, Error = Error> + Send>;
+    fn update_account(&self, maybe_token: AuthenticationToken,  account_id: AccountId, payload: UpdateAccount) -> Box<Future<Item = Account, Error = Error> + Send>;
+    fn delete_account(&self, maybe_token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Account, Error = Error> + Send>;
 }
 
 impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
-    fn create_account(&self, maybe_token: Option<AuthenticationToken>,  input: NewAccount) -> Box<Future<Item = Account, Error = Error> + Send> {
+    fn create_account(&self, maybe_token: AuthenticationToken, input: PostAccountsRequest) -> Box<Future<Item = Account, Error = Error> + Send> {
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
         Box::new(
@@ -49,12 +50,12 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
                 }),
         )
     }
-    fn get_account(&self, maybe_token: Option<AuthenticationToken>, account_id: AccountId) -> Box<Future<Item = Option<Account>, Error = Error> + Send> {
+    fn get_account(&self, maybe_token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Option<Account>, Error = Error> + Send> {
         let accounts_repo = self.accounts_repo.clone();
         self.db_executor
             .execute(move || accounts_repo.get(account_id).map_err(ectx!(ErrorKind::Internal => account_id)))
     }
-    fn update_account(&self, maybe_token: Option<AuthenticationToken>, account_id: AccountId, payload: UpdateAccount) -> Box<Future<Item = Account, Error = Error> + Send> {
+    fn update_account(&self, maybe_token: AuthenticationToken, account_id: AccountId, payload: UpdateAccount) -> Box<Future<Item = Account, Error = Error> + Send> {
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
         Box::new(
@@ -71,7 +72,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
                 }),
         )
     }
-    fn delete_account(&self, maybe_token: Option<AuthenticationToken>, account_id: AccountId) -> Box<Future<Item = Account, Error = Error> + Send> {
+    fn delete_account(&self, maybe_token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Account, Error = Error> + Send> {
         let accounts_repo = self.accounts_repo.clone();
         self.db_executor
             .execute(move || accounts_repo.delete(account_id).map_err(ectx!(ErrorKind::Internal => account_id)))

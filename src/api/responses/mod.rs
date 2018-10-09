@@ -23,3 +23,31 @@ impl From<User> for UsersResponse {
         }
     }
 }
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountsResponse {
+    pub id: AccountId,
+    pub user_id: UserId,
+    pub balance: Amount,
+    pub currency: Currency,
+    pub account_address: AccountAddress,
+    pub name: String,
+    pub created_at: SystemTime,
+    pub updated_at: SystemTime,
+}
+
+impl From<Account> for AccountsResponse {
+    fn from(account: Account) -> Self {
+        Self {
+            id: account.id,
+            user_id: account.user_id,
+            balance: account.balance,
+            currency: account.currency,
+            account_address: account.account_address,
+            name: account.name,
+            created_at: account.created_at,
+            updated_at: account.updated_at,
+        }
+    }
+}

@@ -33,3 +33,36 @@ impl From<PutUsersRequest> for UpdateUser {
         }
     }
 }
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PostAccountsRequest {
+    pub id: AccountId,
+    pub currency: Currency,
+    pub name: String,
+}
+
+impl From<(PostAccountsRequest, UserId, AccountAddress)> for NewAccount {
+    fn from(req: (PostAccountsRequest, UserId, AccountAddress)) -> Self {
+        Self {
+            id: req.0.id,
+            name: req.0.name,
+            currency: req.0.currency,
+            user_id: req.1,
+            balance: Amount::default(),
+            account_address: req.2,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PutAccountsRequest {
+    pub name: Option<String>,
+}
+
+impl From<PutAccountsRequest> for UpdateAccount {
+    fn from(req: PutAccountsRequest) -> Self {
+        Self { name: req.name }
+    }
+}

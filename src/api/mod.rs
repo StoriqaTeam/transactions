@@ -1,20 +1,20 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use hyper;
-use hyper::{service::Service, Body, Request, Response};
 use diesel::pg::PgConnection;
 use diesel::r2d2::ConnectionManager;
 use failure::{Compat, Fail};
 use futures::future;
 use futures::prelude::*;
 use futures_cpupool::CpuPool;
+use hyper;
 use hyper::Server;
+use hyper::{service::Service, Body, Request, Response};
 use r2d2;
 
-use utils::read_body;
 use super::config::Config;
 use super::utils::{log_and_capture_error, log_error, log_warn};
+use utils::read_body;
 
 mod controllers;
 mod error;
@@ -24,9 +24,10 @@ pub mod utils;
 
 use self::controllers::*;
 use self::error::*;
+use models::*;
 use prelude::*;
-use repos::{DbExecutorImpl, UsersRepoImpl};
-use services::{AuthServiceImpl, UsersServiceImpl};
+use repos::{AccountsRepoImpl, DbExecutorImpl, UsersRepoImpl};
+use services::{AccountsServiceImpl, AuthServiceImpl, UsersServiceImpl};
 
 #[derive(Clone)]
 pub struct ApiService {
@@ -81,10 +82,11 @@ impl Service for ApiService {
                 .and_then(move |body| {
                     let router = router! {
                         POST /v1/users => post_users,
-                        // GET /v1/users/{user_id: UserId} => get_users,
                         GET /v1/users/me => get_users_me,
-                        // PUT /v1/users/{user_id: UserId} => put_users,
-                        // DELETE /v1/users/{user_id: UserId} => delete_users,
+                        POST /v1/users/{user_id: UserId}/accounts => post_users_accounts,
+                        GET /v1/accounts/{account_id: AccountId} => get_users_accounts,
+                        PUT /v1/accounts/{account_id: AccountId} => put_users_accounts,
+                        DELETE /v1/accounts/{account_id: AccountId} => delete_users_accounts,
                         _ => not_found,
                     };
 
@@ -95,12 +97,20 @@ impl Service for ApiService {
                         db_executor.clone(),
                     ));
 
+                    let accounts_service = Arc::new(AccountsServiceImpl::new(
+                        auth_service.clone(),
+                        Arc::new(AccountsRepoImpl),
+                        Arc::new(UsersRepoImpl),
+                        db_executor.clone(),
+                    ));
+
                     let ctx = Context {
                         body,
                         method: parts.method.clone(),
                         uri: parts.uri.clone(),
                         headers: parts.headers,
                         users_service,
+                        accounts_service,
                     };
 
                     debug!("Received request {}", ctx);
