@@ -103,45 +103,16 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
-
-    put:
-      summary: Update account for a user
-      description: Only users with `userId` are allowed to update an account
-      security:
-        - Bearer: []
-      tags:
-        - accounts
-      parameters:
-        - $ref: '#/components/parameters/userIdParam'
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Account'
-        400:
-          $ref: '#/components/responses/BadRequest'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        500:
-          $ref: '#/components/responses/Internal'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AccountUpdateInput'
+  /accounts:
     post:
       summary: >-
         Creates account for a user
-      description: Only users with `userId` are allowed to
+      description: Only aithenticated user is allowed to
         create an account
       security:
         - Bearer: []
       tags:
         - accounts
-      parameters:
-        - $ref: '#/components/parameters/userIdParam'
       responses:
         200:
           description: Ok
@@ -160,15 +131,16 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AccountCreateInput'
-    delete:
-      summary: Delete an account
-      description: Account will be deactivated, rather than deleted. Only users with `userId` are allowed to delete an account
+  /accounts/{accountId}:
+    get:
+      summary: Returns account by id.
+      description: You need to be owner of account to get this.
       security:
         - Bearer: []
       tags:
         - accounts
       parameters:
-        - $ref: '#/components/parameters/userIdParam'
+        - $ref: '#/components/parameters/accountIdParam'
       responses:
         200:
           description: Ok
@@ -181,6 +153,54 @@ paths:
         500:
           $ref: '#/components/responses/Internal'
 
+    put:
+      summary: Updates account 
+      description: Only user, owning the account is allowed to update an account
+      security:
+        - Bearer: []
+      tags:
+        - accounts
+      parameters:
+        - $ref: '#/components/parameters/accountIdParam'
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/Internal'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountUpdateInput'
+    delete:
+      summary: Deletes an account
+      description: Account will be deactivated, rather than deleted. Only user owning the account is allowed to delete an account
+      security:
+        - Bearer: []
+      tags:
+        - accounts
+      parameters:
+        - $ref: '#/components/parameters/accountIdParam'
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/Internal'
+          
   '/users/{userId}/transactions':
     get:
       summary: Lists all transactions of a user
@@ -475,11 +495,8 @@ components:
     AccountUpdateInput:
       type: object
       required:
-        - id
         - name
       properties:
-        id:
-          $ref: '#/components/schemas/Id'
         name:
           type: string
           description: Short name for the account
