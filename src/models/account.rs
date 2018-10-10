@@ -65,3 +65,24 @@ pub struct UpdateAccount {
     #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
     pub name: Option<String>,
 }
+
+#[derive(Debug, Clone)]
+pub struct Balance {
+    pub currency: Currency,
+    pub balance: Amount,
+}
+
+impl Balance {
+    pub fn new(currency: Currency, balance: Amount) -> Self {
+        Self { currency, balance }
+    }
+}
+
+impl From<Account> for Balance {
+    fn from(acc: Account) -> Self {
+        Self {
+            currency: acc.currency,
+            balance: acc.balance,
+        }
+    }
+}

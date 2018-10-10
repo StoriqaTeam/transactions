@@ -108,7 +108,7 @@ impl AccountsRepo for AccountsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == account_id).nth(0).cloned().unwrap())
     }
-    fn list_for_user(&self, user_id: UserId, _offset: AccountId, _limit: i64) -> RepoResult<Vec<Account>> {
+    fn list_for_user(&self, user_id: UserId, _offset: Option<AccountId>, _limit: Option<i64>) -> RepoResult<Vec<Account>> {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id).collect())
     }

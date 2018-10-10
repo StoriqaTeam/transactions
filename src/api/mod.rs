@@ -94,6 +94,8 @@ impl Service for ApiService {
                         GET /v1/accounts/{account_id: AccountId} => get_accounts,
                         PUT /v1/accounts/{account_id: AccountId} => put_accounts,
                         DELETE /v1/accounts/{account_id: AccountId} => delete_accounts,
+                        GET /v1/accounts/{account_id: AccountId}/balances => get_accounts_balances,
+                        GET /v1/users/{user_id: UserId}/balances => get_users_balances,
                         _ => not_found,
                     };
 

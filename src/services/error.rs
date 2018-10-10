@@ -39,6 +39,8 @@ pub enum ErrorContext {
     NoAuthToken,
     #[fail(display = "service error context - invalid auth token")]
     InvalidToken,
+    #[fail(display = "service error context - balance overflow")]
+    BalanceOverFlow,
 }
 
 derive_error_impls!();

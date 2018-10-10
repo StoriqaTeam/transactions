@@ -12,7 +12,7 @@ pub trait AccountsRepo: Send + Sync + 'static {
     fn get(&self, account_id: AccountId) -> RepoResult<Option<Account>>;
     fn update(&self, account_id: AccountId, payload: UpdateAccount) -> RepoResult<Account>;
     fn delete(&self, account_id: AccountId) -> RepoResult<Account>;
-    fn list_for_user(&self, user_id: UserId, offset: AccountId, limit: i64) -> RepoResult<Vec<Account>>;
+    fn list_for_user(&self, user_id: UserId, offset: Option<AccountId>, limit: Option<i64>) -> RepoResult<Vec<Account>>;
 }
 
 #[derive(Clone, Default)]
@@ -56,15 +56,16 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
             diesel::delete(filtered).get_result(conn).map_err(ectx!(ErrorKind::Internal))
         })
     }
-    fn list_for_user(&self, user_id_arg: UserId, offset: AccountId, limit: i64) -> RepoResult<Vec<Account>> {
+    fn list_for_user(&self, user_id_arg: UserId, offset: Option<AccountId>, limit: Option<i64>) -> RepoResult<Vec<Account>> {
         with_tls_connection(|conn| {
-            accounts
-                .filter(user_id.eq(user_id_arg))
-                .filter(id.ge(offset))
-                .order(id)
-                .limit(limit)
-                .get_results(conn)
-                .map_err(ectx!(ErrorKind::Internal))
+            let mut query = accounts.filter(user_id.eq(user_id_arg)).order(id).into_boxed();
+            if let Some(offset) = offset {
+                query = query.filter(id.ge(offset));
+            }
+            if let Some(limit) = limit {
+                query = query.limit(limit);
+            }
+            query.get_results(conn).map_err(ectx!(ErrorKind::Internal))
         })
     }
 }
@@ -147,7 +148,7 @@ pub mod tests {
         let repo = AccountsRepoImpl::default();
         let new_user = NewUser::default();
         let account_offset = AccountId::default();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.list_for_user(new_user.id, account_offset, 1)));
+        let res = core.run(db_executor.execute_test_transaction(move || repo.list_for_user(new_user.id, Some(account_offset), Some(1))));
         assert!(res.is_ok());
     }
 }

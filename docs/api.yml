@@ -18,7 +18,7 @@ tags:
   - name: transactions
     description: Managements of transactions
 paths:
-  /users/{userId}/accounts/{accountId}/balance:
+  /accounts/{accountId}/balances:
     get:
       summary: Returns balance of account
       description: You need to be authenticated to use this method.
@@ -27,7 +27,6 @@ paths:
       tags:
         - balances
       parameters:
-        - $ref: '#/components/parameters/userIdParam'
         - $ref: '#/components/parameters/accountIdParam'
       responses:
         200:
