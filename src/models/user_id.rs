@@ -12,11 +12,11 @@ impl UserId {
     pub fn new(id: Uuid) -> Self {
         UserId(id)
     }
-}
-
-impl UserId {
     pub fn inner(&self) -> &Uuid {
         &self.0
+    }
+    pub fn generate() -> Self {
+        UserId(Uuid::new_v4())
     }
 }
 

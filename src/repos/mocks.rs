@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use super::accounts::*;
 use super::error::*;
 use super::executor::DbExecutor;
+use super::transactions::*;
 use super::types::RepoResult;
 use super::users::*;
 use models::*;
@@ -70,16 +72,7 @@ pub struct AccountsRepoMock {
 impl AccountsRepo for AccountsRepoMock {
     fn create(&self, payload: NewAccount) -> Result<Account, Error> {
         let mut data = self.data.lock().unwrap();
-        let res = Account {
-            id: payload.id,
-            name: payload.name,
-            user_id: payload.user_id,
-            balance: payload.balance,
-            currency: payload.currency,
-            account_address: payload.account_address,
-            created_at: SystemTime::now(),
-            updated_at: SystemTime::now(),
-        };
+        let res: Account = payload.into();
         data.push(res.clone());
         Ok(res)
     }
@@ -93,9 +86,7 @@ impl AccountsRepo for AccountsRepoMock {
             .iter_mut()
             .filter_map(|x| {
                 if x.id == account_id {
-                    if let Some(ref name) = payload.name {
-                        x.name = name.clone();
-                    }
+                    x.name = payload.name.clone();
                     Some(x)
                 } else {
                     None
@@ -108,9 +99,131 @@ impl AccountsRepo for AccountsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == account_id).nth(0).cloned().unwrap())
     }
-    fn list_for_user(&self, user_id: UserId, _offset: Option<AccountId>, _limit: Option<i64>) -> RepoResult<Vec<Account>> {
+    fn list_for_user(&self, user_id: UserId, _offset: AccountId, _limit: i64) -> RepoResult<Vec<Account>> {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id).collect())
+    }
+    fn get_balance_for_user(&self, user_id: UserId) -> RepoResult<Vec<Balance>> {
+        let data = self.data.lock().unwrap();
+        let accounts_: Vec<Account> = data.clone().into_iter().filter(|x| x.user_id == user_id).collect();
+        let mut hashmap = HashMap::new();
+        for account in accounts_ {
+            let mut balance_ = hashmap.entry(account.currency).or_insert_with(Amount::default);
+            let new_balance = balance_.checked_add(account.balance);
+            if let Some(new_balance) = new_balance {
+                *balance_ = new_balance;
+            } else {
+                return Err(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => balance_, account.balance));
+            }
+        }
+        let balances = hashmap
+            .into_iter()
+            .map(|(currency_, balance_)| Balance::new(currency_, balance_))
+            .collect();
+        Ok(balances)
+    }
+    fn inc_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account> {
+        let mut data = self.data.lock().unwrap();
+        let u = data
+            .iter_mut()
+            .filter_map(|x| {
+                if x.id == account_id {
+                    x.balance = x.balance.checked_add(amount).unwrap_or_default();
+                    Some(x)
+                } else {
+                    None
+                }
+            }).nth(0)
+            .cloned();
+        Ok(u.unwrap())
+    }
+    fn dec_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account> {
+        let mut data = self.data.lock().unwrap();
+        let u = data
+            .iter_mut()
+            .filter_map(|x| {
+                if x.id == account_id {
+                    x.balance = x.balance.checked_sub(amount).unwrap_or_default();
+                    Some(x)
+                } else {
+                    None
+                }
+            }).nth(0)
+            .cloned();
+        Ok(u.unwrap())
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct TransactionsRepoMock {
+    data: Arc<Mutex<Vec<Transaction>>>,
+}
+
+impl TransactionsRepo for TransactionsRepoMock {
+    fn create(&self, payload: NewTransaction) -> Result<Transaction, Error> {
+        let mut data = self.data.lock().unwrap();
+        let res = Transaction {
+            id: payload.id,
+            user_id: payload.user_id,
+            dr_account_id: payload.dr_account_id,
+            cr_account_id: payload.cr_account_id,
+            currency: payload.currency,
+            value: payload.value,
+            status: payload.status,
+            blockchain_tx_id: payload.blockchain_tx_id,
+            hold_until: payload.hold_until,
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+        };
+        data.push(res.clone());
+        Ok(res)
+    }
+    fn get(&self, transaction_id: TransactionId) -> RepoResult<Option<Transaction>> {
+        let data = self.data.lock().unwrap();
+        Ok(data.iter().filter(|x| x.id == transaction_id).nth(0).cloned())
+    }
+    fn update_status(&self, transaction_id: TransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction> {
+        let mut data = self.data.lock().unwrap();
+        let u = data
+            .iter_mut()
+            .filter_map(|x| {
+                if x.id == transaction_id {
+                    x.status = transaction_status;
+                    Some(x)
+                } else {
+                    None
+                }
+            }).nth(0)
+            .cloned();
+        Ok(u.unwrap())
+    }
+    fn list_for_user(&self, user_id: UserId, _offset: TransactionId, _limit: i64) -> RepoResult<Vec<Transaction>> {
+        let data = self.data.lock().unwrap();
+        Ok(data.clone().into_iter().filter(|x| x.user_id == user_id).collect())
+    }
+    fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount> {
+        let data = self.data.lock().unwrap();
+        data.clone()
+            .into_iter()
+            .fold(Some(Amount::default()), |acc: Option<Amount>, x: Transaction| {
+                if let Some(acc) = acc {
+                    if x.cr_account_id == account_id {
+                        acc.checked_add(x.value)
+                    } else {
+                        acc.checked_sub(x.value)
+                    }
+                } else {
+                    None
+                }
+            }).ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))
+    }
+    fn list_for_account(&self, account_id: AccountId) -> RepoResult<Vec<Transaction>> {
+        let data = self.data.lock().unwrap();
+        Ok(data
+            .clone()
+            .into_iter()
+            .filter(|x| x.cr_account_id == account_id || x.dr_account_id == account_id)
+            .collect())
     }
 }
 

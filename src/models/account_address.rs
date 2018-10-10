@@ -43,33 +43,17 @@ impl AccountAddress {
 
 #[derive(Debug, Validate, Clone, Serialize)]
 pub struct CreateAccountAddress {
-    pub id: AccountId,
-    #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
-    pub name: String,
-    pub user_id: UserId,
     pub currency: Currency,
 }
 
 impl Default for CreateAccountAddress {
     fn default() -> Self {
-        Self {
-            id: AccountId::default(),
-            name: String::default(),
-            user_id: UserId::default(),
-            currency: Currency::Eth,
-        }
+        Self { currency: Currency::Eth }
     }
 }
 
-impl From<(CreateAccountAddress, AccountAddress)> for NewAccount {
-    fn from(req: (CreateAccountAddress, AccountAddress)) -> Self {
-        Self {
-            id: req.0.id,
-            name: req.0.name,
-            currency: req.0.currency,
-            user_id: req.0.user_id,
-            balance: Amount::default(),
-            account_address: req.1,
-        }
+impl From<CreateAccount> for CreateAccountAddress {
+    fn from(acc: CreateAccount) -> Self {
+        Self { currency: acc.currency }
     }
 }

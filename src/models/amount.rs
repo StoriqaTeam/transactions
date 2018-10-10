@@ -15,7 +15,7 @@ use diesel::sql_types::Numeric;
 /// that your db contains only limited precision numbers, i.e. no floating point and limited by u128 values.
 ///
 /// As a monetary amount it only implements checked_add and checked_sub
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, FromSqlRow, AsExpression, Default)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, FromSqlRow, AsExpression, Default, PartialOrd)]
 #[sql_type = "Numeric"]
 pub struct Amount(u128);
 
@@ -28,6 +28,10 @@ impl Amount {
     /// Make saubtraction, return None on overflow
     pub fn checked_sub(&self, other: Amount) -> Option<Self> {
         self.0.checked_sub(other.0).map(Amount)
+    }
+
+    pub fn new(v: u128) -> Self {
+        Amount(v)
     }
 }
 

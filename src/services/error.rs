@@ -23,6 +23,10 @@ pub enum ErrorKind {
     InvalidInput(ValidationErrors),
     #[fail(display = "service error - internal error")]
     Internal,
+    #[fail(display = "service error - not found")]
+    NotFound,
+    #[fail(display = "service error - balance failure")]
+    Balance,
 }
 
 #[allow(dead_code)]
@@ -39,8 +43,12 @@ pub enum ErrorContext {
     NoAuthToken,
     #[fail(display = "service error context - invalid auth token")]
     InvalidToken,
-    #[fail(display = "service error context - balance overflow")]
-    BalanceOverFlow,
+    #[fail(display = "service error context - no account found")]
+    NoAccount,
+    #[fail(display = "service error context - no transaction found")]
+    NoTransaction,
+    #[fail(display = "service error context - not enough founds")]
+    NotEnoughFounds,
 }
 
 derive_error_impls!();

@@ -37,12 +37,14 @@ pub enum ErrorSource {
 pub enum ErrorContext {
     #[fail(display = "database context - error getting connection")]
     Connection,
+    #[fail(display = "database context - balance overflow")]
+    BalanceOverflow,
 }
 
 derive_error_impls!();
 
-impl ErrorKind {
-    pub fn from_diesel(e: &DieselError) -> Self {
+impl<'a> From<&'a DieselError> for ErrorKind {
+    fn from(e: &DieselError) -> Self {
         match e {
             DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, ref info) => {
                 let mut errors = ValidationErrors::new();

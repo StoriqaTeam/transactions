@@ -27,8 +27,8 @@ use self::error::*;
 use client::{HttpClientImpl, KeysClient, KeysClientImpl};
 use models::*;
 use prelude::*;
-use repos::{AccountsRepoImpl, DbExecutorImpl, UsersRepoImpl};
-use services::{AccountsServiceImpl, AuthServiceImpl, UsersServiceImpl};
+use repos::{AccountsRepoImpl, DbExecutorImpl, TransactionsRepoImpl, UsersRepoImpl};
+use services::{AccountsServiceImpl, AuthServiceImpl, TransactionsServiceImpl, UsersServiceImpl};
 
 #[derive(Clone)]
 pub struct ApiService {
@@ -96,6 +96,11 @@ impl Service for ApiService {
                         DELETE /v1/accounts/{account_id: AccountId} => delete_accounts,
                         GET /v1/accounts/{account_id: AccountId}/balances => get_accounts_balances,
                         GET /v1/users/{user_id: UserId}/balances => get_users_balances,
+                        GET /v1/users/{user_id: UserId}/transactions => get_users_transactions,
+                        POST /v1/transactions => post_transactions,
+                        GET /v1/accounts/{account_id: AccountId}/transactions => get_accounts_transactions,
+                        GET /v1/transactions/{transaction_id: TransactionId} => get_transactions,
+                        PUT /v1/transactions/{transaction_id: TransactionId}/status => put_transactions_status,
                         _ => not_found,
                     };
 
@@ -104,6 +109,13 @@ impl Service for ApiService {
 
                     let accounts_service = Arc::new(AccountsServiceImpl::new(
                         auth_service.clone(),
+                        Arc::new(AccountsRepoImpl),
+                        db_executor.clone(),
+                        keys_client.clone(),
+                    ));
+                    let transactions_service = Arc::new(TransactionsServiceImpl::new(
+                        auth_service.clone(),
+                        Arc::new(TransactionsRepoImpl),
                         Arc::new(AccountsRepoImpl),
                         db_executor.clone(),
                         keys_client,
@@ -116,6 +128,7 @@ impl Service for ApiService {
                         headers: parts.headers,
                         users_service,
                         accounts_service,
+                        transactions_service,
                     };
 
                     debug!("Received request {}", ctx);
@@ -136,6 +149,14 @@ impl Service for ApiService {
                             .status(401)
                             .header("Content-Type", "application/json")
                             .body(Body::from(r#"{"description": "Unauthorized"}"#))
+                            .unwrap())
+                    }
+                    ErrorKind::NotFound => {
+                        log_warn(&e);
+                        Ok(Response::builder()
+                            .status(404)
+                            .header("Content-Type", "application/json")
+                            .body(Body::from(r#"{"description": "Not found"}"#))
                             .unwrap())
                     }
                     ErrorKind::UnprocessableEntity(errors) => {

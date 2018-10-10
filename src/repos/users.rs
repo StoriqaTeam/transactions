@@ -26,7 +26,10 @@ impl<'a> UsersRepo for UsersRepoImpl {
                 .limit(1)
                 .get_result(conn)
                 .optional()
-                .map_err(ectx!(ErrorKind::Internal))
+                .map_err(move |e| {
+                    let kind = ErrorKind::from(&e);
+                    ectx!(err e, kind)
+                })
         })
     }
 
@@ -37,7 +40,7 @@ impl<'a> UsersRepo for UsersRepoImpl {
                 .values(payload.clone())
                 .get_result::<User>(conn)
                 .map_err(move |e| {
-                    let kind = ErrorKind::from_diesel(&e);
+                    let kind = ErrorKind::from(&e);
                     ectx!(err e, kind => payload_clone)
                 })
         })
@@ -50,22 +53,28 @@ impl<'a> UsersRepo for UsersRepoImpl {
                 .limit(1)
                 .get_result(conn)
                 .optional()
-                .map_err(ectx!(ErrorKind::Internal))
+                .map_err(move |e| {
+                    let kind = ErrorKind::from(&e);
+                    ectx!(err e, kind => user_id_arg)
+                })
         })
     }
     fn update(&self, user_id_arg: UserId, payload: UpdateUser) -> RepoResult<User> {
         with_tls_connection(|conn| {
             let f = users.filter(id.eq(user_id_arg));
-            diesel::update(f)
-                .set(payload.clone())
-                .get_result(conn)
-                .map_err(ectx!(ErrorKind::Internal))
+            diesel::update(f).set(payload.clone()).get_result(conn).map_err(move |e| {
+                let kind = ErrorKind::from(&e);
+                ectx!(err e, kind => user_id_arg, payload)
+            })
         })
     }
     fn delete(&self, user_id_arg: UserId) -> RepoResult<User> {
         with_tls_connection(|conn| {
             let filtered = users.filter(id.eq(user_id_arg.clone()));
-            diesel::delete(filtered).get_result(conn).map_err(ectx!(ErrorKind::Internal))
+            diesel::delete(filtered).get_result(conn).map_err(move |e| {
+                let kind = ErrorKind::from(&e);
+                ectx!(err e, kind => user_id_arg)
+            })
         })
     }
 }
