@@ -24,6 +24,7 @@ pub mod utils;
 
 use self::controllers::*;
 use self::error::*;
+use client::{HttpClientImpl, KeysClient, KeysClientImpl};
 use models::*;
 use prelude::*;
 use repos::{AccountsRepoImpl, DbExecutorImpl, UsersRepoImpl};
@@ -35,6 +36,7 @@ pub struct ApiService {
     config: Config,
     db_pool: PgPool,
     cpu_pool: CpuPool,
+    keys_client: Arc<dyn KeysClient>,
 }
 
 impl ApiService {
@@ -55,12 +57,15 @@ impl ApiService {
             database_url
         ))?;
         let cpu_pool = CpuPool::new(config.cpu_pool.size);
+        let client = HttpClientImpl::new(config);
+        let keys_client = KeysClientImpl::new(&config, client);
 
         Ok(ApiService {
             config: config.clone(),
             server_address,
             db_pool,
             cpu_pool,
+            keys_client: Arc::new(keys_client),
         })
     }
 }
@@ -75,6 +80,7 @@ impl Service for ApiService {
         let (parts, http_body) = req.into_parts();
         let db_pool = self.db_pool.clone();
         let cpu_pool = self.cpu_pool.clone();
+        let keys_client = self.keys_client.clone();
         let db_executor = DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone());
         Box::new(
             read_body(http_body)
@@ -83,10 +89,11 @@ impl Service for ApiService {
                     let router = router! {
                         POST /v1/users => post_users,
                         GET /v1/users/me => get_users_me,
-                        POST /v1/users/{user_id: UserId}/accounts => post_users_accounts,
-                        GET /v1/accounts/{account_id: AccountId} => get_users_accounts,
-                        PUT /v1/accounts/{account_id: AccountId} => put_users_accounts,
-                        DELETE /v1/accounts/{account_id: AccountId} => delete_users_accounts,
+                        GET /v1/users/{user_id: UserId}/accounts => get_users_accounts,
+                        POST /v1/accounts => post_accounts,
+                        GET /v1/accounts/{account_id: AccountId} => get_accounts,
+                        PUT /v1/accounts/{account_id: AccountId} => put_accounts,
+                        DELETE /v1/accounts/{account_id: AccountId} => delete_accounts,
                         _ => not_found,
                     };
 
@@ -100,8 +107,8 @@ impl Service for ApiService {
                     let accounts_service = Arc::new(AccountsServiceImpl::new(
                         auth_service.clone(),
                         Arc::new(AccountsRepoImpl),
-                        Arc::new(UsersRepoImpl),
                         db_executor.clone(),
+                        keys_client,
                     ));
 
                     let ctx = Context {

@@ -42,6 +42,10 @@ pub enum ErrorContext {
     ResponseJson,
     #[fail(display = "controller context - error with authentication token")]
     Token,
+    #[fail(display = "controller context - missing query despite required params")]
+    RequestMissingQuery,
+    #[fail(display = "controller context - failed to extract query params")]
+    RequestQueryParams,
 }
 
 derive_error_impls!();

@@ -97,7 +97,7 @@ mod tests {
     fn test_create() {
         let new_user = NewUser::default();
         let token = new_user.authentication_token.clone();
-        let auth_service = Arc::new(AuthServiceMock::new(vec![token.clone()]));
+        let auth_service = Arc::new(AuthServiceMock::new(vec![(token.clone(), new_user.id)]));
         let users_repo = Arc::new(UsersRepoMock::default());
         let db_executor = DbExecutorMock::default();
         let users_service = UsersServiceImpl::new(auth_service, users_repo, db_executor);
@@ -113,7 +113,7 @@ mod tests {
     fn test_get_by_auth_token() {
         let new_user = NewUser::default();
         let token = new_user.authentication_token.clone();
-        let auth_service = Arc::new(AuthServiceMock::new(vec![token.clone()]));
+        let auth_service = Arc::new(AuthServiceMock::new(vec![(token.clone(), new_user.id)]));
         let users_repo = Arc::new(UsersRepoMock::default());
         let db_executor = DbExecutorMock::default();
         let users_service = UsersServiceImpl::new(auth_service, users_repo, db_executor);

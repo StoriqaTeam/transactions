@@ -4,6 +4,7 @@ use std::fmt::Display;
 use failure::{Backtrace, Context, Fail};
 use validator::ValidationErrors;
 
+use client::keys::ErrorKind as KeysClientErrorKind;
 use repos::{Error as ReposError, ErrorKind as ReposErrorKind};
 
 #[derive(Debug)]
@@ -36,6 +37,8 @@ pub enum ErrorSource {
 pub enum ErrorContext {
     #[fail(display = "service error context - no auth token received")]
     NoAuthToken,
+    #[fail(display = "service error context - invalid auth token")]
+    InvalidToken,
 }
 
 derive_error_impls!();
@@ -53,6 +56,16 @@ impl From<ReposErrorKind> for ErrorKind {
             ReposErrorKind::Internal => ErrorKind::Internal,
             ReposErrorKind::Unauthorized => ErrorKind::Unauthorized,
             ReposErrorKind::Constraints(validation_errors) => ErrorKind::InvalidInput(validation_errors),
+        }
+    }
+}
+
+impl From<KeysClientErrorKind> for ErrorKind {
+    fn from(err: KeysClientErrorKind) -> Self {
+        match err {
+            KeysClientErrorKind::Internal => ErrorKind::Internal,
+            KeysClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
+            KeysClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
         }
     }
 }

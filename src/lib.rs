@@ -10,6 +10,7 @@ extern crate hyper;
 extern crate r2d2;
 extern crate serde;
 extern crate serde_json;
+extern crate serde_qs;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]

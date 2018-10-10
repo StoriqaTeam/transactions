@@ -38,19 +38,18 @@ impl From<PutUsersRequest> for UpdateUser {
 #[serde(rename_all = "camelCase")]
 pub struct PostAccountsRequest {
     pub id: AccountId,
+    pub user_id: UserId,
     pub currency: Currency,
     pub name: String,
 }
 
-impl From<(PostAccountsRequest, UserId, AccountAddress)> for NewAccount {
-    fn from(req: (PostAccountsRequest, UserId, AccountAddress)) -> Self {
+impl From<PostAccountsRequest> for CreateAccountAddress {
+    fn from(req: PostAccountsRequest) -> Self {
         Self {
-            id: req.0.id,
-            name: req.0.name,
-            currency: req.0.currency,
-            user_id: req.1,
-            balance: Amount::default(),
-            account_address: req.2,
+            id: req.id,
+            name: req.name,
+            currency: req.currency,
+            user_id: req.user_id,
         }
     }
 }
@@ -65,4 +64,11 @@ impl From<PutAccountsRequest> for UpdateAccount {
     fn from(req: PutAccountsRequest) -> Self {
         Self { name: req.name }
     }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GetUsersAccountsParams {
+    pub limit: i64,
+    pub offset: AccountId,
 }

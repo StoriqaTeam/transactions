@@ -11,11 +11,12 @@ pub struct AuthServiceMock {
 }
 
 impl AuthServiceMock {
-    pub fn new(allowed_tokens: Vec<AuthenticationToken>) -> Self {
+    pub fn new(allowed_tokens: Vec<(AuthenticationToken, UserId)>) -> Self {
         let mut users = HashMap::new();
-        for token in allowed_tokens {
+        for (token, id) in allowed_tokens {
             let mut user = User::default();
             user.authentication_token = token.clone();
+            user.id = id;
             users.insert(token, user);
         }
         AuthServiceMock { users }
@@ -23,12 +24,12 @@ impl AuthServiceMock {
 }
 
 impl AuthService for AuthServiceMock {
-    fn authenticate(&self, maybe_token: Option<AuthenticationToken>) -> ServiceFuture<User> {
+    fn authenticate(&self, token: AuthenticationToken) -> ServiceFuture<User> {
         Box::new(
-            maybe_token
-                .and_then(|token| self.users.get(&token))
+            self.users
+                .get(&token)
                 .map(|x| x.clone())
-                .ok_or(ectx!(err ErrorContext::NoAuthToken, ErrorKind::Unauthorized))
+                .ok_or(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized))
                 .into_future(),
         )
     }

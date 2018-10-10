@@ -27,6 +27,7 @@ sentry = "0.12"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
+serde_qs = "0.4"
 tokio-core = "0.1.17"
 uuid = { version = "0.6", features = ["use_std", "v4", "serde"] }
 validator = "0.8"
