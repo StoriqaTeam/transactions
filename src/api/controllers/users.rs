@@ -19,17 +19,6 @@ pub fn post_users(ctx: &Context) -> ControllerFuture {
     )
 }
 
-// pub fn get_users(ctx: &Context, user_id: UserId) -> ControllerFuture {
-//     let users_service = ctx.users_service.clone();
-
-//     Box::new(
-//         users_service
-//             .get_user(user_id)
-//             .map_err(ectx!(convert))
-//             .and_then(|user| response_with_model(&user.map(|user| UsersResponse::from(user)))),
-//     )
-// }
-
 pub fn get_users_me(ctx: &Context) -> ControllerFuture {
     let maybe_token = ctx.get_auth_token();
     let users_service = ctx.users_service.clone();
@@ -41,26 +30,3 @@ pub fn get_users_me(ctx: &Context) -> ControllerFuture {
             .and_then(|user| response_with_model(&user.map(|user| UsersResponse::from(user)))),
     )
 }
-
-// pub fn put_users(ctx: &Context, user_id: UserId) -> ControllerFuture {
-//     let users_service = ctx.users_service.clone();
-//     Box::new(
-//         parse_body::<PutUsersRequest>(ctx.body.clone())
-//             .and_then(move |input| {
-//                 let input_clone = input.clone();
-//                 users_service
-//                     .update_user(user_id, input.into())
-//                     .map_err(ectx!(convert => input_clone))
-//             }).and_then(|user| response_with_model(&UsersResponse::from(user))),
-//     )
-// }
-
-// pub fn delete_users(ctx: &Context, user_id: UserId) -> ControllerFuture {
-//     let users_service = ctx.users_service.clone();
-//     Box::new(
-//         users_service
-//             .delete_user(user_id)
-//             .map_err(ectx!(convert))
-//             .and_then(|user| response_with_model(&UsersResponse::from(user))),
-//     )
-// }

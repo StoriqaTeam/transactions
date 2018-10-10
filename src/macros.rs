@@ -4,7 +4,7 @@
 /// `ectx!` is a macro for converting errors from submodule to a module level.
 ///
 /// The most basic way you handle error is
-/// ```
+/// ```ignore
 /// let res = dangerous_operation(param1)
 ///     .map_err(|e|
 ///          e.context(format!("Called at line {}, filename: {}, with args: param1: {}", line!(), file!(), param1))
@@ -15,7 +15,7 @@
 /// ```
 ///
 /// ectx reduce all this boilerplate. Instead you just do:
-/// ```
+/// ```ignore
 /// let res = dangerous_operation(param1)
 ///     .map_err(ectx!(ErrorContext::Some, ErrorKind::Internal => param1)
 /// ```
@@ -29,7 +29,7 @@
 /// Use this keyword if you want to avoid final `.into()` conversion.
 /// This is useful if you're using this macro with try (question mark) syntax.
 /// Example:
-/// ```
+/// ```ignore
 /// let server_address = format!("{}:{}", config.server.host, config.server.port)
 ///     .parse::<SocketAddr>()
 ///     .map_err(ectx!(try
@@ -51,13 +51,13 @@
 /// By default `ectx!` returns closure, that is used in map_err, since it's the most common use case.
 /// If you want to get raw error, use `err key word`. E.g. these two calls are equivalent:
 ///
-/// ```
+/// ```ignore
 /// map_err(ectx!(ErrorKind::SomeErr))
 /// ```
 ///
 /// and
 ///
-/// ```
+/// ```ignore
 /// map_err(|e| ectx!(err ErrorKind::SomeErr))
 /// ```
 ///
@@ -137,7 +137,7 @@ macro_rules! ectx {
 ///
 /// ## Examples:
 ///
-/// ```
+/// ```ignore
 /// use diesel::sql_types::{Uuid as SqlUuid, VarChar};
 /// use uuid::Uuid;
 /// #[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone)]
@@ -146,7 +146,7 @@ macro_rules! ectx {
 /// derive_newtype_sql!(user_id, SqlUuid, UserId, UserId);
 /// ```
 ///
-/// ```
+/// ```ignore
 /// use diesel::sql_types::{Uuid as SqlUuid, VarChar};
 /// #[derive(Deserialize, FromSqlRow, AsExpression, Clone)]
 /// #[sql_type = "VarChar"]
@@ -205,7 +205,7 @@ macro_rules! mask_logs {
 ///
 /// ## Examples:
 ///
-/// ```
+/// ```ignore
 /// use failure::{Backtrace, Context, Fail};
 /// use services::ErrorKind as ServiceErrorKind;
 /// use std::fmt;

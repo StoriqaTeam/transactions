@@ -98,11 +98,7 @@ impl Service for ApiService {
                     };
 
                     let auth_service = Arc::new(AuthServiceImpl::new(Arc::new(UsersRepoImpl), db_executor.clone()));
-                    let users_service = Arc::new(UsersServiceImpl::new(
-                        auth_service.clone(),
-                        Arc::new(UsersRepoImpl),
-                        db_executor.clone(),
-                    ));
+                    let users_service = Arc::new(UsersServiceImpl::new(Arc::new(UsersRepoImpl), db_executor.clone()));
 
                     let accounts_service = Arc::new(AccountsServiceImpl::new(
                         auth_service.clone(),

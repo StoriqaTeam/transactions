@@ -74,6 +74,7 @@ pub mod tests {
     use diesel::r2d2::ConnectionManager;
     use diesel::PgConnection;
     use futures_cpupool::CpuPool;
+    use r2d2;
     use tokio_core::reactor::Core;
 
     use super::*;
@@ -88,6 +89,7 @@ pub mod tests {
         DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone())
     }
 
+    #[ignore]
     #[test]
     fn accounts_create() {
         let mut core = Core::new().unwrap();
@@ -95,9 +97,11 @@ pub mod tests {
         let repo = AccountsRepoImpl::default();
         let new_user = NewAccount::default();
         let res = core.run(db_executor.execute_test_transaction(move || repo.create(new_user)));
+        println!("{:?}", res);
         assert!(res.is_ok());
     }
 
+    #[ignore]
     #[test]
     fn accounts_read() {
         let mut core = Core::new().unwrap();
@@ -108,6 +112,7 @@ pub mod tests {
         assert!(res.is_ok());
     }
 
+    #[ignore]
     #[test]
     fn accounts_update() {
         let mut core = Core::new().unwrap();
@@ -123,6 +128,7 @@ pub mod tests {
         assert!(res.is_ok());
     }
 
+    #[ignore]
     #[test]
     fn accounts_delete() {
         let mut core = Core::new().unwrap();
@@ -133,6 +139,7 @@ pub mod tests {
         assert!(res.is_ok());
     }
 
+    #[ignore]
     #[test]
     fn accounts_list() {
         let mut core = Core::new().unwrap();

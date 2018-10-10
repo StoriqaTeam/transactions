@@ -170,46 +170,54 @@ mod tests {
     }
 
     #[test]
-    fn test_create() {
+    fn test_account_create() {
         let mut core = Core::new().unwrap();
-        let new_account = CreateAccountAddress::default();
+        let mut new_account = CreateAccountAddress::default();
+        new_account.name = "test test test acc".to_string();
         let token = AuthenticationToken::default();
         let service = create_account_service(token.clone(), new_account.user_id);
         let account = core.run(service.create_account(token, new_account));
         assert!(account.is_ok());
     }
     #[test]
-    fn test_get() {
+    fn test_account_get() {
         let mut core = Core::new().unwrap();
-        let new_account = CreateAccountAddress::default();
+        let mut new_account = CreateAccountAddress::default();
+        new_account.name = "test test test acc".to_string();
         let token = AuthenticationToken::default();
         let service = create_account_service(token.clone(), new_account.user_id);
         let account = core.run(service.get_account(token, new_account.id));
         assert!(account.is_ok());
     }
     #[test]
-    fn test_update() {
+    fn test_account_update() {
         let mut core = Core::new().unwrap();
-        let new_account = CreateAccountAddress::default();
-        let payload = UpdateAccount::default();
+        let mut new_account = CreateAccountAddress::default();
+        new_account.name = "test test test acc".to_string();
+        let mut payload = UpdateAccount::default();
+        payload.name = Some("test test test 2acc".to_string());
         let token = AuthenticationToken::default();
         let service = create_account_service(token.clone(), new_account.user_id);
+        let new_account = core.run(service.create_account(token.clone(), new_account)).unwrap();
         let account = core.run(service.update_account(token, new_account.id, payload));
         assert!(account.is_ok());
     }
     #[test]
-    fn test_delete() {
+    fn test_account_delete() {
         let mut core = Core::new().unwrap();
-        let new_account = CreateAccountAddress::default();
+        let mut new_account = CreateAccountAddress::default();
+        new_account.name = "test test test acc".to_string();
         let token = AuthenticationToken::default();
         let service = create_account_service(token.clone(), new_account.user_id);
+        let new_account = core.run(service.create_account(token.clone(), new_account)).unwrap();
         let account = core.run(service.delete_account(token, new_account.id));
         assert!(account.is_ok());
     }
     #[test]
-    fn test_get_for_users() {
+    fn test_account_get_for_users() {
         let mut core = Core::new().unwrap();
-        let new_account = CreateAccountAddress::default();
+        let mut new_account = CreateAccountAddress::default();
+        new_account.name = "test test test acc".to_string();
         let token = AuthenticationToken::default();
         let service = create_account_service(token.clone(), new_account.user_id);
         let account = core.run(service.get_accounts_for_user(token, new_account.user_id, new_account.id, 10));
