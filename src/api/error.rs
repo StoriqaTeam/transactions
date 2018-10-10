@@ -32,14 +32,20 @@ pub enum ErrorSource {
 #[allow(dead_code)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorContext {
-    #[fail(display = "controller source - error parsing config data")]
+    #[fail(display = "controller context - error parsing config data")]
     Config,
-    #[fail(display = "controller source - error converting json data from request")]
+    #[fail(display = "controller context - error converting json data from request")]
     RequestJson,
-    #[fail(display = "controller source - error parsing bytes into utf8 from request")]
+    #[fail(display = "controller context - error parsing bytes into utf8 from request")]
     RequestUTF8,
-    #[fail(display = "controller source - error converting json data from request")]
+    #[fail(display = "controller context - error converting json data from request")]
     ResponseJson,
+    #[fail(display = "controller context - error with authentication token")]
+    Token,
+    #[fail(display = "controller context - missing query despite required params")]
+    RequestMissingQuery,
+    #[fail(display = "controller context - failed to extract query params")]
+    RequestQueryParams,
 }
 
 derive_error_impls!();

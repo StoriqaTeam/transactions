@@ -9,7 +9,6 @@ pub struct Config {
     pub server: Server,
     pub database: Database,
     pub client: Client,
-    pub auth: Auth,
     pub cpu_pool: CpuPool,
     pub sentry: Option<SentryConfig>,
 }
@@ -17,13 +16,7 @@ pub struct Config {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Client {
     pub dns_threads: usize,
-    pub storiqa_url: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct Auth {
-    pub storiqa_jwt_public_key_base64: String,
-    pub storiqa_jwt_valid_secs: usize,
+    pub keys_url: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]

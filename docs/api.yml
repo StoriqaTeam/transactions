@@ -1,18 +1,16 @@
 openapi: 3.0.0
 servers:
-  - url: 'https://payments.storiqa.com/v1'
-  - url: 'http://payments.storiqa.com/v1'
+  - url: 'https://accounts.stq.cloud/v1'
+  - url: 'http://accounts.stq.cloud/v1'
 info:
-  description: Api server for wallet payments.
-  version: "1.1.0"
-  title: Payments gateway
+  description: Accounts, balances, transactions, etc.
+  version: "1.0.0"
+  title: Accounts core
   contact:
     email: a.karasev@storiqa.com
 tags:
   - name: users
-    description: Login, register, user management, etc.
-  - name: invoices
-    description: Invoice management
+    description: Methods for working with users
   - name: accounts
     description: Managements of accounts
   - name: balances
@@ -20,87 +18,6 @@ tags:
   - name: transactions
     description: Managements of transactions
 paths:
-  /invoices/callback:
-    post:
-      summary: A callback endpoint from upstream Accounts core
-      description: Updated the status of the invoice. This method is not intended for calling from outside. Custom auth scheme will be used
-      security:
-        - Bearer: []
-      tags:
-        - invoices
-      responses:
-        204:
-          description: Ok
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Invoice'
-  
-  /users/{userId}/invoices:
-    get:
-      summary: Get list of invoices for a user
-      description: You need to be authenticated to use this method.
-      security:
-        - Bearer: []
-      tags:
-        - invoices
-      parameters:
-        - $ref: '#/components/parameters/userIdParam'
-        - $ref: '#/components/parameters/invoiceIdParam'
-        - $ref: '#/components/parameters/offsetParam'
-        - $ref: '#/components/parameters/limitParam'
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Invoice'
-
-    post:
-      summary: Create an invoice
-      description: You need to be authenticated to use this method.
-      security:
-        - Bearer: []
-      tags:
-        - invoices
-      parameters:
-        - $ref: '#/components/parameters/userIdParam'
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Invoice'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateInvoiceInput'
-
-  /users/{userId}/invoices/{invoiceId}:
-    get:
-      summary: Get an invoice details
-      description: You need to be authenticated to use this method.
-      security:
-        - Bearer: []
-      tags:
-        - invoices
-      parameters:
-        - $ref: '#/components/parameters/userIdParam'
-        - $ref: '#/components/parameters/invoiceIdParam'
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Invoice'
-
   /users/{userId}/accounts/{accountId}/balance:
     get:
       summary: Returns balance of account
@@ -139,115 +56,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Balance'
-
-  /sessions:
-    post:
-      summary: Login by user and password
-      tags:
-        - users
-      responses:
-        200:
-          description: ok
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  token:
-                    $ref: '#/components/schemas/JWT'
-        400:
-          $ref: '#/components/responses/BadRequest'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        500:
-          $ref: '#/components/responses/Internal'
-
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SessionCreateInput'
-  /sessions/oauth:
-    post:
-      summary: Login by oauth provider
-      tags:
-        - users
-      responses:
-        200:
-          description: ok
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  token:
-                    $ref: '#/components/schemas/JWT'
-        400:
-          $ref: '#/components/responses/BadRequest'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        500:
-          $ref: '#/components/responses/Internal'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SessionOauthCreateInput'
-  /users:
-    post:
-      summary: Registers a new user
-      tags:
-        - users
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        400:
-          $ref: '#/components/responses/BadRequest'
-        422:
-          description: Json object matched schema, but didn't pass validations
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ValidationErrors'
-        500:
-          $ref: '#/components/responses/Internal'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserCreateInput'
-  /users/confirm_email:
-    post:
-      summary: Receives confirmation token, confirms email and gives back jwt for login
-      tags:
-        - users
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  token:
-                    $ref: '#/components/schemas/JWT'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        500:
-          $ref: '#/components/responses/Internal'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UsersConfirmEmailInput'
-
   /users/me:
     get:
       summary: Returns current user
+      description: You need to be authenticated to use this method.
       security:
         - Bearer: []
       tags:
@@ -258,7 +70,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
         401:
           $ref: '#/components/responses/Unauthorized'
         500:
@@ -394,7 +208,7 @@ paths:
           $ref: '#/components/responses/Internal'
     post:
       summary: Create a transactions for a user
-      description: Only users with `userId` are allowed to create a transaction
+      description: Only users with `userId` are allowed to create a transaction. The transaction will be put into queue. Once finished, callback will be executed.
       security:
         - Bearer: []
       tags:
@@ -408,6 +222,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         401:
           $ref: '#/components/responses/Unauthorized'
+        422:
+          $ref: '#/components/responses/UnprocessableEntity'
         500:
           $ref: '#/components/responses/Internal'
       requestBody:
@@ -415,6 +231,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TransactionCreateInput'
+
   '/users/{userId}/accounts/{accountId}/transactions':
     get:
       summary: Lists all transactions of a user's account
@@ -439,40 +256,25 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
-  /obfuscated_accounts:
-    get:
-      summary: Get obfuscated accounts for a phone number and currency
-      description: This method is mostly used when you want to search your counterparty for transaction by phone
+  '/users/{userId}/transactions/{transactionId}':
+    delete:
+      summary: Cancels a transaction for a user
+      description: Only users with `userId` are allowed to create a transaction. The transaction can only be canceled if it is on hold.
+      security:
+        - Bearer: []
+      tags:
+        - transactions
       parameters:
-        - name: phones
-          in: query
-          description: Filter accounts by owners with these phones
-          required: true
-          schema:
-            type: string
-        - name: currency
-          in: query
-          description: Filter accounts by this currency
-          required: true
-          schema:
-            type: string
-            format: currency
-        - $ref: '#/components/parameters/offsetParam'
-        - $ref: '#/components/parameters/limitParam'
-
+        - $ref: '#/components/parameters/userIdParam'
+        - $ref: '#/components/parameters/transactionIdParam'
       responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ObfuscatedUserAccount'
+        204:
+          description: Transaction was cancelled successfully
         401:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
+
 components:
   responses:
     NotFound:
@@ -515,6 +317,12 @@ components:
               description:
                 type: string
                 example: Unauthorized
+    UnprocessableEntity:
+      description: Json object matched schema, but didn't pass validations
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrors'
     Internal:
       description: Internal server error
       content:
@@ -530,17 +338,6 @@ components:
 
 
   schemas:
-    Balance:
-      type: object
-      required:
-        - currency
-        - value
-      properties:
-        currency:
-          $ref: '#/components/schemas/Currency'
-        value:
-          $ref: '#/components/schemas/Value'
-
     ValidationErrors:
       type: array
       items:
@@ -581,107 +378,14 @@ components:
               -
                 code: length
                 message: Length must be less than 16
-
-
-    DeviceType:
-      type: string
-      enum: [ios|android|web|other]
     UserId:
       type: string
       description: Id of a User in our system
-      example: user43975874jghkdf
+      example: jghkdfgdjfgkdf7gd
     AccountId:
       type: string
       description: Id of Account in our system
-      example: acc734895jghkdf
-    InvoiceId:
-      type: string
-      description: Id of Invoice in our system
-      example: inv74329823asdjk
-
-    ObfuscatedUserAccount:
-      type: object
-      description: >
-        User account with *** instead of some numbers + user info like phone
-        number and obfuscated name.
-         This one is used when you want to make a transaction and find accounts by phone number. That way
-         you don't get a full info, but you get enough info for a transfer.
-      properties:
-        account_id:
-          $ref: '#/components/schemas/AccountId'
-        address:
-          type: string
-          description: obfuscated blockchain address / fiat account number
-          example: ofds**************dfgdfofb
-        phone:
-          type: string
-          description: obfuscated phone number
-          example: 8903456***12
-        name:
-          type: string
-          description: obfuscated user full name
-          example: Alexey K.
-        currency:
-          $ref: '#/components/schemas/Currency'
-    OauthJWT:
-      type: string
-      description: Base64 encoded Json web token for a user from Oauth provider.
-      example: dfg98h798g875hs5fg6h5sf8gh==
-    JWT:
-      type: string
-      description: Base64 encoded Json web token for a user from API.
-      example: gnsiocrto7cr8ctialc34==
-    UsersConfirmEmailInput:
-      type: object
-      required:
-        - emailConfirmToken
-      properties:
-        emailConfirmToken:
-          type: string
-          description: Confirmation token that is sent via email after registration
-          example: lkg7713rlkf==
-    SessionCreateInput:
-      type: object
-      required:
-        - email
-        - password
-        - deviceType
-      properties:
-        email:
-          type: string
-          example: a.karasev@storiqa.com
-        password:
-          type: string
-          example: secret pass
-        deviceType:
-          $ref: '#/components/schemas/DeviceType'
-        deviceOs:
-          type: string
-          description: Android SDK / iOS version. Requied for mobile only.
-        deviceId:
-          description: IMEI. Requied for mobile only.
-          type: string
-          example: 1237987834798375349
-    SessionOauthCreateInput:
-      type: object
-      required:
-        - oauthToken
-        - oauthProvider
-      properties:
-        oauthToken:
-          $ref: '#/components/schemas/OauthJWT'
-        oauthProvider:
-          $ref: '#/components/schemas/OauthProvider'
-        deviceType:
-          type: string
-          enum: [ios|android|web|other]
-        deviceOs:
-          type: string
-          description: Android SDK / iOS version. Requied for mobile only.
-        deviceId:
-          description: IMEI. Requied for mobile only.
-          type: string
-          example: 1237987834798375349
+      example: jghkdfgdjfgkdf7gd
     Value:
       type: integer
       format: uint256
@@ -723,6 +427,7 @@ components:
           $ref: '#/components/schemas/Value'
         holdUntil:
           $ref: '#/components/schemas/Timestamp'
+
     Transaction:
       type: object
       required:
@@ -731,7 +436,6 @@ components:
         - toAddress
         - currency
         - value
-        - status
         - createdAt
       properties:
         id:
@@ -744,16 +448,11 @@ components:
           $ref: '#/components/schemas/Currency'
         value:
           $ref: '#/components/schemas/Value'
-        status:
-          $ref: '#/components/schemas/TransactionStatus'
         createdAt:
           $ref: '#/components/schemas/Timestamp'
         holdUntil:
           $ref: '#/components/schemas/Timestamp'
-    TransactionStatus:
-      type: string
-      enum: [pending|done|cancelled]
-      example: pending
+
     AccountAddress:
       type: string
       description: Either blockchain address or fiat account number (depending on currency)
@@ -785,6 +484,16 @@ components:
           type: string
           description: Short name for the account
           example: My main account
+    Balance:
+      type: object
+      required:
+        - currency
+        - value
+      properties:
+        currency:
+          $ref: '#/components/schemas/Currency'
+        value:
+          $ref: '#/components/schemas/Value'
     Account:
       type: object
       required:
@@ -819,17 +528,14 @@ components:
     Id:
       type: string
       example: jghkdfgdjfgkdf7gd
-    OauthProvider:
-      type: string
-      enum: [facebook|google]
     User:
       type: object
       required:
         - email
-        - password
         - phone
         - firstName
         - lastName
+        - companyName
       properties:
         id:
           $ref: '#/components/schemas/Id'
@@ -845,101 +551,9 @@ components:
         lastName:
           type: string
           example: Karasev
-    UserCreateInput:
-      type: object
-      required:
-        - email
-        - password
-        - firstName
-        - lastName
-        - deviceType
-      properties:
-        email:
+        companyName:
           type: string
-          example: a.karasev@storiqa.com
-        password:
-          type: string
-          example: secret password
-        firstName:
-          type: string
-          example: Alexey
-        lastName:
-          type: string
-          example: Karasev
-        deviceType:
-          type: string
-          enum: [ios|android|web|other]
-        deviceOs:
-          type: string
-          description: Android SDK / iOS version. Requied for mobile only.
-        deviceId:
-          description: IMEI. Requied for mobile only.
-          type: string
-          example: 1237987834798375349
-    Invoice:
-      type: object
-      required:
-        - id
-        - fromUserId
-        - status
-        - currency
-        - value
-        - to
-      properties:
-        id:
-          $ref: '#/components/schemas/InvoiceId'
-        status:
-          type: string
-          description: 'unpaid - no payments made, processing - incoming payment is made, but outgoing is not, done - invoice processing is done'
-          enum: [unpaid|processing|done]
-        callbackUrl:
-          $ref: '#/components/schemas/CallbackUrl'
-        currency:
-          $ref: '#/components/schemas/Currency'
-        value:
-          $ref: '#/components/schemas/Value'
-        to:
-          type: array
-          description: Invoice payment receivers
-          items:
-            type: object
-            properties:
-              userId:
-                $ref: '#/components/schemas/UserId'
-              currency:
-                $ref: '#/components/schemas/Currency'
-              value:
-                $ref: '#/components/schemas/Value'
-    CreateInvoiceInput:
-      type: object
-      required:
-        - id
-        - currency
-        - value
-        - to
-      properties:
-        id:
-          $ref: '#/components/schemas/InvoiceId'
-        currency:
-          $ref: '#/components/schemas/Currency'
-        callbackUrl:
-          $ref: '#/components/schemas/CallbackUrl'
-        to:
-          type: array
-          description: Invoice payment receivers
-          items:
-            type: object
-            properties:
-              userId:
-                $ref: '#/components/schemas/UserId'
-              currency:
-                $ref: '#/components/schemas/Currency'
-              value:
-                $ref: '#/components/schemas/Value'
-    CallbackUrl:
-      type: string
-      enum: [nightlyStq|stableStq|stageStq|productionStq]
-      example: nightlyStq
+          example: Storiqa
     Timestamp:
       type: string
       format: date-time
@@ -950,14 +564,14 @@ components:
       name: Authorization
       in: header
   parameters:
-    invoiceIdParam:
-      name: invoiceId
+    transactionIdParam:
+      name: transactionId
       in: path
-      description: ID of invoice
+      description: ID of transaction
       required: true
       schema:
-        $ref: '#/components/schemas/InvoiceId'
-
+        $ref: '#/components/schemas/Id'
+  
     userIdParam:
       name: userId
       in: path
@@ -990,4 +604,3 @@ components:
         minimum: 1
         maximum: 50
         default: 20
-      description: The numbers of items to return.

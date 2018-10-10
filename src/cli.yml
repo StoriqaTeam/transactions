@@ -7,3 +7,12 @@ subcommands:
         about: Prints current config
     - server:
         about: Starts server
+    - create_user:
+        about: Creates a new user and prints access token to console
+        args:
+            - name:
+                short: n
+                long: name
+                help: name of a user
+                required: true
+                takes_value: true

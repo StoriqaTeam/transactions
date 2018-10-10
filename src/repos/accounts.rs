@@ -5,67 +5,66 @@ use super::executor::with_tls_connection;
 use super::*;
 use models::*;
 use prelude::*;
-use schema::users::dsl::*;
+use schema::accounts::dsl::*;
 
-pub trait UsersRepo: Send + Sync + 'static {
-    fn find_user_by_authentication_token(&self, token: AuthenticationToken) -> RepoResult<Option<User>>;
-    fn create(&self, payload: NewUser) -> RepoResult<User>;
-    fn get(&self, user_id: UserId) -> RepoResult<Option<User>>;
-    fn update(&self, user_id: UserId, payload: UpdateUser) -> RepoResult<User>;
-    fn delete(&self, user_id: UserId) -> RepoResult<User>;
+pub trait AccountsRepo: Send + Sync + 'static {
+    fn create(&self, payload: NewAccount) -> RepoResult<Account>;
+    fn get(&self, account_id: AccountId) -> RepoResult<Option<Account>>;
+    fn update(&self, account_id: AccountId, payload: UpdateAccount) -> RepoResult<Account>;
+    fn delete(&self, account_id: AccountId) -> RepoResult<Account>;
+    fn list_for_user(&self, user_id: UserId, offset: AccountId, limit: i64) -> RepoResult<Vec<Account>>;
 }
 
 #[derive(Clone, Default)]
-pub struct UsersRepoImpl;
+pub struct AccountsRepoImpl;
 
-impl<'a> UsersRepo for UsersRepoImpl {
-    fn find_user_by_authentication_token(&self, token: AuthenticationToken) -> RepoResult<Option<User>> {
-        with_tls_connection(|conn| {
-            users
-                .filter(authentication_token.eq(token))
-                .limit(1)
-                .get_result(conn)
-                .optional()
-                .map_err(ectx!(ErrorKind::Internal))
-        })
-    }
-
-    fn create(&self, payload: NewUser) -> RepoResult<User> {
+impl<'a> AccountsRepo for AccountsRepoImpl {
+    fn create(&self, payload: NewAccount) -> RepoResult<Account> {
         let payload_clone = payload.clone();
         with_tls_connection(|conn| {
-            diesel::insert_into(users)
+            diesel::insert_into(accounts)
                 .values(payload.clone())
-                .get_result::<User>(conn)
+                .get_result::<Account>(conn)
                 .map_err(move |e| {
                     let kind = ErrorKind::from_diesel(&e);
                     ectx!(err e, kind => payload_clone)
                 })
         })
     }
-
-    fn get(&self, user_id_arg: UserId) -> RepoResult<Option<User>> {
+    fn get(&self, account_id_arg: AccountId) -> RepoResult<Option<Account>> {
         with_tls_connection(|conn| {
-            users
-                .filter(id.eq(user_id_arg))
+            accounts
+                .filter(id.eq(account_id_arg))
                 .limit(1)
                 .get_result(conn)
                 .optional()
                 .map_err(ectx!(ErrorKind::Internal))
         })
     }
-    fn update(&self, user_id_arg: UserId, payload: UpdateUser) -> RepoResult<User> {
+    fn update(&self, account_id_arg: AccountId, payload: UpdateAccount) -> RepoResult<Account> {
         with_tls_connection(|conn| {
-            let f = users.filter(id.eq(user_id_arg));
+            let f = accounts.filter(id.eq(account_id_arg));
             diesel::update(f)
                 .set(payload.clone())
                 .get_result(conn)
                 .map_err(ectx!(ErrorKind::Internal))
         })
     }
-    fn delete(&self, user_id_arg: UserId) -> RepoResult<User> {
+    fn delete(&self, account_id_arg: AccountId) -> RepoResult<Account> {
         with_tls_connection(|conn| {
-            let filtered = users.filter(id.eq(user_id_arg.clone()));
+            let filtered = accounts.filter(id.eq(account_id_arg.clone()));
             diesel::delete(filtered).get_result(conn).map_err(ectx!(ErrorKind::Internal))
+        })
+    }
+    fn list_for_user(&self, user_id_arg: UserId, offset: AccountId, limit: i64) -> RepoResult<Vec<Account>> {
+        with_tls_connection(|conn| {
+            accounts
+                .filter(user_id.eq(user_id_arg))
+                .filter(id.ge(offset))
+                .order(id)
+                .limit(limit)
+                .get_results(conn)
+                .map_err(ectx!(ErrorKind::Internal))
         })
     }
 }
@@ -92,11 +91,11 @@ pub mod tests {
 
     #[ignore]
     #[test]
-    fn users_create() {
+    fn accounts_create() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = UsersRepoImpl::default();
-        let new_user = NewUser::default();
+        let repo = AccountsRepoImpl::default();
+        let new_user = NewAccount::default();
         let res = core.run(db_executor.execute_test_transaction(move || repo.create(new_user)));
         println!("{:?}", res);
         assert!(res.is_ok());
@@ -104,26 +103,26 @@ pub mod tests {
 
     #[ignore]
     #[test]
-    fn users_read() {
+    fn accounts_read() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = UsersRepoImpl::default();
-        let new_user = NewUser::default();
+        let repo = AccountsRepoImpl::default();
+        let new_user = NewAccount::default();
         let res = core.run(db_executor.execute_test_transaction(move || repo.get(new_user.id)));
         assert!(res.is_ok());
     }
 
     #[ignore]
     #[test]
-    fn users_update() {
+    fn accounts_update() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = UsersRepoImpl::default();
-        let new_user = NewUser::default();
+        let repo = AccountsRepoImpl::default();
+        let new_user = NewAccount::default();
 
-        let payload = UpdateUser {
+        let payload = UpdateAccount {
             name: Some("test".to_string()),
-            authentication_token: None,
+            ..Default::default()
         };
         let res = core.run(db_executor.execute_test_transaction(move || repo.update(new_user.id, payload)));
         assert!(res.is_ok());
@@ -131,12 +130,24 @@ pub mod tests {
 
     #[ignore]
     #[test]
-    fn users_delete() {
+    fn accounts_delete() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = UsersRepoImpl::default();
-        let new_user = NewUser::default();
+        let repo = AccountsRepoImpl::default();
+        let new_user = NewAccount::default();
         let res = core.run(db_executor.execute_test_transaction(move || repo.delete(new_user.id)));
+        assert!(res.is_ok());
+    }
+
+    #[ignore]
+    #[test]
+    fn accounts_list() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let repo = AccountsRepoImpl::default();
+        let new_user = NewUser::default();
+        let account_offset = AccountId::default();
+        let res = core.run(db_executor.execute_test_transaction(move || repo.list_for_user(new_user.id, account_offset, 1)));
         assert!(res.is_ok());
     }
 }
