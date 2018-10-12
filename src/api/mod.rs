@@ -99,6 +99,7 @@ impl Service for ApiService {
                         GET /v1/users/{user_id: UserId}/transactions => get_users_transactions,
                         POST /v1/transactions/local => post_transactions_local,
                         POST /v1/transactions/deposit => post_transactions_deposit,
+                        POST /v1/transactions/withdraw => post_transactions_withdraw,
                         GET /v1/accounts/{account_id: AccountId}/transactions => get_accounts_transactions,
                         GET /v1/transactions/{transaction_id: TransactionId} => get_transactions,
                         PUT /v1/transactions/{transaction_id: TransactionId}/status => put_transactions_status,

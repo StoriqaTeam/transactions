@@ -50,6 +50,26 @@ pub fn post_transactions_deposit(ctx: &Context) -> ControllerFuture {
     )
 }
 
+pub fn post_transactions_withdraw(ctx: &Context) -> ControllerFuture {
+    let transactions_service = ctx.transactions_service.clone();
+    let maybe_token = ctx.get_auth_token();
+    let body = ctx.body.clone();
+    Box::new(
+        maybe_token
+            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
+            .into_future()
+            .and_then(move |token| {
+                parse_body::<PostTransactionsWithdrawRequest>(body)
+                    .and_then(move |input| {
+                        let input_clone = input.clone();
+                        transactions_service
+                            .withdraw(token, input.into())
+                            .map_err(ectx!(convert => input_clone))
+                    }).and_then(|transaction| response_with_model(&TransactionsResponse::from(transaction)))
+            }),
+    )
+}
+
 pub fn get_users_transactions(ctx: &Context, user_id: UserId) -> ControllerFuture {
     let transactions_service = ctx.transactions_service.clone();
     let maybe_token = ctx.get_auth_token();

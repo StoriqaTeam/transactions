@@ -44,6 +44,7 @@ pub trait TransactionsService: Send + Sync + 'static {
         input: CreateTransactionLocal,
     ) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     fn deposit_founds(&self, token: AuthenticationToken, input: DepositFounds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
+    fn withdraw(&self, token: AuthenticationToken, input: Withdraw) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     fn get_transaction(
         &self,
         token: AuthenticationToken,
@@ -279,6 +280,61 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 })
         }))
     }
+    fn withdraw(&self, token: AuthenticationToken, input: Withdraw) -> Box<Future<Item = Transaction, Error = Error> + Send> {
+        let transactions_repo = self.transactions_repo.clone();
+        let accounts_repo = self.accounts_repo.clone();
+        let db_executor = self.db_executor.clone();
+        let keys_client = self.keys_client.clone();
+        Box::new(self.auth_service.authenticate(token.clone()).and_then(move |user| {
+            input
+                .validate()
+                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
+                .into_future()
+                .and_then(move |_| {
+                    db_executor.execute_transaction(move || {
+                        let account_id = input.account_id.clone();
+                        // check that cr account exists and it is belonging to one user
+                        let cr_acc = accounts_repo
+                            .get(account_id)
+                            .map_err(ectx!(try convert => account_id, AccountKind::Cr))?;
+                        let cr_acc = cr_acc.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => user.id))?;
+                        if cr_acc.user_id != user.id {
+                            return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
+                        }
+                        let currency = input.currency.clone();
+                        if cr_acc.currency != currency {
+                            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Balance => currency));
+                        }
+                        let value = input.value.clone();
+                        if cr_acc.balance < value {
+                            return Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => value));
+                        }
+
+                        let value = input.value.clone();
+                        let currency = input.currency.clone();
+                        let user_id = input.user_id.clone();
+                        // find acc with min enough balance
+                        let dr_acc = accounts_repo
+                            .get_min_enough_value(value, currency, user_id)
+                            .map_err(ectx!(try convert ErrorContext::NotEnoughFounds => value, currency, user_id))?;
+
+                        // creating transaction in blockchain
+                        let create_blockchain_input = CreateBlockchainTx::new(cr_acc.address, dr_acc.address, input.value, input.currency);
+
+                        let blockchain_tx_id = keys_client
+                            .create_blockchain_tx(token, create_blockchain_input.clone())
+                            .map_err(ectx!(try convert => create_blockchain_input))
+                            .wait()?;
+
+                        // creating transaction in db
+                        let new_transaction: NewTransaction = (input, dr_acc.id, blockchain_tx_id).into();
+                        transactions_repo
+                            .create(new_transaction.clone())
+                            .map_err(ectx!(convert => new_transaction))
+                    })
+                })
+        }))
+    }
 }
 
 #[cfg(test)]
@@ -434,6 +490,47 @@ mod tests {
         new_transaction.address = cr_account.address;
 
         let transaction = core.run(trans_service.deposit_founds(token.clone(), new_transaction));
+        assert!(transaction.is_ok());
+    }
+    #[test]
+    fn test_transaction_withdraw() {
+        let mut core = Core::new().unwrap();
+        let token = AuthenticationToken::default();
+        let user_id = UserId::generate();
+        let (acc_service, trans_service) = create_services(token.clone(), user_id);
+
+        //creating withdraw account
+        let mut cr_account = CreateAccount::default();
+        cr_account.name = "test test test acc".to_string();
+        cr_account.user_id = user_id;
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+
+        //depositing on withdraw account
+        let mut deposit = DepositFounds::default();
+        deposit.value = Amount::new(100500);
+        deposit.address = cr_account.address;
+
+        core.run(trans_service.deposit_founds(token.clone(), deposit)).unwrap();
+
+        //creating random account
+        let mut dr_account = CreateAccount::default();
+        dr_account.name = "test test test acc".to_string();
+        dr_account.user_id = user_id;
+        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
+
+        //depositin on random account
+        let mut deposit = DepositFounds::default();
+        deposit.value = Amount::new(100500);
+        deposit.address = dr_account.address;
+
+        core.run(trans_service.deposit_founds(token.clone(), deposit)).unwrap();
+
+        //withdrawing
+        let mut withdraw = Withdraw::default();
+        withdraw.value = Amount::new(100);
+        withdraw.account_id = cr_account.id;
+
+        let transaction = core.run(trans_service.withdraw(token.clone(), withdraw));
         assert!(transaction.is_ok());
     }
 }

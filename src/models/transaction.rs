@@ -143,3 +143,70 @@ impl From<(DepositFounds, AccountId, AccountId)> for NewTransaction {
         }
     }
 }
+
+#[derive(Debug, Clone, Validate)]
+pub struct Withdraw {
+    pub user_id: UserId,
+    pub account_id: AccountId,
+    pub address: AccountAddress,
+    pub currency: Currency,
+    pub value: Amount,
+}
+
+impl Default for Withdraw {
+    fn default() -> Self {
+        Self {
+            user_id: UserId::default(),
+            account_id: AccountId::generate(),
+            address: AccountAddress::default(),
+            currency: Currency::Eth,
+            value: Amount::default(),
+        }
+    }
+}
+
+impl From<(Withdraw, AccountId, BlockchainTransactionId)> for NewTransaction {
+    fn from(create: (Withdraw, AccountId, BlockchainTransactionId)) -> Self {
+        Self {
+            id: TransactionId::generate(),
+            user_id: create.0.user_id,
+            currency: create.0.currency,
+            value: create.0.value,
+            cr_account_id: create.0.account_id,
+            dr_account_id: create.1,
+            hold_until: None,
+            status: TransactionStatus::Pending,
+            blockchain_tx_id: Some(create.2),
+        }
+    }
+}
+
+#[derive(Debug, Validate, Clone, Serialize)]
+pub struct CreateBlockchainTx {
+    pub from_address: AccountAddress,
+    pub to_address: AccountAddress,
+    pub currency: Currency,
+    pub value: Amount,
+}
+
+impl Default for CreateBlockchainTx {
+    fn default() -> Self {
+        Self {
+            from_address: AccountAddress::default(),
+            to_address: AccountAddress::default(),
+            currency: Currency::Eth,
+            value: Amount::default(),
+        }
+    }
+}
+
+impl CreateBlockchainTx {
+    pub fn new(from_address: AccountAddress, to_address: AccountAddress, value: Amount, currency: Currency) -> Self {
+        Self {
+            from_address,
+            to_address,
+            value,
+            currency,
+        }
+    }
+}

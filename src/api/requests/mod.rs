@@ -139,3 +139,25 @@ impl From<PostTransactionsDepositRequest> for DepositFounds {
         }
     }
 }
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PostTransactionsWithdrawRequest {
+    pub user_id: UserId,
+    pub account_id: AccountId,
+    pub address: AccountAddress,
+    pub currency: Currency,
+    pub value: Amount,
+}
+
+impl From<PostTransactionsWithdrawRequest> for Withdraw {
+    fn from(req: PostTransactionsWithdrawRequest) -> Self {
+        Self {
+            user_id: req.user_id,
+            account_id: req.account_id,
+            address: req.address,
+            currency: req.currency,
+            value: req.value,
+        }
+    }
+}

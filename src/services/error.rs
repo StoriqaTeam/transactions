@@ -49,6 +49,8 @@ pub enum ErrorContext {
     NoTransaction,
     #[fail(display = "service error context - not enough founds")]
     NotEnoughFounds,
+    #[fail(display = "service error context - invalid currency")]
+    InvalidCurrency,
 }
 
 derive_error_impls!();

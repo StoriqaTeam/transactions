@@ -19,6 +19,7 @@ pub trait AccountsRepo: Send + Sync + 'static {
     fn inc_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
     fn dec_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
     fn get_by_address(&self, address_: AccountAddress, kind_: AccountKind) -> RepoResult<Account>;
+    fn get_min_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Account>;
 }
 
 #[derive(Clone, Default)]
@@ -147,6 +148,21 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
                     ectx!(err e, error_kind => address_, kind_)
+                })
+        })
+    }
+    fn get_min_enough_value(&self, value: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Account> {
+        with_tls_connection(|conn| {
+            accounts
+                .filter(user_id.eq(&user_id_))
+                .filter(currency.eq(currency_.clone()))
+                .order(balance)
+                .filter(balance.ge(value))
+                .filter(kind.eq(AccountKind::Dr))
+                .get_result(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => value, currency_, user_id_)
                 })
         })
     }

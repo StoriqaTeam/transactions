@@ -157,6 +157,15 @@ impl AccountsRepo for AccountsRepoMock {
         let u = data.iter().filter(|x| x.address == address_ && x.kind == kind_).nth(0).cloned();
         Ok(u.unwrap())
     }
+    fn get_min_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Account> {
+        let data = self.data.lock().unwrap();
+        let u = data
+            .iter()
+            .filter(|x| x.user_id == user_id && x.currency == currency && x.balance >= value && x.kind == AccountKind::Dr)
+            .nth(0)
+            .cloned();
+        Ok(u.unwrap())
+    }
 }
 
 #[derive(Clone, Default)]
