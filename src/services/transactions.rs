@@ -43,6 +43,7 @@ pub trait TransactionsService: Send + Sync + 'static {
         token: AuthenticationToken,
         input: CreateTransactionLocal,
     ) -> Box<Future<Item = Transaction, Error = Error> + Send>;
+    fn deposit_founds(&self, token: AuthenticationToken, input: DepositFounds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     fn get_transaction(
         &self,
         token: AuthenticationToken,
@@ -107,9 +108,20 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         // check that balance > value of input
                         if cr_acc.balance > input.value {
                             let new_transaction: NewTransaction = input.into();
-                            transactions_repo
+                            let transaction = transactions_repo
                                 .create(new_transaction.clone())
-                                .map_err(ectx!(convert => new_transaction))
+                                .map_err(ectx!(try convert => new_transaction))?;
+                            let value = transaction.value;
+                            let cr_account_id = transaction.cr_account_id;
+                            accounts_repo
+                                .inc_balance(cr_account_id, value)
+                                .map_err(ectx!(try convert => cr_account_id, value))?;
+
+                            let dr_account_id = transaction.dr_account_id;
+                            accounts_repo
+                                .dec_balance(dr_account_id, value)
+                                .map_err(ectx!(try convert => dr_account_id, value))?;
+                            Ok(transaction)
                         } else {
                             Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => cr_acc.balance, input.value))
                         }
@@ -218,6 +230,55 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
             })
         }))
     }
+    fn deposit_founds(&self, token: AuthenticationToken, input: DepositFounds) -> Box<Future<Item = Transaction, Error = Error> + Send> {
+        let transactions_repo = self.transactions_repo.clone();
+        let accounts_repo = self.accounts_repo.clone();
+        let db_executor = self.db_executor.clone();
+        Box::new(self.auth_service.authenticate(token).and_then(move |user| {
+            input
+                .validate()
+                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
+                .into_future()
+                .and_then(move |_| {
+                    db_executor.execute_transaction(move || {
+                        let address = input.address.clone();
+                        // check that cr account exists and it is belonging to one user
+                        let cr_acc = accounts_repo
+                            .get_by_address(address.clone(), AccountKind::Cr)
+                            .map_err(ectx!(try convert => address, AccountKind::Cr))?;
+                        if cr_acc.user_id != user.id {
+                            return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
+                        }
+
+                        let address = input.address.clone();
+                        // check that dr account exists and it is belonging to one user
+                        let dr_acc = accounts_repo
+                            .get_by_address(address.clone(), AccountKind::Dr)
+                            .map_err(ectx!(try convert => address, AccountKind::Dr))?;
+                        if dr_acc.user_id != user.id {
+                            return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
+                        }
+
+                        // creating transaction
+                        let new_transaction: NewTransaction = (input, cr_acc.id, dr_acc.id).into();
+                        let transaction = transactions_repo
+                            .create(new_transaction.clone())
+                            .map_err(ectx!(try convert => new_transaction))?;
+                        let value = transaction.value;
+                        let cr_account_id = transaction.cr_account_id;
+                        accounts_repo
+                            .inc_balance(cr_account_id, value)
+                            .map_err(ectx!(try convert => cr_account_id, value))?;
+
+                        let dr_account_id = transaction.dr_account_id;
+                        accounts_repo
+                            .dec_balance(dr_account_id, value)
+                            .map_err(ectx!(try convert => dr_account_id, value))?;
+                        Ok(transaction)
+                    })
+                })
+        }))
+    }
 }
 
 #[cfg(test)]
@@ -228,13 +289,23 @@ mod tests {
     use services::*;
     use tokio_core::reactor::Core;
 
-    fn create_transaction_service(token: AuthenticationToken, user_id: UserId) -> TransactionsServiceImpl<DbExecutorMock> {
+    fn create_services(
+        token: AuthenticationToken,
+        user_id: UserId,
+    ) -> (AccountsServiceImpl<DbExecutorMock>, TransactionsServiceImpl<DbExecutorMock>) {
         let auth_service = Arc::new(AuthServiceMock::new(vec![(token, user_id)]));
-        let transactions_repo = Arc::new(TransactionsRepoMock::default());
         let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let transactions_repo = Arc::new(TransactionsRepoMock::default());
         let keys_client = Arc::new(KeysClientMock::default());
         let db_executor = DbExecutorMock::default();
-        TransactionsServiceImpl::new(auth_service, transactions_repo, accounts_repo, db_executor, keys_client)
+        let acc_service = AccountsServiceImpl::new(
+            auth_service.clone(),
+            accounts_repo.clone(),
+            db_executor.clone(),
+            keys_client.clone(),
+        );
+        let trans_service = TransactionsServiceImpl::new(auth_service, transactions_repo, accounts_repo, db_executor, keys_client);
+        (acc_service, trans_service)
     }
 
     #[test]
@@ -242,11 +313,11 @@ mod tests {
         let mut core = Core::new().unwrap();
         let token = AuthenticationToken::default();
         let user_id = UserId::generate();
-        let service = create_transaction_service(token.clone(), user_id);
+        let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
         let mut new_transaction = CreateTransactionLocal::default();
         new_transaction.value = Amount::new(100500);
-        let transaction = core.run(service.create_transaction_local(token, new_transaction));
+        let transaction = core.run(trans_service.create_transaction_local(token, new_transaction));
         assert!(transaction.is_ok());
     }
     #[test]
@@ -254,13 +325,13 @@ mod tests {
         let mut core = Core::new().unwrap();
         let token = AuthenticationToken::default();
         let user_id = UserId::generate();
-        let service = create_transaction_service(token.clone(), user_id);
+        let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
         let mut new_transaction = CreateTransactionLocal::default();
         new_transaction.value = Amount::new(100500);
-        let transaction = core.run(service.create_transaction_local(token.clone(), new_transaction));
+        let transaction = core.run(trans_service.create_transaction_local(token.clone(), new_transaction));
         assert!(transaction.is_ok());
-        let transaction = core.run(service.get_transaction(token, transaction.unwrap().id));
+        let transaction = core.run(trans_service.get_transaction(token, transaction.unwrap().id));
         assert!(transaction.is_ok());
     }
     #[test]
@@ -268,14 +339,14 @@ mod tests {
         let mut core = Core::new().unwrap();
         let token = AuthenticationToken::default();
         let user_id = UserId::generate();
-        let service = create_transaction_service(token.clone(), user_id);
+        let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
         let mut new_transaction = CreateTransactionLocal::default();
         new_transaction.value = Amount::new(100500);
         let transaction = core
-            .run(service.create_transaction_local(token.clone(), new_transaction.clone()))
+            .run(trans_service.create_transaction_local(token.clone(), new_transaction.clone()))
             .unwrap();
-        let transaction = core.run(service.get_transactions_for_user(token, transaction.user_id, transaction.id, 10));
+        let transaction = core.run(trans_service.get_transactions_for_user(token, transaction.user_id, transaction.id, 10));
         assert!(transaction.is_ok());
     }
     #[test]
@@ -283,13 +354,51 @@ mod tests {
         let mut core = Core::new().unwrap();
         let token = AuthenticationToken::default();
         let user_id = UserId::generate();
-        let service = create_transaction_service(token.clone(), user_id);
+        let (acc_service, trans_service) = create_services(token.clone(), user_id);
+        let mut cr_account = CreateAccount::default();
+        cr_account.name = "test test test acc".to_string();
+        cr_account.user_id = user_id;
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+
+        let mut new_transaction = DepositFounds::default();
+        new_transaction.value = Amount::new(100500);
+        new_transaction.address = cr_account.address;
+
+        core.run(trans_service.deposit_founds(token.clone(), new_transaction)).unwrap();
+
+        let mut dr_account = CreateAccount::default();
+        dr_account.name = "test test test acc".to_string();
+        dr_account.user_id = user_id;
+        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
         let mut new_transaction = CreateTransactionLocal::default();
         new_transaction.value = Amount::new(100500);
-        let transaction = core.run(service.create_transaction_local(token.clone(), new_transaction)).unwrap();
-        let transaction = core.run(service.get_account_transactions(token, transaction.cr_account_id));
+        new_transaction.cr_account_id = cr_account.id;
+        new_transaction.dr_account_id = dr_account.id;
+
+        let transaction = core
+            .run(trans_service.create_transaction_local(token.clone(), new_transaction))
+            .unwrap();
+        let transaction = core.run(trans_service.get_account_transactions(token, transaction.cr_account_id));
         assert!(transaction.is_ok());
     }
+    #[test]
+    fn test_transaction_deposit_founds() {
+        let mut core = Core::new().unwrap();
+        let token = AuthenticationToken::default();
+        let user_id = UserId::generate();
+        let (acc_service, trans_service) = create_services(token.clone(), user_id);
+        let mut cr_account = CreateAccount::default();
+        cr_account.name = "test test test acc".to_string();
+        cr_account.user_id = user_id;
 
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+
+        let mut new_transaction = DepositFounds::default();
+        new_transaction.value = Amount::new(100500);
+        new_transaction.address = cr_account.address;
+
+        let transaction = core.run(trans_service.deposit_founds(token.clone(), new_transaction));
+        assert!(transaction.is_ok());
+    }
 }

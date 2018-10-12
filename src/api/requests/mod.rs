@@ -77,7 +77,7 @@ pub struct GetUsersAccountsParams {
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct PostTransactionsRequest {
+pub struct PostTransactionsLocalRequest {
     pub user_id: UserId,
     pub dr_account_id: AccountId,
     pub cr_account_id: AccountId,
@@ -86,8 +86,8 @@ pub struct PostTransactionsRequest {
     pub hold_until: Option<SystemTime>,
 }
 
-impl From<PostTransactionsRequest> for CreateTransactionLocal {
-    fn from(req: PostTransactionsRequest) -> Self {
+impl From<PostTransactionsLocalRequest> for CreateTransactionLocal {
+    fn from(req: PostTransactionsLocalRequest) -> Self {
         Self {
             user_id: req.user_id,
             dr_account_id: req.dr_account_id,
@@ -116,4 +116,26 @@ impl From<PutTransactionsRequest> for TransactionStatus {
 pub struct GetUsersTransactionsParams {
     pub limit: i64,
     pub offset: TransactionId,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PostTransactionsDepositRequest {
+    pub user_id: UserId,
+    pub address: AccountAddress,
+    pub currency: Currency,
+    pub value: Amount,
+    pub blockchain_tx_id: BlockchainTransactionId,
+}
+
+impl From<PostTransactionsDepositRequest> for DepositFounds {
+    fn from(req: PostTransactionsDepositRequest) -> Self {
+        Self {
+            user_id: req.user_id,
+            address: req.address,
+            currency: req.currency,
+            value: req.value,
+            blockchain_tx_id: req.blockchain_tx_id,
+        }
+    }
 }

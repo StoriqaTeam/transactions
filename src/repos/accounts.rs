@@ -18,6 +18,7 @@ pub trait AccountsRepo: Send + Sync + 'static {
     fn get_balance_for_user(&self, user_id: UserId) -> RepoResult<Vec<Balance>>;
     fn inc_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
     fn dec_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
+    fn get_by_address(&self, address_: AccountAddress, kind_: AccountKind) -> RepoResult<Account>;
 }
 
 #[derive(Clone, Default)]
@@ -135,6 +136,18 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
                 let error_kind = ErrorKind::from(&e);
                 ectx!(err e, error_kind => account_id, amount)
             })
+        })
+    }
+    fn get_by_address(&self, address_: AccountAddress, kind_: AccountKind) -> RepoResult<Account> {
+        with_tls_connection(|conn| {
+            accounts
+                .filter(address.eq(address_.clone()))
+                .filter(kind.eq(kind_))
+                .get_result(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => address_, kind_)
+                })
         })
     }
 }

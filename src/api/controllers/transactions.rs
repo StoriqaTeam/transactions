@@ -10,7 +10,7 @@ use api::responses::*;
 use models::*;
 use serde_qs;
 
-pub fn post_transactions(ctx: &Context) -> ControllerFuture {
+pub fn post_transactions_local(ctx: &Context) -> ControllerFuture {
     let transactions_service = ctx.transactions_service.clone();
     let maybe_token = ctx.get_auth_token();
     let body = ctx.body.clone();
@@ -19,11 +19,31 @@ pub fn post_transactions(ctx: &Context) -> ControllerFuture {
             .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
             .into_future()
             .and_then(move |token| {
-                parse_body::<PostTransactionsRequest>(body)
+                parse_body::<PostTransactionsLocalRequest>(body)
                     .and_then(move |input| {
                         let input_clone = input.clone();
                         transactions_service
                             .create_transaction_local(token, input.into())
+                            .map_err(ectx!(convert => input_clone))
+                    }).and_then(|transaction| response_with_model(&TransactionsResponse::from(transaction)))
+            }),
+    )
+}
+
+pub fn post_transactions_deposit(ctx: &Context) -> ControllerFuture {
+    let transactions_service = ctx.transactions_service.clone();
+    let maybe_token = ctx.get_auth_token();
+    let body = ctx.body.clone();
+    Box::new(
+        maybe_token
+            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
+            .into_future()
+            .and_then(move |token| {
+                parse_body::<PostTransactionsDepositRequest>(body)
+                    .and_then(move |input| {
+                        let input_clone = input.clone();
+                        transactions_service
+                            .deposit_founds(token, input.into())
                             .map_err(ectx!(convert => input_clone))
                     }).and_then(|transaction| response_with_model(&TransactionsResponse::from(transaction)))
             }),

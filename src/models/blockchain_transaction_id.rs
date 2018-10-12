@@ -1,4 +1,5 @@
 use diesel::sql_types::Varchar;
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, PartialEq)]
 #[sql_type = "Varchar"]
@@ -12,5 +13,11 @@ impl BlockchainTransactionId {
 
     pub fn inner(&self) -> &str {
         &self.0
+    }
+}
+
+impl Default for BlockchainTransactionId {
+    fn default() -> Self {
+        BlockchainTransactionId(Uuid::new_v4().to_string())
     }
 }

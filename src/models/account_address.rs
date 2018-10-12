@@ -2,11 +2,12 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use diesel::sql_types::VarChar;
+use uuid::Uuid;
 use validator::{Validate, ValidationError, ValidationErrors};
 
 use models::*;
 
-#[derive(Deserialize, FromSqlRow, AsExpression, Clone, Default, PartialEq, Eq, Hash, Serialize, Debug)]
+#[derive(Deserialize, FromSqlRow, AsExpression, Clone, PartialEq, Eq, Hash, Serialize, Debug)]
 #[sql_type = "VarChar"]
 pub struct AccountAddress(String);
 derive_newtype_sql!(account_address, VarChar, AccountAddress, AccountAddress);
@@ -38,6 +39,12 @@ impl AccountAddress {
 
     pub fn raw(&self) -> &str {
         &self.0
+    }
+}
+
+impl Default for AccountAddress {
+    fn default() -> Self {
+        AccountAddress(Uuid::new_v4().to_string())
     }
 }
 

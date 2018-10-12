@@ -152,6 +152,11 @@ impl AccountsRepo for AccountsRepoMock {
             .cloned();
         Ok(u.unwrap())
     }
+    fn get_by_address(&self, address_: AccountAddress, kind_: AccountKind) -> RepoResult<Account> {
+        let data = self.data.lock().unwrap();
+        let u = data.iter().filter(|x| x.address == address_ && x.kind == kind_).nth(0).cloned();
+        Ok(u.unwrap())
+    }
 }
 
 #[derive(Clone, Default)]
