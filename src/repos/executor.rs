@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use diesel::pg::PgConnection;
-use failure::Error as FailureError;
+use diesel::result::Error as DieselError;
 use futures_cpupool::CpuPool;
 
 use super::error::*;
@@ -82,12 +82,22 @@ impl DbExecutor for DbExecutorImpl {
         Box::new(self.db_thread_pool.spawn_fn(move || {
             DB_CONN.with(move |tls_conn_cell| -> Result<T, E> {
                 let _ = put_connection_into_tls(db_pool, tls_conn_cell)?;
-                with_tls_connection(move |conn| {
-                    conn.transaction::<_, FailureError, _>(|| f().map_err(From::from))
-                        .map_err(ectx!(ErrorSource::Transaction, ErrorKind::Internal))
-                }).map_err(|e| {
+                let mut err: Option<E> = None;
+                let res = {
+                    let err_ref = &mut err;
+                    with_tls_connection(move |conn| {
+                        conn.transaction(|| {
+                            f().map_err(|e| {
+                                *err_ref = Some(e);
+                                DieselError::RollbackTransaction
+                            })
+                        }).map_err(ectx!(ErrorSource::Diesel, ErrorKind::Internal))
+                    })
+                };
+                res.map_err(|e| {
+                    let e: E = err.unwrap_or(e.into());
                     remove_connection_from_tls_if_broken(tls_conn_cell);
-                    e.into()
+                    e
                 })
             })
         }))
@@ -101,7 +111,7 @@ impl DbExecutor for DbExecutorImpl {
         E: From<Error> + Fail,
     {
         self.execute_transaction(|| {
-            f()?;
+            let _ = f()?;
             let e: Error = ErrorKind::Internal.into();
             Err(e.into())
         })

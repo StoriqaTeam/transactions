@@ -99,53 +99,62 @@ pub mod tests {
         DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone())
     }
 
-    #[ignore]
     #[test]
     fn users_create() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = UsersRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
         let new_user = NewUser::default();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.create(new_user)));
-        println!("{:?}", res);
-        assert!(res.is_ok());
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let res = users_repo.create(new_user);
+            assert!(res.is_ok());
+            res
+        }));
     }
 
-    #[ignore]
     #[test]
     fn users_read() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = UsersRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
         let new_user = NewUser::default();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.get(new_user.id)));
-        assert!(res.is_ok());
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let res = users_repo.get(user.id);
+            assert!(res.is_ok());
+            res
+        }));
     }
 
-    #[ignore]
     #[test]
     fn users_update() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = UsersRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
         let new_user = NewUser::default();
-
-        let payload = UpdateUser {
-            name: Some("test".to_string()),
-            authentication_token: None,
-        };
-        let res = core.run(db_executor.execute_test_transaction(move || repo.update(new_user.id, payload)));
-        assert!(res.is_ok());
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let payload = UpdateUser {
+                name: Some("test".to_string()),
+                authentication_token: None,
+            };
+            let res = users_repo.update(user.id, payload);
+            assert!(res.is_ok());
+            res
+        }));
     }
 
-    #[ignore]
     #[test]
     fn users_delete() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = UsersRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
         let new_user = NewUser::default();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.delete(new_user.id)));
-        assert!(res.is_ok());
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let res = users_repo.delete(user.id);
+            assert!(res.is_ok());
+            res
+        }));
     }
 }

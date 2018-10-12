@@ -273,7 +273,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
 
                         let dr_account_id = transaction.dr_account_id;
                         accounts_repo
-                            .dec_balance(dr_account_id, value)
+                            .inc_balance(dr_account_id, value)
                             .map_err(ectx!(try convert => dr_account_id, value))?;
                         Ok(transaction)
                     })

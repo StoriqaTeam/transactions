@@ -127,61 +127,182 @@ pub mod tests {
         DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone())
     }
 
-    #[ignore]
     #[test]
     fn transactions_create() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = TransactionsRepoImpl::default();
-        let new_user = NewTransaction::default();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.create(new_user)));
-        println!("{:?}", res);
-        assert!(res.is_ok());
+        let users_repo = UsersRepoImpl::default();
+        let accounts_repo = AccountsRepoImpl::default();
+        let transactions_repo = TransactionsRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc1 = accounts_repo.create(new_account)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc2 = accounts_repo.create(new_account)?;
+
+            let mut trans = NewTransaction::default();
+            trans.cr_account_id = acc1.id;
+            trans.dr_account_id = acc2.id;
+            trans.user_id = user.id;
+            trans.value = Amount::new(123);
+
+            let res = transactions_repo.create(trans);
+            assert!(res.is_ok());
+            res
+        }));
     }
 
-    #[ignore]
     #[test]
     fn transactions_read() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = TransactionsRepoImpl::default();
-        let transaction_id = TransactionId::generate();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.get(transaction_id)));
-        assert!(res.is_ok());
+        let users_repo = UsersRepoImpl::default();
+        let accounts_repo = AccountsRepoImpl::default();
+        let transactions_repo = TransactionsRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc1 = accounts_repo.create(new_account)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc2 = accounts_repo.create(new_account)?;
+
+            let mut trans = NewTransaction::default();
+            trans.cr_account_id = acc1.id;
+            trans.dr_account_id = acc2.id;
+            trans.user_id = user.id;
+            trans.value = Amount::new(123);
+
+            let transaction = transactions_repo.create(trans)?;
+            let res = transactions_repo.get(transaction.id);
+            assert!(res.is_ok());
+            res
+        }));
     }
 
-    #[ignore]
     #[test]
     fn transactions_update() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = TransactionsRepoImpl::default();
-        let transaction_id = TransactionId::generate();
-        let transaction_status = TransactionStatus::Done;
-        let res = core.run(db_executor.execute_test_transaction(move || repo.update_status(transaction_id, transaction_status)));
-        assert!(res.is_ok());
+        let users_repo = UsersRepoImpl::default();
+        let accounts_repo = AccountsRepoImpl::default();
+        let transactions_repo = TransactionsRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc1 = accounts_repo.create(new_account)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc2 = accounts_repo.create(new_account)?;
+
+            let mut trans = NewTransaction::default();
+            trans.cr_account_id = acc1.id;
+            trans.dr_account_id = acc2.id;
+            trans.user_id = user.id;
+            trans.value = Amount::new(123);
+
+            let transaction = transactions_repo.create(trans)?;
+            let transaction_status = TransactionStatus::Done;
+            let res = transactions_repo.update_status(transaction.id, transaction_status);
+            assert!(res.is_ok());
+            res
+        }));
     }
 
-    #[ignore]
     #[test]
     fn transactions_list_for_user() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = TransactionsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
+        let accounts_repo = AccountsRepoImpl::default();
+        let transactions_repo = TransactionsRepoImpl::default();
         let new_user = NewUser::default();
-        let transaction_offset = TransactionId::generate();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.list_for_user(new_user.id, transaction_offset, 1)));
-        assert!(res.is_ok());
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc1 = accounts_repo.create(new_account)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc2 = accounts_repo.create(new_account)?;
+
+            let mut trans = NewTransaction::default();
+            trans.cr_account_id = acc1.id;
+            trans.dr_account_id = acc2.id;
+            trans.user_id = user.id;
+            trans.value = Amount::new(123);
+
+            let transaction = transactions_repo.create(trans)?;
+            let res = transactions_repo.list_for_user(user.id, transaction.id, 1);
+            assert!(res.is_ok());
+            res
+        }));
     }
 
-    #[ignore]
     #[test]
     fn transactions_get_account_balance() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = TransactionsRepoImpl::default();
-        let account_id = AccountId::generate();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.get_account_balance(account_id)));
-        assert!(res.is_ok());
+        let users_repo = UsersRepoImpl::default();
+        let accounts_repo = AccountsRepoImpl::default();
+        let transactions_repo = TransactionsRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc1 = accounts_repo.create(new_account)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc2 = accounts_repo.create(new_account)?;
+
+            let mut trans = NewTransaction::default();
+            trans.cr_account_id = acc1.id;
+            trans.dr_account_id = acc2.id;
+            trans.user_id = user.id;
+            trans.value = Amount::new(123);
+
+            transactions_repo.create(trans)?;
+            let res = transactions_repo.get_account_balance(acc1.id);
+            assert!(res.is_ok());
+            res
+        }));
+    }
+    #[test]
+    fn transactions_list_for_account() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let users_repo = UsersRepoImpl::default();
+        let accounts_repo = AccountsRepoImpl::default();
+        let transactions_repo = TransactionsRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc1 = accounts_repo.create(new_account)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc2 = accounts_repo.create(new_account)?;
+
+            let mut trans = NewTransaction::default();
+            trans.cr_account_id = acc1.id;
+            trans.dr_account_id = acc2.id;
+            trans.user_id = user.id;
+            trans.value = Amount::new(123);
+
+            transactions_repo.create(trans)?;
+            let res = transactions_repo.list_for_account(acc1.id);
+            assert!(res.is_ok());
+            res
+        }));
     }
 }

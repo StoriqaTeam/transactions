@@ -188,66 +188,167 @@ pub mod tests {
         DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone())
     }
 
-    #[ignore]
     #[test]
     fn accounts_create() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = AccountsRepoImpl::default();
-        let new_user = NewAccount::default();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.create(new_user)));
-        println!("{:?}", res);
-        assert!(res.is_ok());
+        let accounts_repo = AccountsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let res = accounts_repo.create(new_account);
+            assert!(res.is_ok());
+            res
+        }));
     }
 
-    #[ignore]
     #[test]
     fn accounts_read() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = AccountsRepoImpl::default();
-        let account_id = AccountId::generate();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.get(account_id)));
-        assert!(res.is_ok());
+        let accounts_repo = AccountsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let account = accounts_repo.create(new_account).unwrap();
+            let res = accounts_repo.get(account.id);
+            assert!(res.is_ok());
+            res
+        }));
     }
 
-    #[ignore]
     #[test]
     fn accounts_update() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = AccountsRepoImpl::default();
-        let account_id = AccountId::generate();
+        let accounts_repo = AccountsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let account = accounts_repo.create(new_account).unwrap();
 
-        let payload = UpdateAccount {
-            name: Some("test".to_string()),
-            ..Default::default()
-        };
-        let res = core.run(db_executor.execute_test_transaction(move || repo.update(account_id, payload)));
-        assert!(res.is_ok());
+            let payload = UpdateAccount {
+                name: Some("test".to_string()),
+                ..Default::default()
+            };
+            let res = accounts_repo.update(account.id, payload);
+            assert!(res.is_ok());
+            res
+        }));
     }
 
-    #[ignore]
     #[test]
     fn accounts_delete() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = AccountsRepoImpl::default();
-        let _new_user = NewAccount::default();
-        let account_id = AccountId::generate();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.delete(account_id)));
-        assert!(res.is_ok());
+        let accounts_repo = AccountsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let account = accounts_repo.create(new_account).unwrap();
+            let res = accounts_repo.delete(account.id);
+            assert!(res.is_ok());
+            res
+        }));
     }
-
-    #[ignore]
     #[test]
     fn accounts_list() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
-        let repo = AccountsRepoImpl::default();
+        let accounts_repo = AccountsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
         let new_user = NewUser::default();
-        let account_offset = AccountId::generate();
-        let res = core.run(db_executor.execute_test_transaction(move || repo.list_for_user(new_user.id, account_offset, 1)));
-        assert!(res.is_ok());
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let account = accounts_repo.create(new_account).unwrap();
+            let res = accounts_repo.list_for_user(user.id, account.id, 1);
+            assert!(res.is_ok());
+            res
+        }));
+    }
+    #[test]
+    fn accounts_inc_balance() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let accounts_repo = AccountsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let account = accounts_repo.create(new_account).unwrap();
+            let res = accounts_repo.inc_balance(account.id, Amount::new(123));
+            assert!(res.is_ok());
+            res
+        }));
+    }
+
+    #[test]
+    fn accounts_dec_balance() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let accounts_repo = AccountsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let account = accounts_repo.create(new_account).unwrap();
+            let res = accounts_repo.dec_balance(account.id, Amount::new(123));
+            assert!(res.is_ok());
+            res
+        }));
+    }
+    #[test]
+    fn accounts_get_by_address() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let accounts_repo = AccountsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let account = accounts_repo.create(new_account).unwrap();
+            let res = accounts_repo.get_by_address(account.address, AccountKind::Cr);
+            assert!(res.is_ok());
+            res
+        }));
+    }
+    #[test]
+    fn accounts_get_min_enough_value() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let accounts_repo = AccountsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            new_account.kind = AccountKind::Dr;
+            let account = accounts_repo.create(new_account).unwrap();
+            accounts_repo.inc_balance(account.id, Amount::new(123))?;
+            let res = accounts_repo.get_min_enough_value(Amount::new(123), Currency::Eth, user.id);
+            assert!(res.is_ok());
+            res
+        }));
     }
 }
