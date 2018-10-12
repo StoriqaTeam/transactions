@@ -113,7 +113,7 @@ pub fn get_transactions(ctx: &Context, transaction_id: TransactionId) -> Control
                 transactions_service
                     .get_transaction(token, transaction_id)
                     .map_err(ectx!(convert))
-                    .and_then(|transaction| response_with_model(&transaction.map(|transaction| TransactionsResponse::from(transaction))))
+                    .and_then(|transaction| response_with_model(&transaction.map(TransactionsResponse::from)))
             }),
     )
 }

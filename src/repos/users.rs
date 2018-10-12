@@ -70,7 +70,7 @@ impl<'a> UsersRepo for UsersRepoImpl {
     }
     fn delete(&self, user_id_arg: UserId) -> RepoResult<User> {
         with_tls_connection(|conn| {
-            let filtered = users.filter(id.eq(user_id_arg.clone()));
+            let filtered = users.filter(id.eq(user_id_arg));
             diesel::delete(filtered).get_result(conn).map_err(move |e| {
                 let kind = ErrorKind::from(&e);
                 ectx!(err e, kind => user_id_arg)

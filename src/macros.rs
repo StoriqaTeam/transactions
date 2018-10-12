@@ -72,11 +72,7 @@ macro_rules! ectx {
                 msg.push_str(&arg);
             )*
         )*
-        let err = $e.context(msg);
-        $(
-            let err = err.context($context);
-        )*
-        err
+        $e.context(msg)$(.context($context))*
     }};
 
     (err $e:expr $(,$context:expr)* $(=> $($arg:expr),*)*) => {{

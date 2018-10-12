@@ -63,7 +63,7 @@ impl DbExecutor for DbExecutorImpl {
         let db_pool = self.db_pool.clone();
         Box::new(self.db_thread_pool.spawn_fn(move || {
             DB_CONN.with(move |tls_conn_cell| -> Result<T, E> {
-                let _ = put_connection_into_tls(db_pool, tls_conn_cell)?;
+                put_connection_into_tls(db_pool, tls_conn_cell)?;
                 f().map_err(move |e| {
                     remove_connection_from_tls_if_broken(tls_conn_cell);
                     e
@@ -81,7 +81,7 @@ impl DbExecutor for DbExecutorImpl {
         let db_pool = self.db_pool.clone();
         Box::new(self.db_thread_pool.spawn_fn(move || {
             DB_CONN.with(move |tls_conn_cell| -> Result<T, E> {
-                let _ = put_connection_into_tls(db_pool, tls_conn_cell)?;
+                put_connection_into_tls(db_pool, tls_conn_cell)?;
                 let mut err: Option<E> = None;
                 let res = {
                     let err_ref = &mut err;
@@ -95,7 +95,7 @@ impl DbExecutor for DbExecutorImpl {
                     })
                 };
                 res.map_err(|e| {
-                    let e: E = err.unwrap_or(e.into());
+                    let e: E = err.unwrap_or_else(|| e.into());
                     remove_connection_from_tls_if_broken(tls_conn_cell);
                     e
                 })
@@ -146,7 +146,7 @@ fn put_connection_into_tls(db_pool: PgPool, tls_conn_cell: &RefCell<Option<PgPoo
             Ok(conn) => *maybe_conn = Some(conn),
             Err(e) => {
                 let e: Error = ectx!(err e, ErrorSource::R2D2, ErrorKind::Internal);
-                return Err(e.into());
+                return Err(e);
             }
         }
     }

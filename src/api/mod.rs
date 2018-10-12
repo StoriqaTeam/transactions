@@ -192,7 +192,7 @@ pub fn start_server(config: Config) {
                     let res: Result<_, hyper::Error> = Ok(api_clone.clone());
                     res
                 };
-                let addr = api.server_address.clone();
+                let addr = api.server_address;
                 let server = Server::bind(&api.server_address)
                     .serve(new_service)
                     .map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal => addr));

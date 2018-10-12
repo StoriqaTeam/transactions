@@ -48,7 +48,7 @@ impl KeysClientImpl {
         &self,
         query: &str,
         body: String,
-        token: AuthenticationToken,
+        token: &AuthenticationToken,
         method: Method,
     ) -> impl Future<Item = T, Error = Error> + Send {
         let query = query.to_string();
@@ -86,7 +86,7 @@ impl KeysClient for KeysClientImpl {
                 .into_future()
                 .and_then(move |body| {
                     client
-                        .exec_query::<CreateAccountAddressResponse>("/account_address", body, token, Method::POST)
+                        .exec_query::<CreateAccountAddressResponse>("/account_address", body, &token, Method::POST)
                         .map(|resp_data| resp_data.account_address)
                 }),
         )
@@ -103,7 +103,7 @@ impl KeysClient for KeysClientImpl {
                 .into_future()
                 .and_then(move |body| {
                     client
-                        .exec_query::<CreateBlockchainTxResponse>("/blockchain", body, token, Method::POST)
+                        .exec_query::<CreateBlockchainTxResponse>("/blockchain", body, &token, Method::POST)
                         .map(|resp_data| resp_data.blockchain_tx_id)
                 }),
         )

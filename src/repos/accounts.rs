@@ -61,7 +61,7 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
     }
     fn delete(&self, account_id_arg: AccountId) -> RepoResult<Account> {
         with_tls_connection(|conn| {
-            let filtered = accounts.filter(id.eq(account_id_arg.clone()));
+            let filtered = accounts.filter(id.eq(account_id_arg));
             diesel::delete(filtered).get_result(conn).map_err(move |e| {
                 let error_kind = ErrorKind::from(&e);
                 ectx!(err e, error_kind => account_id_arg)
@@ -155,7 +155,7 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
         with_tls_connection(|conn| {
             accounts
                 .filter(user_id.eq(&user_id_))
-                .filter(currency.eq(currency_.clone()))
+                .filter(currency.eq(currency_))
                 .order(balance)
                 .filter(balance.ge(value))
                 .filter(kind.eq(AccountKind::Dr))

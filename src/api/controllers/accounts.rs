@@ -73,7 +73,7 @@ pub fn get_accounts(ctx: &Context, account_id: AccountId) -> ControllerFuture {
                 accounts_service
                     .get_account(token, account_id)
                     .map_err(ectx!(convert))
-                    .and_then(|account| response_with_model(&account.map(|account| AccountsResponse::from(account))))
+                    .and_then(|account| response_with_model(&account.map(AccountsResponse::from)))
             }),
     )
 }

@@ -43,7 +43,7 @@ impl Context {
                 } else {
                     None
                 }
-            }).map(|t| AuthenticationToken::new(t))
+            }).map(AuthenticationToken::new)
     }
 }
 

@@ -292,7 +292,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 .into_future()
                 .and_then(move |_| {
                     db_executor.execute_transaction(move || {
-                        let account_id = input.account_id.clone();
+                        let account_id = input.account_id;
                         // check that cr account exists and it is belonging to one user
                         let cr_acc = accounts_repo
                             .get(account_id)
@@ -301,18 +301,18 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         if cr_acc.user_id != user.id {
                             return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                         }
-                        let currency = input.currency.clone();
+                        let currency = input.currency;
                         if cr_acc.currency != currency {
                             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Balance => currency));
                         }
-                        let value = input.value.clone();
+                        let value = input.value;
                         if cr_acc.balance < value {
                             return Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => value));
                         }
 
-                        let value = input.value.clone();
-                        let currency = input.currency.clone();
-                        let user_id = input.user_id.clone();
+                        let value = input.value;
+                        let currency = input.currency;
+                        let user_id = input.user_id;
                         // find acc with min enough balance
                         let dr_acc = accounts_repo
                             .get_min_enough_value(value, currency, user_id)

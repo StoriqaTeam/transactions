@@ -107,7 +107,7 @@ fn pg_decimal_to_u128(numeric: &PgNumeric) -> deserialize::Result<u128> {
             .ok_or(Box::from(format!("Overflow in Pgnumeric to u128 (digits phase): {:#?}", numeric)) as Box<StdError + Send + Sync>)?;
     }
 
-    let correction_exp = 4 * ((weight as i32) - (digits.len() as i32) + 1);
+    let correction_exp = 4 * ((i32::from(weight)) - (digits.len() as i32) + 1);
     if correction_exp < 0 {
         return Err(Box::from(format!(
             "Negative correction exp is not supported in u128: {:#?}",
@@ -152,14 +152,14 @@ mod tests {
 
             match sign {
                 0 => PgNumeric::Positive {
-                    weight: weight,
+                    weight,
                     scale: scale as u16,
-                    digits: digits,
+                    digits,
                 },
                 0x4000 => PgNumeric::Negative {
-                    weight: weight,
+                    weight,
                     scale: scale as u16,
-                    digits: digits,
+                    digits,
                 },
                 _ => PgNumeric::NaN,
             }

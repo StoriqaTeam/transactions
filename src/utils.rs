@@ -2,7 +2,6 @@ use failure::Fail;
 use futures::future;
 use futures::prelude::*;
 use hyper;
-use regex;
 use sentry::integrations::failure::capture_error;
 
 pub fn format_error<E: Fail>(error: &E) -> String {
@@ -17,15 +16,14 @@ pub fn format_error<E: Fail>(error: &E) -> String {
         result.push_str(&format!("{}\n", err));
     }
     if let Some(bt) = error.backtrace() {
-        let regexp = regex::Regex::new("transactions_lib").unwrap();
         let bt = format!("{}", bt);
-        let lines: Vec<&str> = bt.split("\n").skip(1).collect();
-        if lines.len() > 0 {
+        let lines: Vec<&str> = bt.split('\n').skip(1).collect();
+        if lines.is_empty() {
             result.push_str("\nRelevant backtrace:\n");
         }
         lines.chunks(2).for_each(|chunk| {
             if let Some(line1) = chunk.get(0) {
-                if regexp.is_match(line1) {
+                if line1.contains("transactions_lib") {
                     result.push_str(line1);
                     result.push_str("\n");
                     if let Some(line2) = chunk.get(1) {
