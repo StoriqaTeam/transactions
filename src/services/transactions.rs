@@ -314,24 +314,50 @@ mod tests {
         let token = AuthenticationToken::default();
         let user_id = UserId::generate();
         let (acc_service, trans_service) = create_services(token.clone(), user_id);
+        let mut cr_account = CreateAccount::default();
+        cr_account.name = "test test test acc".to_string();
+        cr_account.user_id = user_id;
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+
+        let mut new_transaction = DepositFounds::default();
+        new_transaction.value = Amount::new(100501);
+        new_transaction.address = cr_account.address;
+
+        core.run(trans_service.deposit_founds(token.clone(), new_transaction)).unwrap();
+
+        let mut dr_account = CreateAccount::default();
+        dr_account.name = "test test test acc".to_string();
+        dr_account.user_id = user_id;
+        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
         let mut new_transaction = CreateTransactionLocal::default();
         new_transaction.value = Amount::new(100500);
-        let transaction = core.run(trans_service.create_transaction_local(token, new_transaction));
+        new_transaction.cr_account_id = cr_account.id;
+        new_transaction.dr_account_id = dr_account.id;
+
+        let transaction = core.run(trans_service.create_transaction_local(token.clone(), new_transaction));
         assert!(transaction.is_ok());
     }
     #[test]
-    fn test_transaction_get() {
+    fn test_transaction_get_by_id() {
         let mut core = Core::new().unwrap();
         let token = AuthenticationToken::default();
         let user_id = UserId::generate();
         let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
-        let mut new_transaction = CreateTransactionLocal::default();
+        let mut cr_account = CreateAccount::default();
+        cr_account.name = "test test test acc".to_string();
+        cr_account.user_id = user_id;
+
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+
+        let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100500);
-        let transaction = core.run(trans_service.create_transaction_local(token.clone(), new_transaction));
-        assert!(transaction.is_ok());
-        let transaction = core.run(trans_service.get_transaction(token, transaction.unwrap().id));
+        new_transaction.address = cr_account.address;
+        new_transaction.user_id = user_id;
+
+        let transaction = core.run(trans_service.deposit_founds(token.clone(), new_transaction)).unwrap();
+        let transaction = core.run(trans_service.get_transaction(token, transaction.id));
         assert!(transaction.is_ok());
     }
     #[test]
@@ -341,13 +367,22 @@ mod tests {
         let user_id = UserId::generate();
         let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
-        let mut new_transaction = CreateTransactionLocal::default();
+        let mut cr_account = CreateAccount::default();
+        cr_account.name = "test test test acc".to_string();
+        cr_account.user_id = user_id;
+
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+
+        let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100500);
-        let transaction = core
-            .run(trans_service.create_transaction_local(token.clone(), new_transaction.clone()))
-            .unwrap();
-        let transaction = core.run(trans_service.get_transactions_for_user(token, transaction.user_id, transaction.id, 10));
-        assert!(transaction.is_ok());
+        new_transaction.address = cr_account.address;
+        new_transaction.user_id = user_id;
+
+        let transaction = core.run(trans_service.deposit_founds(token.clone(), new_transaction)).unwrap();
+
+        let transactions = core.run(trans_service.get_transactions_for_user(token, user_id, transaction.id, 10));
+        assert!(transactions.is_ok());
+        assert_eq!(transactions.unwrap().len(), 1);
     }
     #[test]
     fn test_transaction_get_for_account() {
@@ -361,7 +396,7 @@ mod tests {
         let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
-        new_transaction.value = Amount::new(100500);
+        new_transaction.value = Amount::new(100501);
         new_transaction.address = cr_account.address;
 
         core.run(trans_service.deposit_founds(token.clone(), new_transaction)).unwrap();
