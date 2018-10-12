@@ -4,7 +4,7 @@ use diesel::serialize::{self, IsNull, Output, ToSql};
 use diesel::sql_types::VarChar;
 use std::io::Write;
 
-#[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Eq, PartialEq, Hash)]
 #[sql_type = "VarChar"]
 #[serde(rename_all = "lowercase")]
 pub enum Currency {

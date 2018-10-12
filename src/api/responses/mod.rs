@@ -51,3 +51,34 @@ impl From<Account> for AccountsResponse {
         }
     }
 }
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BalanceResponse {
+    pub balance: Amount,
+    pub currency: Currency,
+}
+
+impl From<Balance> for BalanceResponse {
+    fn from(balance: Balance) -> Self {
+        Self {
+            balance: balance.balance,
+            currency: balance.currency,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BalancesResponse {
+    #[serde(flatten)]
+    pub data: Vec<BalanceResponse>,
+}
+
+impl From<Vec<Balance>> for BalancesResponse {
+    fn from(balances: Vec<Balance>) -> Self {
+        Self {
+            data: balances.into_iter().map(From::from).collect(),
+        }
+    }
+}
