@@ -80,7 +80,7 @@ pipeline:
     group: package
     image: plugins/docker
     repo: storiqateam/transactions
-    dockerfile: docker/Dockerfile.default
+    dockerfile: Dockerfile
     tags:
     - ${DRONE_BRANCH//\//_}
     - ${DRONE_BRANCH//\//_}${DRONE_BUILD_NUMBER}
@@ -92,7 +92,9 @@ pipeline:
   package:
     image: plugins/docker
     repo: storiqateam/transactions
-    dockerfile: docker/Dockerfile.run
+    dockerfile: Dockerfile
+    build_args:
+    - env=release
     tags:
     - '${DRONE_TAG}'
     - latest
