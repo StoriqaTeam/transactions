@@ -151,6 +151,7 @@ pub struct Withdraw {
     pub address: AccountAddress,
     pub currency: Currency,
     pub value: Amount,
+    pub fee: Amount,
 }
 
 impl Default for Withdraw {
@@ -161,6 +162,7 @@ impl Default for Withdraw {
             address: AccountAddress::default(),
             currency: Currency::Eth,
             value: Amount::default(),
+            fee: Amount::default(),
         }
     }
 }
@@ -182,31 +184,60 @@ impl From<(Withdraw, Amount, AccountId, BlockchainTransactionId)> for NewTransac
 }
 
 #[derive(Debug, Validate, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateBlockchainTx {
-    pub from_address: AccountAddress,
+    pub id: TransactionId,
+    pub from: AccountAddress,
     pub to: AccountAddress,
-    pub value: Amount,
     pub currency: Currency,
+    pub value: Amount,
+    pub fee_price: Amount,
+    pub nonce: Option<u64>,
+    pub utxos: Option<Vec<BitcoinUtxos>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BitcoinUtxos {
+    tx_hash: BlockchainTransactionId,
+    index: u64,
+    value: Amount,
 }
 
 impl Default for CreateBlockchainTx {
     fn default() -> Self {
         Self {
-            from_address: AccountAddress::default(),
+            id: TransactionId::generate(),
+            from: AccountAddress::default(),
             to: AccountAddress::default(),
-            value: Amount::default(),
             currency: Currency::Eth,
+            value: Amount::default(),
+            fee_price: Amount::default(),
+            nonce: Some(0),
+            utxos: None,
         }
     }
 }
 
 impl CreateBlockchainTx {
-    pub fn new(from_address: AccountAddress, to: AccountAddress, value: Amount, currency: Currency) -> Self {
+    pub fn new(
+        from: AccountAddress,
+        to: AccountAddress,
+        currency: Currency,
+        value: Amount,
+        fee_price: Amount,
+        nonce: Option<u64>,
+        utxos: Option<Vec<BitcoinUtxos>>,
+    ) -> Self {
         Self {
-            from_address,
+            id: TransactionId::generate(),
+            from,
             to,
-            value,
             currency,
+            value,
+            fee_price,
+            nonce,
+            utxos,
         }
     }
 }

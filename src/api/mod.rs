@@ -24,7 +24,7 @@ pub mod utils;
 
 use self::controllers::*;
 use self::error::*;
-use client::{HttpClientImpl, KeysClient, KeysClientImpl};
+use client::{BlockchainClient, BlockchainClientImpl, HttpClientImpl, KeysClient, KeysClientImpl};
 use models::*;
 use prelude::*;
 use repos::{AccountsRepoImpl, DbExecutorImpl, TransactionsRepoImpl, UsersRepoImpl};
@@ -37,6 +37,7 @@ pub struct ApiService {
     db_pool: PgPool,
     cpu_pool: CpuPool,
     keys_client: Arc<dyn KeysClient>,
+    blockchain_client: Arc<dyn BlockchainClient>,
 }
 
 impl ApiService {
@@ -58,7 +59,8 @@ impl ApiService {
         ))?;
         let cpu_pool = CpuPool::new(config.cpu_pool.size);
         let client = HttpClientImpl::new(config);
-        let keys_client = KeysClientImpl::new(&config, client);
+        let keys_client = KeysClientImpl::new(&config, client.clone());
+        let blockchain_client = BlockchainClientImpl::new(&config, client);
 
         Ok(ApiService {
             config: config.clone(),
@@ -66,6 +68,7 @@ impl ApiService {
             db_pool,
             cpu_pool,
             keys_client: Arc::new(keys_client),
+            blockchain_client: Arc::new(blockchain_client),
         })
     }
 }
@@ -81,6 +84,7 @@ impl Service for ApiService {
         let db_pool = self.db_pool.clone();
         let cpu_pool = self.cpu_pool.clone();
         let keys_client = self.keys_client.clone();
+        let blockchain_client = self.blockchain_client.clone();
         let db_executor = DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone());
         Box::new(
             read_body(http_body)
@@ -121,6 +125,7 @@ impl Service for ApiService {
                         Arc::new(AccountsRepoImpl),
                         db_executor.clone(),
                         keys_client,
+                        blockchain_client,
                     ));
 
                     let ctx = Context {

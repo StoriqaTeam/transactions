@@ -7,5 +7,6 @@ pub struct CreateAccountAddressResponse {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct CreateBlockchainTxResponse {
+    #[serde(flatten)]
     pub blockchain_tx_id: BlockchainTransactionId,
 }

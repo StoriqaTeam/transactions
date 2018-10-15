@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::{self, Display};
 
 use diesel::sql_types::VarChar;
 use uuid::Uuid;
@@ -45,6 +46,12 @@ impl AccountAddress {
 impl Default for AccountAddress {
     fn default() -> Self {
         AccountAddress(Uuid::new_v4().to_string())
+    }
+}
+
+impl Display for AccountAddress {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&format!("{}", self.0,))
     }
 }
 

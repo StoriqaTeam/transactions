@@ -10,6 +10,7 @@ use std::io::Write;
 pub enum Currency {
     Eth,
     Stq,
+    Btc,
 }
 
 impl FromSql<VarChar, Pg> for Currency {
@@ -17,6 +18,7 @@ impl FromSql<VarChar, Pg> for Currency {
         match data {
             Some(b"eth") => Ok(Currency::Eth),
             Some(b"stq") => Ok(Currency::Stq),
+            Some(b"btc") => Ok(Currency::Btc),
             Some(v) => Err(format!(
                 "Unrecognized enum variant: {:?}",
                 String::from_utf8(v.to_vec()).unwrap_or_else(|_| "Non - UTF8 value".to_string())
@@ -32,6 +34,7 @@ impl ToSql<VarChar, Pg> for Currency {
         match self {
             Currency::Eth => out.write_all(b"eth")?,
             Currency::Stq => out.write_all(b"stq")?,
+            Currency::Btc => out.write_all(b"btc")?,
         };
         Ok(IsNull::No)
     }

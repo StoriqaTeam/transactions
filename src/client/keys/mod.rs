@@ -23,7 +23,7 @@ pub trait KeysClient: Send + Sync + 'static {
         token: AuthenticationToken,
         create_account: CreateAccountAddress,
     ) -> Box<Future<Item = AccountAddress, Error = Error> + Send>;
-    fn create_blockchain_tx(
+    fn sign_transaction(
         &self,
         token: AuthenticationToken,
         create_blockchain_tx: CreateBlockchainTx,
@@ -91,7 +91,7 @@ impl KeysClient for KeysClientImpl {
                 }),
         )
     }
-    fn create_blockchain_tx(
+    fn sign_transaction(
         &self,
         token: AuthenticationToken,
         create_blockchain_tx: CreateBlockchainTx,
@@ -103,7 +103,7 @@ impl KeysClient for KeysClientImpl {
                 .into_future()
                 .and_then(move |body| {
                     client
-                        .exec_query::<CreateBlockchainTxResponse>("/blockchain", body, &token, Method::POST)
+                        .exec_query::<CreateBlockchainTxResponse>("/transactions", body, &token, Method::POST)
                         .map(|resp_data| resp_data.blockchain_tx_id)
                 }),
         )
@@ -121,7 +121,7 @@ impl KeysClient for KeysClientMock {
     ) -> Box<Future<Item = AccountAddress, Error = Error> + Send> {
         Box::new(Ok(AccountAddress::default()).into_future())
     }
-    fn create_blockchain_tx(
+    fn sign_transaction(
         &self,
         _token: AuthenticationToken,
         _create_blockchain_tx: CreateBlockchainTx,

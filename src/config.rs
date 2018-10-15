@@ -17,6 +17,7 @@ pub struct Config {
 pub struct Client {
     pub dns_threads: usize,
     pub keys_url: String,
+    pub blockchain_url: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
