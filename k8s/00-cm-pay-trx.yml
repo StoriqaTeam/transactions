@@ -14,7 +14,10 @@ data:
 
     [client]
     dns_threads = 4
-    storiqa_url = "https://stable.stq.cloud/graphql"
+    keys_url = "https://stable.stq.cloud/graphql"
 
     [database]
-    url = "postgresql://gateway:gateway@postgres/gateway"
+    url = "postgresql://transactions:transactions@db-postgresql/transactions"
+
+    [cpu_pool]
+    size = 1

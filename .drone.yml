@@ -79,7 +79,7 @@ pipeline:
   package:
     group: package
     image: plugins/docker
-    repo: storiqateam/transactions
+    repo: storiqateam/payments-transactions
     tags:
     - ${DRONE_BRANCH//\//_}
     - ${DRONE_BRANCH//\//_}${DRONE_BUILD_NUMBER}
@@ -90,7 +90,7 @@ pipeline:
       event: push
   package:
     image: plugins/docker
-    repo: storiqateam/transactions
+    repo: storiqateam/payments-transactions
     build_args:
     - env=release
     tags:
@@ -106,7 +106,7 @@ pipeline:
     namespace: default
     kind: deployment
     object: transactions
-    img_names: storiqateam/transactions
+    img_names: storiqateam/payments-transactions
     img_tags: ${DRONE_BRANCH//\//_}${DRONE_BUILD_NUMBER}
     img_cnts: gateway
     secrets:
