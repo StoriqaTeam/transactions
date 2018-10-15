@@ -165,18 +165,18 @@ impl Default for Withdraw {
     }
 }
 
-impl From<(Withdraw, AccountId, BlockchainTransactionId)> for NewTransaction {
-    fn from(create: (Withdraw, AccountId, BlockchainTransactionId)) -> Self {
+impl From<(Withdraw, Amount, AccountId, BlockchainTransactionId)> for NewTransaction {
+    fn from(create: (Withdraw, Amount, AccountId, BlockchainTransactionId)) -> Self {
         Self {
             id: TransactionId::generate(),
             user_id: create.0.user_id,
             currency: create.0.currency,
-            value: create.0.value,
+            value: create.1,
             cr_account_id: create.0.account_id,
-            dr_account_id: create.1,
+            dr_account_id: create.2,
             hold_until: None,
             status: TransactionStatus::Pending,
-            blockchain_tx_id: Some(create.2),
+            blockchain_tx_id: Some(create.3),
         }
     }
 }
@@ -184,27 +184,27 @@ impl From<(Withdraw, AccountId, BlockchainTransactionId)> for NewTransaction {
 #[derive(Debug, Validate, Clone, Serialize)]
 pub struct CreateBlockchainTx {
     pub from_address: AccountAddress,
-    pub to_address: AccountAddress,
-    pub currency: Currency,
+    pub to: AccountAddress,
     pub value: Amount,
+    pub currency: Currency,
 }
 
 impl Default for CreateBlockchainTx {
     fn default() -> Self {
         Self {
             from_address: AccountAddress::default(),
-            to_address: AccountAddress::default(),
-            currency: Currency::Eth,
+            to: AccountAddress::default(),
             value: Amount::default(),
+            currency: Currency::Eth,
         }
     }
 }
 
 impl CreateBlockchainTx {
-    pub fn new(from_address: AccountAddress, to_address: AccountAddress, value: Amount, currency: Currency) -> Self {
+    pub fn new(from_address: AccountAddress, to: AccountAddress, value: Amount, currency: Currency) -> Self {
         Self {
             from_address,
-            to_address,
+            to,
             value,
             currency,
         }

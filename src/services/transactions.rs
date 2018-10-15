@@ -44,7 +44,7 @@ pub trait TransactionsService: Send + Sync + 'static {
         input: CreateTransactionLocal,
     ) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     fn deposit_founds(&self, token: AuthenticationToken, input: DepositFounds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
-    fn withdraw(&self, token: AuthenticationToken, input: Withdraw) -> Box<Future<Item = Transaction, Error = Error> + Send>;
+    fn withdraw(&self, token: AuthenticationToken, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
     fn get_transaction(
         &self,
         token: AuthenticationToken,
@@ -280,7 +280,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 })
         }))
     }
-    fn withdraw(&self, token: AuthenticationToken, input: Withdraw) -> Box<Future<Item = Transaction, Error = Error> + Send> {
+    fn withdraw(&self, token: AuthenticationToken, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send> {
         let transactions_repo = self.transactions_repo.clone();
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
@@ -313,24 +313,33 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         let value = input.value;
                         let currency = input.currency;
                         let user_id = input.user_id;
-                        // find acc with min enough balance
-                        let dr_acc = accounts_repo
-                            .get_min_enough_value(value, currency, user_id)
+
+                        // find accs with enough balance sum
+                        let dr_accs = accounts_repo
+                            .get_with_enough_value(value, currency, user_id)
                             .map_err(ectx!(try convert ErrorContext::NotEnoughFounds => value, currency, user_id))?;
 
-                        // creating transaction in blockchain
-                        let create_blockchain_input = CreateBlockchainTx::new(cr_acc.address, dr_acc.address, input.value, input.currency);
+                        let mut transactions = vec![];
+                        for (dr_acc, balance) in dr_accs {
+                            // creating blockchain transactions array
+                            let create_blockchain_input =
+                                CreateBlockchainTx::new(cr_acc.address.clone(), dr_acc.address.clone(), balance, currency);
 
-                        let blockchain_tx_id = keys_client
-                            .create_blockchain_tx(token, create_blockchain_input.clone())
-                            .map_err(ectx!(try convert => create_blockchain_input))
-                            .wait()?;
+                            // sending transactions to blockchain
+                            let blockchain_tx_id = keys_client
+                                .create_blockchain_tx(token.clone(), create_blockchain_input.clone())
+                                .map_err(ectx!(try convert => create_blockchain_input))
+                                .wait()?;
 
-                        // creating transaction in db
-                        let new_transaction: NewTransaction = (input, dr_acc.id, blockchain_tx_id).into();
-                        transactions_repo
-                            .create(new_transaction.clone())
-                            .map_err(ectx!(convert => new_transaction))
+                            // creating transaction in db
+                            let new_transaction: NewTransaction = (input.clone(), balance, dr_acc.id, blockchain_tx_id).into();
+                            let transaction = transactions_repo
+                                .create(new_transaction.clone())
+                                .map_err(ectx!(try convert => new_transaction))?;
+                            transactions.push(transaction);
+                        }
+
+                        Ok(transactions)
                     })
                 })
         }))

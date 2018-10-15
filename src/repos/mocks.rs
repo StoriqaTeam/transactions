@@ -157,14 +157,31 @@ impl AccountsRepo for AccountsRepoMock {
         let u = data.iter().filter(|x| x.address == address_ && x.kind == kind_).nth(0).cloned();
         Ok(u.unwrap())
     }
-    fn get_min_enough_value(&self, value: Amount, currency: Currency, _user_id: UserId) -> RepoResult<Account> {
+    fn get_with_enough_value(&self, value: Amount, currency: Currency, _user_id: UserId) -> RepoResult<Vec<(Account, Amount)>> {
         let data = self.data.lock().unwrap();
         let u = data
-            .iter()
+            .clone()
+            .into_iter()
             .filter(|x| x.currency == currency && x.balance >= value && x.kind == AccountKind::Dr)
-            .nth(0)
-            .cloned();
-        Ok(u.unwrap())
+            .scan(value, |remaining_balance, account| match *remaining_balance {
+                x if x == Amount::new(0) => None,
+                x if x <= account.balance => {
+                    let balance_to_sub = *remaining_balance;
+                    *remaining_balance = Amount::new(0);
+                    Some((account, balance_to_sub))
+                }
+                x if x > account.balance => {
+                    if let Some(new_balance) = remaining_balance.checked_sub(account.balance) {
+                        let balance_to_sub = account.balance;
+                        *remaining_balance = new_balance;
+                        Some((account, balance_to_sub))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }).collect();
+        Ok(u)
     }
 }
 
