@@ -105,10 +105,10 @@ pipeline:
     image: jackthestripper/drone_setimage
     namespace: default
     kind: deployment
-    object: transactions
+    object: payments-transactions
     img_names: storiqateam/payments-transactions
     img_tags: ${DRONE_BRANCH//\//_}${DRONE_BUILD_NUMBER}
-    img_cnts: gateway
+    img_cnts: transactions
     secrets:
     - source: k8s_pay_nightly_ca
       target: k8s_ca
