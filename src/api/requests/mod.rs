@@ -79,9 +79,9 @@ pub struct GetUsersAccountsParams {
 #[serde(rename_all = "camelCase")]
 pub struct PostTransactionsLocalRequest {
     pub user_id: UserId,
-    pub dr_account_id: AccountId,
-    pub cr_account_id: AccountId,
-    pub currency: Currency,
+    pub from: AccountId,
+    pub to: AccountId,
+    pub to_currency: Currency,
     pub value: Amount,
     pub hold_until: Option<SystemTime>,
 }
@@ -90,9 +90,9 @@ impl From<PostTransactionsLocalRequest> for CreateTransactionLocal {
     fn from(req: PostTransactionsLocalRequest) -> Self {
         Self {
             user_id: req.user_id,
-            dr_account_id: req.dr_account_id,
-            cr_account_id: req.cr_account_id,
-            currency: req.currency,
+            cr_account_id: req.from,
+            dr_account_id: req.to,
+            currency: req.to_currency,
             value: req.value,
             hold_until: req.hold_until,
         }
@@ -144,8 +144,8 @@ impl From<PostTransactionsDepositRequest> for DepositFounds {
 #[serde(rename_all = "camelCase")]
 pub struct PostTransactionsWithdrawRequest {
     pub user_id: UserId,
-    pub account_id: AccountId,
-    pub address: AccountAddress,
+    pub from_account_id: AccountId,
+    pub to_address: AccountAddress,
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,
@@ -155,8 +155,8 @@ impl From<PostTransactionsWithdrawRequest> for Withdraw {
     fn from(req: PostTransactionsWithdrawRequest) -> Self {
         Self {
             user_id: req.user_id,
-            account_id: req.account_id,
-            address: req.address,
+            account_id: req.from_account_id,
+            address: req.to_address,
             currency: req.currency,
             value: req.value,
             fee: req.fee,
