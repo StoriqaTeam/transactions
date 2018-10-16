@@ -94,7 +94,7 @@ impl Service for ApiService {
                         POST /v1/users => post_users,
                         GET /v1/users/me => get_users_me,
                         GET /v1/users/{user_id: UserId}/accounts => get_users_accounts,
-                        POST /v1/accounts => post_accounts,
+                        POST /v1/users/{user_id: UserId}/accounts => post_accounts,
                         GET /v1/accounts/{account_id: AccountId} => get_accounts,
                         PUT /v1/accounts/{account_id: AccountId} => put_accounts,
                         DELETE /v1/accounts/{account_id: AccountId} => delete_accounts,

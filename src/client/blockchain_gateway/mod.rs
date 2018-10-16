@@ -1,5 +1,4 @@
 mod error;
-mod requests;
 mod responses;
 
 use std::sync::Arc;
@@ -13,7 +12,6 @@ use serde::Deserialize;
 use serde_json;
 
 pub use self::error::*;
-use self::requests::*;
 use self::responses::*;
 use super::HttpClient;
 use config::Config;
@@ -22,24 +20,14 @@ use utils::read_body;
 pub trait BlockchainClient: Send + Sync + 'static {
     fn post_etherium_transaction(
         &self,
-        token: AuthenticationToken,
-        post_transaction: PostTransactoinRequest,
-    ) -> Box<Future<Item = (), Error = Error> + Send>;
+        transaction: BlockchainTransaction,
+    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
     fn post_bitcoin_transaction(
         &self,
-        token: AuthenticationToken,
-        post_transaction: PostTransactoinRequest,
-    ) -> Box<Future<Item = (), Error = Error> + Send>;
-    fn get_bitcoin_utxos(
-        &self,
-        token: AuthenticationToken,
-        address: AccountAddress,
-    ) -> Box<Future<Item = GetBitcoinUtxosResponse, Error = Error> + Send>;
-    fn get_etherium_nonce(
-        &self,
-        token: AuthenticationToken,
-        address: AccountAddress,
-    ) -> Box<Future<Item = GetEtheriumNonceResponse, Error = Error> + Send>;
+        transaction: BlockchainTransaction,
+    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
+    fn get_bitcoin_utxos(&self, address: AccountAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send>;
+    fn get_etherium_nonce(&self, address: AccountAddress) -> Box<Future<Item = u64, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -60,7 +48,6 @@ impl BlockchainClientImpl {
         &self,
         query: &str,
         body: Option<String>,
-        token: &AuthenticationToken,
         method: Method,
     ) -> impl Future<Item = T, Error = Error> + Send {
         let query = query.to_string();
@@ -71,7 +58,6 @@ impl BlockchainClientImpl {
         let mut builder = Request::builder();
         let url = format!("{}{}", self.blockchain_url, query);
         builder.uri(url).method(method);
-        builder.header("Authorization", format!("Bearer {}", token.raw()));
         let body = if let Some(body) = body { Body::from(body) } else { Body::empty() };
         builder
             .body(body)
@@ -89,45 +75,41 @@ impl BlockchainClientImpl {
 impl BlockchainClient for BlockchainClientImpl {
     fn post_etherium_transaction(
         &self,
-        token: AuthenticationToken,
-        post_transaction: PostTransactoinRequest,
-    ) -> Box<Future<Item = (), Error = Error> + Send> {
+        transaction: BlockchainTransaction,
+    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         let client = self.clone();
         Box::new(
-            serde_json::to_string(&post_transaction)
-                .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => post_transaction))
+            serde_json::to_string(&transaction)
+                .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => transaction))
                 .into_future()
-                .and_then(move |body| client.exec_query::<()>("/ethereum/transactions/raw", Some(body), &token, Method::POST)),
+                .and_then(move |body| client.exec_query::<BlockchainTransactionId>("/ethereum/transactions/raw", Some(body), Method::POST)),
         )
     }
     fn post_bitcoin_transaction(
         &self,
-        token: AuthenticationToken,
-        post_transaction: PostTransactoinRequest,
-    ) -> Box<Future<Item = (), Error = Error> + Send> {
+        transaction: BlockchainTransaction,
+    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         let client = self.clone();
         Box::new(
-            serde_json::to_string(&post_transaction)
-                .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => post_transaction))
+            serde_json::to_string(&transaction)
+                .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => transaction))
                 .into_future()
-                .and_then(move |body| client.exec_query::<()>("/ethereum/transactions/raw", Some(body), &token, Method::POST)),
+                .and_then(move |body| client.exec_query::<BlockchainTransactionId>("/ethereum/transactions/raw", Some(body), Method::POST)),
         )
     }
-    fn get_bitcoin_utxos(
-        &self,
-        token: AuthenticationToken,
-        address: AccountAddress,
-    ) -> Box<Future<Item = GetBitcoinUtxosResponse, Error = Error> + Send> {
+    fn get_bitcoin_utxos(&self, address: AccountAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send> {
         let url = format!("/ethereum/{}/nonce/", address);
-        Box::new(self.exec_query::<GetBitcoinUtxosResponse>(&url, None, &token, Method::GET))
+        Box::new(
+            self.exec_query::<GetBitcoinUtxosResponse>(&url, None, Method::GET)
+                .map(|resp| resp.utxos),
+        )
     }
-    fn get_etherium_nonce(
-        &self,
-        token: AuthenticationToken,
-        address: AccountAddress,
-    ) -> Box<Future<Item = GetEtheriumNonceResponse, Error = Error> + Send> {
+    fn get_etherium_nonce(&self, address: AccountAddress) -> Box<Future<Item = u64, Error = Error> + Send> {
         let url = format!("/bitcoin/{}/nonce/", address);
-        Box::new(self.exec_query::<GetEtheriumNonceResponse>(&url, None, &token, Method::GET))
+        Box::new(
+            self.exec_query::<GetEtheriumNonceResponse>(&url, None, Method::GET)
+                .map(|resp| resp.nonce),
+        )
     }
 }
 
@@ -137,30 +119,20 @@ pub struct BlockchainClientMock;
 impl BlockchainClient for BlockchainClientMock {
     fn post_etherium_transaction(
         &self,
-        _token: AuthenticationToken,
-        _post_transaction: PostTransactoinRequest,
-    ) -> Box<Future<Item = (), Error = Error> + Send> {
-        Box::new(Ok(()).into_future())
+        _post_transaction: BlockchainTransaction,
+    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
+        Box::new(Ok(BlockchainTransactionId::default()).into_future())
     }
     fn post_bitcoin_transaction(
         &self,
-        _token: AuthenticationToken,
-        _post_transaction: PostTransactoinRequest,
-    ) -> Box<Future<Item = (), Error = Error> + Send> {
-        Box::new(Ok(()).into_future())
+        _post_transaction: BlockchainTransaction,
+    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
+        Box::new(Ok(BlockchainTransactionId::default()).into_future())
     }
-    fn get_bitcoin_utxos(
-        &self,
-        _token: AuthenticationToken,
-        _address: AccountAddress,
-    ) -> Box<Future<Item = GetBitcoinUtxosResponse, Error = Error> + Send> {
-        Box::new(Ok(GetBitcoinUtxosResponse::default()).into_future())
+    fn get_bitcoin_utxos(&self, _address: AccountAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send> {
+        Box::new(Ok(vec![BitcoinUtxos::default()]).into_future())
     }
-    fn get_etherium_nonce(
-        &self,
-        _token: AuthenticationToken,
-        _address: AccountAddress,
-    ) -> Box<Future<Item = GetEtheriumNonceResponse, Error = Error> + Send> {
-        Box::new(Ok(GetEtheriumNonceResponse::default()).into_future())
+    fn get_etherium_nonce(&self, _address: AccountAddress) -> Box<Future<Item = u64, Error = Error> + Send> {
+        Box::new(Ok(0).into_future())
     }
 }

@@ -148,6 +148,7 @@ pub struct PostTransactionsWithdrawRequest {
     pub address: AccountAddress,
     pub currency: Currency,
     pub value: Amount,
+    pub fee: Amount,
 }
 
 impl From<PostTransactionsWithdrawRequest> for Withdraw {
@@ -158,6 +159,7 @@ impl From<PostTransactionsWithdrawRequest> for Withdraw {
             address: req.address,
             currency: req.currency,
             value: req.value,
+            fee: req.fee,
         }
     }
 }

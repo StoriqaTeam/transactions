@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use futures::prelude::*;
+use futures::stream::iter_ok;
 use futures::IntoFuture;
 use validator::Validate;
 
@@ -10,6 +12,7 @@ use client::KeysClient;
 use models::*;
 use prelude::*;
 use repos::{AccountsRepo, DbExecutor, TransactionsRepo};
+use utils::log_and_capture_error;
 
 #[derive(Clone)]
 pub struct TransactionsServiceImpl<E: DbExecutor> {
@@ -71,6 +74,26 @@ pub trait TransactionsService: Send + Sync + 'static {
         token: AuthenticationToken,
         transaction_id: TransactionId,
         transaction_status: TransactionStatus,
+    ) -> Box<Future<Item = Transaction, Error = Error> + Send>;
+
+    fn create_transaction_etherium(
+        &self,
+        token: AuthenticationToken,
+        user_id: UserId,
+        cr_acc: Account,
+        dr_acc: Account,
+        value: Amount,
+        fee: Amount,
+        currency: Currency,
+    ) -> Box<Future<Item = Transaction, Error = Error> + Send>;
+    fn create_transaction_bitcoin(
+        &self,
+        token: AuthenticationToken,
+        user_id: UserId,
+        cr_acc: Account,
+        dr_acc: Account,
+        value: Amount,
+        fee: Amount,
     ) -> Box<Future<Item = Transaction, Error = Error> + Send>;
 }
 
@@ -285,18 +308,19 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         }))
     }
     fn withdraw(&self, token: AuthenticationToken, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send> {
-        let transactions_repo = self.transactions_repo.clone();
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
-        let keys_client = self.keys_client.clone();
-        let blockchain_client = self.blockchain_client.clone();
+        let currency = input.currency;
+        let user_id = input.user_id;
+        let fee = input.fee;
+        let service = self.clone();
         Box::new(self.auth_service.authenticate(token.clone()).and_then(move |user| {
             input
                 .validate()
                 .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
                 .into_future()
                 .and_then(move |_| {
-                    db_executor.execute_transaction(move || {
+                    db_executor.execute(move || {
                         let account_id = input.account_id;
                         // check that cr account exists and it is belonging to one user
                         let cr_acc = accounts_repo
@@ -315,90 +339,184 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             return Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => value));
                         }
 
-                        let value = input.value;
-                        let currency = input.currency;
-                        let user_id = input.user_id;
-                        let cr_address = input.address;
-                        let fee = input.fee;
-
-                        // find accs with enough balance sum
-                        let dr_accs = accounts_repo
+                        accounts_repo
                             .get_with_enough_value(value, currency, user_id)
-                            .map_err(ectx!(try convert ErrorContext::NotEnoughFounds => value, currency, user_id))?;
-
-                        let mut transactions = vec![];
-                        for (dr_acc, balance) in dr_accs {
-                            let blockchain_tx_id = match currency {
-                                Currency::Eth | Currency::Stq => {
-                                    // sending transactions to blockchain
-                                    let nonce = blockchain_client
-                                        .get_etherium_nonce(token.clone(), cr_address.clone())
-                                        .map_err(ectx!(try convert => cr_address))
-                                        .wait()?;
-
-                                    // creating blockchain transactions array
-                                    let create_blockchain_input = CreateBlockchainTx::new(
-                                        cr_acc.address.clone(),
-                                        dr_acc.address.clone(),
-                                        currency,
-                                        balance,
-                                        fee,
-                                        Some(nonce),
-                                        None,
-                                    );
-
-                                    let raw = keys_client
-                                        .sign_transaction(token.clone(), create_blockchain_input.clone())
-                                        .map_err(ectx!(try convert => create_blockchain_input))
-                                        .wait()?;
-
-                                    blockchain_client
-                                        .post_etherium_transaction(token.clone(), raw)
-                                        .map_err(ectx!(try convert))
-                                        .wait()?;
-                                }
-                                Currency::Btc => {
-                                    // sending transactions to blockchain
-                                    let utxos = blockchain_client
-                                        .get_bitcoin_utxos(token.clone(), cr_address.clone())
-                                        .map_err(ectx!(try convert => cr_address))
-                                        .wait()?;
-
-                                    // creating blockchain transactions array
-                                    let create_blockchain_input = CreateBlockchainTx::new(
-                                        cr_acc.address.clone(),
-                                        dr_acc.address.clone(),
-                                        currency,
-                                        balance,
-                                        fee,
-                                        None,
-                                        Some(utxos),
-                                    );
-
-                                    let raw = keys_client
-                                        .sign_transaction(token.clone(), create_blockchain_input.clone())
-                                        .map_err(ectx!(try convert => create_blockchain_input))
-                                        .wait()?;
-
-                                    blockchain_client
-                                        .post_bitcoin_transaction(token.clone(), raw)
-                                        .map_err(ectx!(try convert))
-                                        .wait()?;
-                                }
+                            .map_err(ectx!(convert ErrorContext::NotEnoughFounds => value, currency, user_id))
+                            .map(|dr_accs| (cr_acc, dr_accs))
+                    })
+                }).and_then(move |(cr_acc, dr_accs)| {
+                    iter_ok::<_, Error>(dr_accs).fold(vec![], move |mut transactions, (dr_acc, value)| {
+                        match currency {
+                            Currency::Eth => service.create_transaction_etherium(
+                                token.clone(),
+                                user_id,
+                                cr_acc.clone(),
+                                dr_acc,
+                                value,
+                                fee,
+                                Currency::Eth,
+                            ),
+                            Currency::Stq => service.create_transaction_etherium(
+                                token.clone(),
+                                user_id,
+                                cr_acc.clone(),
+                                dr_acc,
+                                value,
+                                fee,
+                                Currency::Stq,
+                            ),
+                            Currency::Btc => service.create_transaction_bitcoin(token.clone(), user_id, cr_acc.clone(), dr_acc, value, fee),
+                        }.then(|res| {
+                            if let Ok(r) = res {
+                                transactions.push(r);
                             };
-
-                            // creating transaction in db
-                            let new_transaction: NewTransaction = (input.clone(), balance, dr_acc.id, blockchain_tx_id).into();
-                            let transaction = transactions_repo
-                                .create(new_transaction.clone())
-                                .map_err(ectx!(try convert => new_transaction))?;
-                            transactions.push(transaction);
-                        }
-
-                        Ok(transactions)
+                            Ok(transactions) as Result<Vec<Transaction>, Error>
+                        })
                     })
                 })
         }))
+    }
+
+    fn create_transaction_bitcoin(
+        &self,
+        token: AuthenticationToken,
+        user_id: UserId,
+        cr_acc: Account,
+        dr_acc: Account,
+        value: Amount,
+        fee: Amount,
+    ) -> Box<Future<Item = Transaction, Error = Error> + Send> {
+        let transactions_repo = self.transactions_repo.clone();
+        let transactions_repo_clone = self.transactions_repo.clone();
+        let db_executor = self.db_executor.clone();
+        let keys_client = self.keys_client.clone();
+        let blockchain_client = self.blockchain_client.clone();
+
+        Box::new(
+            db_executor
+                .execute_transaction(move || {
+                    // creating transaction in db
+                    let new_transaction: NewTransaction = NewTransaction {
+                        id: TransactionId::generate(),
+                        user_id,
+                        dr_account_id: dr_acc.id,
+                        cr_account_id: cr_acc.id,
+                        currency: Currency::Btc,
+                        value,
+                        status: TransactionStatus::Pending,
+                        blockchain_tx_id: None,
+                        hold_until: None,
+                    };
+                    let transaction = transactions_repo
+                        .create(new_transaction.clone())
+                        .map_err(ectx!(try convert => new_transaction))?;
+
+                    // sending transactions to blockchain
+                    let cr_address = cr_acc.address.clone();
+                    let utxos = blockchain_client
+                        .get_bitcoin_utxos(cr_address.clone())
+                        .map_err(ectx!(try convert => cr_address))
+                        .wait()?;
+
+                    // creating blockchain transactions array
+                    let create_blockchain_input =
+                        CreateBlockchainTx::new(cr_acc.address, dr_acc.address.clone(), Currency::Btc, value, fee, None, Some(utxos));
+
+                    let raw = keys_client
+                        .sign_transaction(token.clone(), create_blockchain_input.clone())
+                        .map_err(ectx!(try convert => create_blockchain_input))
+                        .wait()?;
+
+                    let tx_id = blockchain_client.post_bitcoin_transaction(raw).map_err(ectx!(try convert)).wait()?;
+
+                    Ok((transaction, tx_id))
+                }).and_then(move |(transaction, tx_id)| {
+                    //updating transaction with tx_id
+                    let transaction_id = transaction.id;
+                    db_executor
+                        .execute(move || transactions_repo_clone.update_blockchain_tx(transaction_id, tx_id))
+                        .then(|res| match res {
+                            Ok(updated_transaction) => Ok(updated_transaction),
+                            Err(e) => {
+                                log_and_capture_error(e);
+                                Ok(transaction)
+                            }
+                        })
+                }),
+        )
+    }
+
+    fn create_transaction_etherium(
+        &self,
+        token: AuthenticationToken,
+        user_id: UserId,
+        cr_acc: Account,
+        dr_acc: Account,
+        value: Amount,
+        fee: Amount,
+        currency: Currency,
+    ) -> Box<Future<Item = Transaction, Error = Error> + Send> {
+        let transactions_repo = self.transactions_repo.clone();
+        let transactions_repo_clone = self.transactions_repo.clone();
+        let db_executor = self.db_executor.clone();
+        let keys_client = self.keys_client.clone();
+        let blockchain_client = self.blockchain_client.clone();
+
+        Box::new(
+            db_executor
+                .execute_transaction(move || {
+                    // creating transaction in db
+                    let new_transaction: NewTransaction = NewTransaction {
+                        id: TransactionId::generate(),
+                        user_id,
+                        dr_account_id: dr_acc.id,
+                        cr_account_id: cr_acc.id,
+                        currency,
+                        value,
+                        status: TransactionStatus::Pending,
+                        blockchain_tx_id: None,
+                        hold_until: None,
+                    };
+                    let transaction = transactions_repo
+                        .create(new_transaction.clone())
+                        .map_err(ectx!(try convert => new_transaction))?;
+
+                    // sending transactions to blockchain
+                    let cr_address = cr_acc.address.clone();
+                    let nonce = blockchain_client
+                        .get_etherium_nonce(cr_address.clone())
+                        .map_err(ectx!(try convert => cr_address))
+                        .wait()?;
+
+                    // creating blockchain transactions array
+                    let create_blockchain_input =
+                        CreateBlockchainTx::new(cr_acc.address, dr_acc.address.clone(), currency, value, fee, Some(nonce), None);
+
+                    let raw = keys_client
+                        .sign_transaction(token.clone(), create_blockchain_input.clone())
+                        .map_err(ectx!(try convert => create_blockchain_input))
+                        .wait()?;
+
+                    let tx_id = blockchain_client
+                        .post_etherium_transaction(raw)
+                        .map_err(ectx!(try convert))
+                        .wait()?;
+
+                    Ok((transaction, tx_id))
+                }).and_then(move |(transaction, tx_id)| {
+                    //updating transaction with tx_id
+                    let transaction_id = transaction.id;
+                    db_executor
+                        .execute(move || transactions_repo_clone.update_blockchain_tx(transaction_id, tx_id))
+                        .then(|res| match res {
+                            Ok(updated_transaction) => Ok(updated_transaction),
+                            Err(e) => {
+                                log_and_capture_error(e);
+                                Ok(transaction)
+                            }
+                        })
+                }),
+        )
     }
 }
 
@@ -446,7 +564,7 @@ mod tests {
         let mut cr_account = CreateAccount::default();
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100501);
@@ -457,7 +575,7 @@ mod tests {
         let mut dr_account = CreateAccount::default();
         dr_account.name = "test test test acc".to_string();
         dr_account.user_id = user_id;
-        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
+        let dr_account = core.run(acc_service.create_account(token.clone(), user_id, dr_account)).unwrap();
 
         let mut new_transaction = CreateTransactionLocal::default();
         new_transaction.value = Amount::new(100500);
@@ -478,7 +596,7 @@ mod tests {
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
 
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100500);
@@ -500,7 +618,7 @@ mod tests {
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
 
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100500);
@@ -522,7 +640,7 @@ mod tests {
         let mut cr_account = CreateAccount::default();
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100501);
@@ -533,7 +651,7 @@ mod tests {
         let mut dr_account = CreateAccount::default();
         dr_account.name = "test test test acc".to_string();
         dr_account.user_id = user_id;
-        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
+        let dr_account = core.run(acc_service.create_account(token.clone(), user_id, dr_account)).unwrap();
 
         let mut new_transaction = CreateTransactionLocal::default();
         new_transaction.value = Amount::new(100500);
@@ -556,7 +674,7 @@ mod tests {
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
 
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100500);
@@ -576,7 +694,7 @@ mod tests {
         let mut cr_account = CreateAccount::default();
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
 
         //depositing on withdraw account
         let mut deposit = DepositFounds::default();
@@ -589,7 +707,7 @@ mod tests {
         let mut dr_account = CreateAccount::default();
         dr_account.name = "test test test acc".to_string();
         dr_account.user_id = user_id;
-        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
+        let dr_account = core.run(acc_service.create_account(token.clone(), user_id, dr_account)).unwrap();
 
         //depositin on random account
         let mut deposit = DepositFounds::default();

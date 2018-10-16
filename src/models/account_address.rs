@@ -51,23 +51,30 @@ impl Default for AccountAddress {
 
 impl Display for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&format!("{}", self.0,))
+        f.write_str(&self.0.to_string())
     }
 }
 
 #[derive(Debug, Validate, Clone, Serialize)]
 pub struct CreateAccountAddress {
+    pub id: Uuid,
     pub currency: Currency,
 }
 
 impl Default for CreateAccountAddress {
     fn default() -> Self {
-        Self { currency: Currency::Eth }
+        Self {
+            currency: Currency::Eth,
+            id: Uuid::new_v4(),
+        }
     }
 }
 
 impl From<CreateAccount> for CreateAccountAddress {
     fn from(acc: CreateAccount) -> Self {
-        Self { currency: acc.currency }
+        Self {
+            id: Uuid::new_v4(),
+            currency: acc.currency,
+        }
     }
 }

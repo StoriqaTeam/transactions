@@ -21,13 +21,14 @@ pub trait KeysClient: Send + Sync + 'static {
     fn create_account_address(
         &self,
         token: AuthenticationToken,
+        user_id: UserId,
         create_account: CreateAccountAddress,
     ) -> Box<Future<Item = AccountAddress, Error = Error> + Send>;
     fn sign_transaction(
         &self,
         token: AuthenticationToken,
         create_blockchain_tx: CreateBlockchainTx,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
+    ) -> Box<Future<Item = BlockchainTransaction, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -77,6 +78,7 @@ impl KeysClient for KeysClientImpl {
     fn create_account_address(
         &self,
         token: AuthenticationToken,
+        user_id: UserId,
         create_account: CreateAccountAddress,
     ) -> Box<Future<Item = AccountAddress, Error = Error> + Send> {
         let client = self.clone();
@@ -85,9 +87,10 @@ impl KeysClient for KeysClientImpl {
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_account))
                 .into_future()
                 .and_then(move |body| {
+                    let url = format!("/users/{}/keys", user_id);
                     client
-                        .exec_query::<CreateAccountAddressResponse>("/account_address", body, &token, Method::POST)
-                        .map(|resp_data| resp_data.account_address)
+                        .exec_query::<CreateAccountAddressResponse>(&url, body, &token, Method::POST)
+                        .map(|resp_data| resp_data.address)
                 }),
         )
     }
@@ -95,7 +98,7 @@ impl KeysClient for KeysClientImpl {
         &self,
         token: AuthenticationToken,
         create_blockchain_tx: CreateBlockchainTx,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
+    ) -> Box<Future<Item = BlockchainTransaction, Error = Error> + Send> {
         let client = self.clone();
         Box::new(
             serde_json::to_string(&create_blockchain_tx)
@@ -104,7 +107,7 @@ impl KeysClient for KeysClientImpl {
                 .and_then(move |body| {
                     client
                         .exec_query::<CreateBlockchainTxResponse>("/transactions", body, &token, Method::POST)
-                        .map(|resp_data| resp_data.blockchain_tx_id)
+                        .map(|resp_data| resp_data.blockchain_tx)
                 }),
         )
     }
@@ -117,6 +120,7 @@ impl KeysClient for KeysClientMock {
     fn create_account_address(
         &self,
         _token: AuthenticationToken,
+        _user_id: UserId,
         _create_account: CreateAccountAddress,
     ) -> Box<Future<Item = AccountAddress, Error = Error> + Send> {
         Box::new(Ok(AccountAddress::default()).into_future())
@@ -125,7 +129,7 @@ impl KeysClient for KeysClientMock {
         &self,
         _token: AuthenticationToken,
         _create_blockchain_tx: CreateBlockchainTx,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
-        Box::new(Ok(BlockchainTransactionId::default()).into_future())
+    ) -> Box<Future<Item = BlockchainTransaction, Error = Error> + Send> {
+        Box::new(Ok(BlockchainTransaction::default()).into_future())
     }
 }

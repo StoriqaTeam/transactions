@@ -11,6 +11,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewTransaction) -> RepoResult<Transaction>;
     fn get(&self, transaction_id: TransactionId) -> RepoResult<Option<Transaction>>;
     fn update_status(&self, transaction_id: TransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction>;
+    fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Transaction>;
     fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount>;
     fn list_for_user(&self, user_id_arg: UserId, offset: TransactionId, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId) -> RepoResult<Vec<Transaction>>;
@@ -105,6 +106,22 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
+    fn update_blockchain_tx(
+        &self,
+        transaction_id_arg: TransactionId,
+        blockchain_tx_id_: BlockchainTransactionId,
+    ) -> RepoResult<Transaction> {
+        with_tls_connection(|conn| {
+            let f = transactions.filter(id.eq(transaction_id_arg));
+            diesel::update(f)
+                .set(blockchain_tx_id.eq(blockchain_tx_id_.clone()))
+                .get_result(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => transaction_id_arg, blockchain_tx_id_)
+                })
+        })
+    }
 }
 
 #[cfg(test)]
@@ -187,7 +204,7 @@ pub mod tests {
     }
 
     #[test]
-    fn transactions_update() {
+    fn transactions_update_status() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
         let users_repo = UsersRepoImpl::default();
@@ -301,6 +318,37 @@ pub mod tests {
 
             transactions_repo.create(trans)?;
             let res = transactions_repo.list_for_account(acc1.id);
+            assert!(res.is_ok());
+            res
+        }));
+    }
+
+    #[test]
+    fn transactions_update_blockchain_tx_id() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let users_repo = UsersRepoImpl::default();
+        let accounts_repo = AccountsRepoImpl::default();
+        let transactions_repo = TransactionsRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc1 = accounts_repo.create(new_account)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc2 = accounts_repo.create(new_account)?;
+
+            let mut trans = NewTransaction::default();
+            trans.cr_account_id = acc1.id;
+            trans.dr_account_id = acc2.id;
+            trans.user_id = user.id;
+            trans.value = Amount::new(123);
+
+            let transaction = transactions_repo.create(trans)?;
+            let tx = BlockchainTransactionId::default();
+            let res = transactions_repo.update_blockchain_tx(transaction.id, tx);
             assert!(res.is_ok());
             res
         }));

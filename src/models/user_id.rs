@@ -1,3 +1,4 @@
+use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use diesel::sql_types::Uuid as SqlUuid;
@@ -26,5 +27,11 @@ impl FromStr for UserId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let id = Uuid::parse_str(s)?;
         Ok(UserId::new(id))
+    }
+}
+
+impl Display for UserId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&format!("{}", self.0,))
     }
 }

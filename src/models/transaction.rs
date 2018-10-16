@@ -196,14 +196,6 @@ pub struct CreateBlockchainTx {
     pub utxos: Option<Vec<BitcoinUtxos>>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct BitcoinUtxos {
-    tx_hash: BlockchainTransactionId,
-    index: u64,
-    value: Amount,
-}
-
 impl Default for CreateBlockchainTx {
     fn default() -> Self {
         Self {
@@ -238,6 +230,24 @@ impl CreateBlockchainTx {
             fee_price,
             nonce,
             utxos,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BitcoinUtxos {
+    tx_hash: BlockchainTransactionId,
+    index: u64,
+    value: Amount,
+}
+
+impl Default for BitcoinUtxos {
+    fn default() -> Self {
+        Self {
+            tx_hash: BlockchainTransactionId::default(),
+            index: 0,
+            value: Amount::default(),
         }
     }
 }

@@ -30,7 +30,12 @@ impl<E: DbExecutor> AccountsServiceImpl<E> {
 }
 
 pub trait AccountsService: Send + Sync + 'static {
-    fn create_account(&self, token: AuthenticationToken, input: CreateAccount) -> Box<Future<Item = Account, Error = Error> + Send>;
+    fn create_account(
+        &self,
+        token: AuthenticationToken,
+        user_id: UserId,
+        input: CreateAccount,
+    ) -> Box<Future<Item = Account, Error = Error> + Send>;
     fn get_account(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Option<Account>, Error = Error> + Send>;
     fn update_account(
         &self,
@@ -51,7 +56,12 @@ pub trait AccountsService: Send + Sync + 'static {
 }
 
 impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
-    fn create_account(&self, token: AuthenticationToken, input: CreateAccount) -> Box<Future<Item = Account, Error = Error> + Send> {
+    fn create_account(
+        &self,
+        token: AuthenticationToken,
+        user_id: UserId,
+        input: CreateAccount,
+    ) -> Box<Future<Item = Account, Error = Error> + Send> {
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
         let keys_client = self.keys_client.clone();
@@ -64,7 +74,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
                     let input = input.clone();
                     move |_| {
                         keys_client
-                            .create_account_address(token, input.clone().into())
+                            .create_account_address(token, user_id, input.clone().into())
                             .map_err(ectx!(convert => input))
                     }
                 }).and_then(move |address| {
@@ -225,7 +235,7 @@ mod tests {
         new_account.name = "test test test acc".to_string();
         new_account.user_id = user_id;
 
-        let account = core.run(service.create_account(token, new_account));
+        let account = core.run(service.create_account(token, user_id, new_account));
         assert!(account.is_ok());
     }
     #[test]
@@ -253,7 +263,8 @@ mod tests {
         new_account.name = "test test test acc".to_string();
         new_account.user_id = user_id;
 
-        core.run(service.create_account(token.clone(), new_account.clone())).unwrap();
+        core.run(service.create_account(token.clone(), user_id, new_account.clone()))
+            .unwrap();
 
         let mut payload = UpdateAccount::default();
         payload.name = Some("test test test 2acc".to_string());
@@ -270,7 +281,8 @@ mod tests {
         let mut new_account = CreateAccount::default();
         new_account.name = "test test test acc".to_string();
         new_account.user_id = user_id;
-        core.run(service.create_account(token.clone(), new_account.clone())).unwrap();
+        core.run(service.create_account(token.clone(), user_id, new_account.clone()))
+            .unwrap();
 
         let account = core.run(service.delete_account(token, new_account.id));
         assert!(account.is_ok());
@@ -300,7 +312,8 @@ mod tests {
         new_account.name = "test test test acc".to_string();
         new_account.user_id = user_id;
 
-        core.run(service.create_account(token.clone(), new_account.clone())).unwrap();
+        core.run(service.create_account(token.clone(), user_id, new_account.clone()))
+            .unwrap();
 
         let account = core.run(service.get_account_balance(token, new_account.id));
         assert!(account.is_ok());
@@ -317,14 +330,14 @@ mod tests {
         new_account.currency = Currency::Eth;
         new_account.user_id = user_id;
 
-        core.run(service.create_account(token.clone(), new_account)).unwrap();
+        core.run(service.create_account(token.clone(), user_id, new_account)).unwrap();
 
         let mut new_account2 = CreateAccount::default();
         new_account2.name = "test tвфвest test acc".to_string();
         new_account2.currency = Currency::Stq;
         new_account2.user_id = user_id;
 
-        core.run(service.create_account(token.clone(), new_account2)).unwrap();
+        core.run(service.create_account(token.clone(), user_id, new_account2)).unwrap();
 
         let balance = core.run(service.get_user_balance(token, user_id));
         assert!(balance.is_ok());

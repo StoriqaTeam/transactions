@@ -10,7 +10,7 @@ use api::responses::*;
 use models::*;
 use serde_qs;
 
-pub fn post_accounts(ctx: &Context) -> ControllerFuture {
+pub fn post_accounts(ctx: &Context, user_id: UserId) -> ControllerFuture {
     let accounts_service = ctx.accounts_service.clone();
     let maybe_token = ctx.get_auth_token();
     let body = ctx.body.clone();
@@ -23,7 +23,7 @@ pub fn post_accounts(ctx: &Context) -> ControllerFuture {
                     .and_then(move |input| {
                         let input_clone = input.clone();
                         accounts_service
-                            .create_account(token, input.into())
+                            .create_account(token, user_id, input.into())
                             .map_err(ectx!(convert => input_clone))
                     }).and_then(|account| response_with_model(&AccountsResponse::from(account)))
             }),

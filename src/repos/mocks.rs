@@ -256,6 +256,21 @@ impl TransactionsRepo for TransactionsRepoMock {
             .filter(|x| x.cr_account_id == account_id || x.dr_account_id == account_id)
             .collect())
     }
+    fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id_: BlockchainTransactionId) -> RepoResult<Transaction> {
+        let mut data = self.data.lock().unwrap();
+        let u = data
+            .iter_mut()
+            .filter_map(|x| {
+                if x.id == transaction_id {
+                    x.blockchain_tx_id = Some(blockchain_tx_id_.clone());
+                    Some(x)
+                } else {
+                    None
+                }
+            }).nth(0)
+            .cloned();
+        Ok(u.unwrap())
+    }
 }
 
 #[derive(Clone, Default)]
