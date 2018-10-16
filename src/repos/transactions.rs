@@ -1,4 +1,5 @@
 use diesel;
+use diesel::dsl::sum;
 
 use super::error::*;
 use super::executor::with_tls_connection;
@@ -59,27 +60,31 @@ impl TransactionsRepo for TransactionsRepoImpl {
     }
     fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount> {
         with_tls_connection(|conn| {
-            let transactions_ = transactions
-                .filter(dr_account_id.eq(account_id).or(cr_account_id.eq(account_id)))
-                .get_results(conn)
+            let cr_sum: Option<Amount> = transactions
+                .filter(cr_account_id.eq(account_id))
+                .select(sum(value))
+                .get_result(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
                     ectx!(try err e, error_kind => account_id)
                 })?;
+            //sum will return null if there are no rows in select statement returned
+            let cr_sum = cr_sum.unwrap_or_default();
 
-            transactions_
-                .iter()
-                .fold(Some(Amount::default()), |acc: Option<Amount>, x: &Transaction| {
-                    if let Some(acc) = acc {
-                        if x.cr_account_id == account_id {
-                            acc.checked_add(x.value)
-                        } else {
-                            acc.checked_sub(x.value)
-                        }
-                    } else {
-                        None
-                    }
-                }).ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))
+            let dr_sum: Option<Amount> = transactions
+                .filter(dr_account_id.eq(account_id))
+                .select(sum(value))
+                .get_result(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(try err e, error_kind => account_id)
+                })?;
+            //sum will return null if there are no rows in select statement returned
+            let dr_sum = dr_sum.unwrap_or_default();
+
+            cr_sum
+                .checked_sub(dr_sum)
+                .ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))
         })
     }
     fn list_for_user(&self, user_id_arg: UserId, offset: TransactionId, limit: i64) -> RepoResult<Vec<Transaction>> {

@@ -34,7 +34,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Balance'
+                $ref: '#/components/schemas/Account'
   /users/{userId}/balances:
     get:
       summary: Returns total balances of a user
@@ -226,93 +226,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
-  '/transactions/local':
-    post:
-      summary: Create a transactions beetween accounts inside payments system
-      description: Only users with `userId` are allowed to create a transaction. The transaction will be executed immediately.
-      security:
-        - Bearer: []
-      tags:
-        - transactions
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Transaction'
-        400:
-          $ref: '#/components/responses/BadRequest'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        422:
-          $ref: '#/components/responses/UnprocessableEntity'
-        500:
-          $ref: '#/components/responses/Internal'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TransactionLocalInput'
-  '/transactions/deposit':
-    post:
-      summary: Create a deposit transaction from blockchain to users account 
-      description: Only users with `userId` are allowed to create a transaction. The transaction will be executed immediately.
-      security:
-        - Bearer: []
-      tags:
-        - transactions
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Transaction'
-        400:
-          $ref: '#/components/responses/BadRequest'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        422:
-          $ref: '#/components/responses/UnprocessableEntity'
-        500:
-          $ref: '#/components/responses/Internal'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TransactionDepositInput'
-  '/transactions/withdraw':
-    post:
-      summary: Create a withdraw transactions from users account to blockchain address 
-      description: Only users with `userId` are allowed to create a transaction. The transaction will be put into queue. Once finished, callback will be executed.
-      security:
-        - Bearer: []
-      tags:
-        - transactions
-      responses:
-        200:
-          description: Ok
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Transaction'
-        400:
-          $ref: '#/components/responses/BadRequest'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        422:
-          $ref: '#/components/responses/UnprocessableEntity'
-        500:
-          $ref: '#/components/responses/Internal'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TransactionWithDrawInput'
-
   '/users/{userId}/accounts/{accountId}/transactions':
     get:
       summary: Lists all transactions of a user's account
@@ -333,24 +246,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Transaction'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        500:
-          $ref: '#/components/responses/Internal'
-  '/users/{userId}/transactions/{transactionId}':
-    delete:
-      summary: Cancels a transaction for a user
-      description: Only users with `userId` are allowed to create a transaction. The transaction can only be canceled if it is on hold.
-      security:
-        - Bearer: []
-      tags:
-        - transactions
-      parameters:
-        - $ref: '#/components/parameters/userIdParam'
-        - $ref: '#/components/parameters/transactionIdParam'
-      responses:
-        204:
-          description: Transaction was cancelled successfully
         401:
           $ref: '#/components/responses/Unauthorized'
         500:
@@ -378,34 +273,35 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
-  '/transactions/{transactionId}/status':
-    put:
-      summary: Change transaction status by transaction id
-      description: Only users with `userId` are allowed to update transaction status.
+  '/transactions':
+    post:
+      summary: Create a transactions beetween accounts inside payments system
+      description: Only users with `userId` are allowed to create a transaction. The transaction will be executed immediately.
       security:
         - Bearer: []
       tags:
         - transactions
-      parameters:
-        - $ref: '#/components/parameters/transactionIdParam'
       responses:
         200:
           description: Ok
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Transaction'
+                $ref: '#/components/schemas/Transaction'
+        400:
+          $ref: '#/components/responses/BadRequest'
         401:
           $ref: '#/components/responses/Unauthorized'
+        422:
+          $ref: '#/components/responses/UnprocessableEntity'
         500:
           $ref: '#/components/responses/Internal'
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TransactionStatusInput'
+              $ref: '#/components/schemas/TransactionCreateInput'
+  
 
 components:
   responses:
@@ -521,86 +417,7 @@ components:
       format: uint256
       description: Monetary value - either fiat or blockchain
       example: 185000000000000000000
-    BlockchainTxId:
-      type: string
-      description: Id of transaction in blockchain
-      example: fladksjflksadjfja3pfsjdkf
-    TransactionStatus:
-      type: string
-      description: Transaction status
-      example: fladksjflksadjfja3pfsjdkf
       
-    TransactionLocalInput:
-      type: object
-      required:
-        - userId
-        - from
-        - to
-        - toCurrency
-        - value
-      properties:
-        userId:
-          $ref: '#/components/schemas/UserId'
-        from:
-          $ref: '#/components/schemas/AccountId'
-        to:
-          $ref: '#/components/schemas/AccountId'
-        toCurrency:
-          $ref: '#/components/schemas/Currency'
-        value:
-          $ref: '#/components/schemas/Value'
-        holdUntil:
-          $ref: '#/components/schemas/Timestamp'
-    TransactionDepositInput:
-      type: object
-      required:
-        - userId
-        - address
-        - currency
-        - value
-        - blockchainTxId
-      properties:
-        userId:
-          $ref: '#/components/schemas/UserId'
-        address:
-          $ref: '#/components/schemas/AccountAddress'
-        currency:
-          $ref: '#/components/schemas/Currency'
-        value:
-          $ref: '#/components/schemas/Value'
-        blockchainTxId:
-          $ref: '#/components/schemas/BlockchainTxId'
-          
-    TransactionWithDrawInput:
-      type: object
-      required:
-        - userId
-        - fromAccountId
-        - toAddress
-        - currency
-        - value
-        - fee
-      properties:
-        userId:
-          $ref: '#/components/schemas/UserId'
-        fromAccountId:
-          $ref: '#/components/schemas/AccountId'
-        toAddress:
-          $ref: '#/components/schemas/AccountAddress'
-        currency:
-          $ref: '#/components/schemas/Currency'
-        value:
-          $ref: '#/components/schemas/Value'
-        fee:
-          $ref: '#/components/schemas/Value'
-          
-    TransactionStatusInput:
-      type: object
-      required:
-        - status
-      properties:
-        status:
-          $ref: '#/components/schemas/TransactionStatus'
     Transaction:
       type: object
       required:
@@ -625,7 +442,45 @@ components:
           $ref: '#/components/schemas/Timestamp'
         holdUntil:
           $ref: '#/components/schemas/Timestamp'
-
+          
+    TransactionCreateInput:
+      type: object
+      required:
+        - userId
+        - from
+        - to
+        - toType
+        - currency
+        - value
+        - fee
+      properties:
+        userId:
+          $ref: '#/components/schemas/UserId'
+        from:
+          $ref: '#/components/schemas/AccountId'
+        to:
+          description: >
+            Generally you make a transaction using blockchain address.
+            However, when working with obfuscated accounts you get back
+            only account id in our system (we need that to hide blockchain
+            address so that a user couldn't find it by phone)
+          oneOf:
+            - $ref: '#/components/schemas/AccountId'
+            - $ref: '#/components/schemas/AccountAddress'
+          discriminator:
+            propertyName: toType
+          example:
+            jghkdfgdjfgkdf7gd | 0x89595fa59d69d696d9d96
+        toType:
+          type: string
+          enum: [account|address]
+        currency:
+          $ref: '#/components/schemas/Currency'
+        value:
+          $ref: '#/components/schemas/Value'
+        fee:
+          $ref: '#/components/schemas/Value'
+          
     AccountAddress:
       type: string
       description: Either blockchain address or fiat account number (depending on currency)

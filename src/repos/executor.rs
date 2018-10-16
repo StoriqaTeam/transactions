@@ -63,7 +63,7 @@ impl DbExecutor for DbExecutorImpl {
         let db_pool = self.db_pool.clone();
         Box::new(self.db_thread_pool.spawn_fn(move || {
             DB_CONN.with(move |tls_conn_cell| -> Result<T, E> {
-                put_connection_into_tls(db_pool, tls_conn_cell)?;
+                put_connection_into_tls(&db_pool, tls_conn_cell)?;
                 f().map_err(move |e| {
                     remove_connection_from_tls_if_broken(tls_conn_cell);
                     e
@@ -81,7 +81,7 @@ impl DbExecutor for DbExecutorImpl {
         let db_pool = self.db_pool.clone();
         Box::new(self.db_thread_pool.spawn_fn(move || {
             DB_CONN.with(move |tls_conn_cell| -> Result<T, E> {
-                put_connection_into_tls(db_pool, tls_conn_cell)?;
+                put_connection_into_tls(&db_pool, tls_conn_cell)?;
                 let mut err: Option<E> = None;
                 let res = {
                     let err_ref = &mut err;
@@ -139,7 +139,7 @@ where
 
 /// Checkout connection from db_pool and put it into thead local storage
 /// if there is no connection already in thread local storage
-fn put_connection_into_tls(db_pool: PgPool, tls_conn_cell: &RefCell<Option<PgPooledConnection>>) -> Result<(), Error> {
+fn put_connection_into_tls(db_pool: &PgPool, tls_conn_cell: &RefCell<Option<PgPooledConnection>>) -> Result<(), Error> {
     let mut maybe_conn = tls_conn_cell.borrow_mut();
     if maybe_conn.is_none() {
         match db_pool.get() {

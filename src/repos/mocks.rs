@@ -152,10 +152,10 @@ impl AccountsRepo for AccountsRepoMock {
             .cloned();
         Ok(u.unwrap())
     }
-    fn get_by_address(&self, address_: AccountAddress, kind_: AccountKind) -> RepoResult<Account> {
+    fn get_by_address(&self, address_: AccountAddress, kind_: AccountKind) -> RepoResult<Option<Account>> {
         let data = self.data.lock().unwrap();
         let u = data.iter().filter(|x| x.address == address_ && x.kind == kind_).nth(0).cloned();
-        Ok(u.unwrap())
+        Ok(u)
     }
     fn get_with_enough_value(&self, value: Amount, currency: Currency, _user_id: UserId) -> RepoResult<Vec<(Account, Amount)>> {
         let data = self.data.lock().unwrap();
@@ -234,14 +234,29 @@ impl TransactionsRepo for TransactionsRepoMock {
     }
     fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount> {
         let data = self.data.lock().unwrap();
-        data.clone()
-            .into_iter()
-            .fold(Some(Amount::default()), |acc: Option<Amount>, x: Transaction| {
+        let sum_cr = data
+            .clone()
+            .iter()
+            .fold(Some(Amount::default()), |acc: Option<Amount>, x: &Transaction| {
                 if let Some(acc) = acc {
                     if x.cr_account_id == account_id {
                         acc.checked_add(x.value)
                     } else {
+                        Some(acc)
+                    }
+                } else {
+                    None
+                }
+            }).ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
+
+        data.clone()
+            .iter()
+            .fold(Some(sum_cr), |acc: Option<Amount>, x: &Transaction| {
+                if let Some(acc) = acc {
+                    if x.dr_account_id == account_id {
                         acc.checked_sub(x.value)
+                    } else {
+                        Some(acc)
                     }
                 } else {
                     None

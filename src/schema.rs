@@ -41,8 +41,4 @@ table! {
 joinable!(accounts -> users (user_id));
 joinable!(transactions -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(
-    accounts,
-    transactions,
-    users,
-);
+allow_tables_to_appear_in_same_query!(accounts, transactions, users,);

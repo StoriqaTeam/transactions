@@ -69,21 +69,46 @@ impl Default for NewTransaction {
 }
 
 #[derive(Debug, Clone, Validate)]
-pub struct CreateTransactionLocal {
+pub struct CreateTransaction {
     pub user_id: UserId,
     pub dr_account_id: AccountId,
-    pub cr_account_id: AccountId,
+    pub to: Receipt,
+    pub to_type: ReceiptType,
+    pub to_currency: Currency,
+    pub value: Amount,
+    pub fee: Amount,
+    pub hold_until: Option<SystemTime>,
+}
+
+#[derive(Debug, Clone, Validate)]
+pub struct CreateTransactionLocal {
+    pub user_id: UserId,
+    pub dr_account: Account,
+    pub cr_account: Account,
     pub currency: Currency,
     pub value: Amount,
     pub hold_until: Option<SystemTime>,
+}
+
+impl CreateTransactionLocal {
+    pub fn new(create: &CreateTransaction, dr_account: Account, cr_account: Account) -> Self {
+        Self {
+            user_id: create.user_id,
+            dr_account,
+            cr_account,
+            currency: create.to_currency,
+            value: create.value,
+            hold_until: create.hold_until,
+        }
+    }
 }
 
 impl Default for CreateTransactionLocal {
     fn default() -> Self {
         Self {
             user_id: UserId::generate(),
-            dr_account_id: AccountId::generate(),
-            cr_account_id: AccountId::generate(),
+            dr_account: Account::default(),
+            cr_account: Account::default(),
             currency: Currency::Eth,
             value: Amount::default(),
             hold_until: None,
@@ -91,13 +116,13 @@ impl Default for CreateTransactionLocal {
     }
 }
 
-impl From<CreateTransactionLocal> for NewTransaction {
-    fn from(create: CreateTransactionLocal) -> Self {
+impl NewTransaction {
+    pub fn from_local(create: &CreateTransactionLocal) -> Self {
         Self {
             id: TransactionId::generate(),
             user_id: create.user_id,
-            dr_account_id: create.dr_account_id,
-            cr_account_id: create.cr_account_id,
+            dr_account_id: create.dr_account.id,
+            cr_account_id: create.cr_account.id,
             currency: create.currency,
             value: create.value,
             hold_until: create.hold_until,
@@ -128,18 +153,18 @@ impl Default for DepositFounds {
     }
 }
 
-impl From<(DepositFounds, AccountId, AccountId)> for NewTransaction {
-    fn from(create: (DepositFounds, AccountId, AccountId)) -> Self {
+impl NewTransaction {
+    pub fn from_deposit(deposit: DepositFounds, cr_account_id: AccountId, dr_account_id: AccountId) -> Self {
         Self {
             id: TransactionId::generate(),
-            user_id: create.0.user_id,
-            currency: create.0.currency,
-            value: create.0.value,
+            user_id: deposit.user_id,
+            currency: deposit.currency,
+            value: deposit.value,
             hold_until: None,
-            cr_account_id: create.1,
-            dr_account_id: create.2,
+            cr_account_id,
+            dr_account_id,
             status: TransactionStatus::Done,
-            blockchain_tx_id: Some(create.0.blockchain_tx_id),
+            blockchain_tx_id: Some(deposit.blockchain_tx_id),
         }
     }
 }
@@ -147,38 +172,35 @@ impl From<(DepositFounds, AccountId, AccountId)> for NewTransaction {
 #[derive(Debug, Clone, Validate)]
 pub struct Withdraw {
     pub user_id: UserId,
-    pub account_id: AccountId,
+    pub dr_account: Account,
     pub address: AccountAddress,
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,
 }
 
-impl Default for Withdraw {
-    fn default() -> Self {
+impl Withdraw {
+    pub fn new(create: &CreateTransaction, dr_account: Account, address: AccountAddress) -> Self {
         Self {
-            user_id: UserId::default(),
-            account_id: AccountId::generate(),
-            address: AccountAddress::default(),
-            currency: Currency::Eth,
-            value: Amount::default(),
-            fee: Amount::default(),
+            user_id: create.user_id,
+            dr_account,
+            address,
+            currency: create.to_currency,
+            value: create.value,
+            fee: create.fee,
         }
     }
 }
 
-impl From<(Withdraw, Amount, AccountId, BlockchainTransactionId)> for NewTransaction {
-    fn from(create: (Withdraw, Amount, AccountId, BlockchainTransactionId)) -> Self {
+impl Default for Withdraw {
+    fn default() -> Self {
         Self {
-            id: TransactionId::generate(),
-            user_id: create.0.user_id,
-            currency: create.0.currency,
-            value: create.1,
-            cr_account_id: create.0.account_id,
-            dr_account_id: create.2,
-            hold_until: None,
-            status: TransactionStatus::Pending,
-            blockchain_tx_id: Some(create.3),
+            user_id: UserId::default(),
+            dr_account: Account::default(),
+            address: AccountAddress::default(),
+            currency: Currency::Eth,
+            value: Amount::default(),
+            fee: Amount::default(),
         }
     }
 }

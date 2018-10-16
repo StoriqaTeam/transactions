@@ -77,23 +77,27 @@ pub struct GetUsersAccountsParams {
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct PostTransactionsLocalRequest {
+pub struct PostTransactionsRequest {
     pub user_id: UserId,
     pub from: AccountId,
-    pub to: AccountId,
+    pub to: Receipt,
+    pub to_type: ReceiptType,
     pub to_currency: Currency,
     pub value: Amount,
+    pub fee: Amount,
     pub hold_until: Option<SystemTime>,
 }
 
-impl From<PostTransactionsLocalRequest> for CreateTransactionLocal {
-    fn from(req: PostTransactionsLocalRequest) -> Self {
+impl From<PostTransactionsRequest> for CreateTransaction {
+    fn from(req: PostTransactionsRequest) -> Self {
         Self {
             user_id: req.user_id,
-            cr_account_id: req.from,
-            dr_account_id: req.to,
-            currency: req.to_currency,
+            dr_account_id: req.from,
+            to: req.to,
+            to_type: req.to_type,
+            to_currency: req.to_currency,
             value: req.value,
+            fee: req.fee,
             hold_until: req.hold_until,
         }
     }
@@ -116,50 +120,4 @@ impl From<PutTransactionsRequest> for TransactionStatus {
 pub struct GetUsersTransactionsParams {
     pub limit: i64,
     pub offset: TransactionId,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct PostTransactionsDepositRequest {
-    pub user_id: UserId,
-    pub address: AccountAddress,
-    pub currency: Currency,
-    pub value: Amount,
-    pub blockchain_tx_id: BlockchainTransactionId,
-}
-
-impl From<PostTransactionsDepositRequest> for DepositFounds {
-    fn from(req: PostTransactionsDepositRequest) -> Self {
-        Self {
-            user_id: req.user_id,
-            address: req.address,
-            currency: req.currency,
-            value: req.value,
-            blockchain_tx_id: req.blockchain_tx_id,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct PostTransactionsWithdrawRequest {
-    pub user_id: UserId,
-    pub from_account_id: AccountId,
-    pub to_address: AccountAddress,
-    pub currency: Currency,
-    pub value: Amount,
-    pub fee: Amount,
-}
-
-impl From<PostTransactionsWithdrawRequest> for Withdraw {
-    fn from(req: PostTransactionsWithdrawRequest) -> Self {
-        Self {
-            user_id: req.user_id,
-            account_id: req.from_account_id,
-            address: req.to_address,
-            currency: req.currency,
-            value: req.value,
-            fee: req.fee,
-        }
-    }
 }

@@ -10,7 +10,7 @@ use api::responses::*;
 use models::*;
 use serde_qs;
 
-pub fn post_transactions_local(ctx: &Context) -> ControllerFuture {
+pub fn post_transactions(ctx: &Context) -> ControllerFuture {
     let transactions_service = ctx.transactions_service.clone();
     let maybe_token = ctx.get_auth_token();
     let body = ctx.body.clone();
@@ -19,55 +19,16 @@ pub fn post_transactions_local(ctx: &Context) -> ControllerFuture {
             .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
             .into_future()
             .and_then(move |token| {
-                parse_body::<PostTransactionsLocalRequest>(body)
-                    .and_then(move |input| {
-                        let input_clone = input.clone();
-                        transactions_service
-                            .create_transaction_local(token, input.into())
-                            .map_err(ectx!(convert => input_clone))
-                    }).and_then(|transaction| response_with_model(&TransactionsResponse::from(transaction)))
-            }),
-    )
-}
-
-pub fn post_transactions_deposit(ctx: &Context) -> ControllerFuture {
-    let transactions_service = ctx.transactions_service.clone();
-    let maybe_token = ctx.get_auth_token();
-    let body = ctx.body.clone();
-    Box::new(
-        maybe_token
-            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
-            .into_future()
-            .and_then(move |token| {
-                parse_body::<PostTransactionsDepositRequest>(body)
-                    .and_then(move |input| {
-                        let input_clone = input.clone();
-                        transactions_service
-                            .deposit_founds(token, input.into())
-                            .map_err(ectx!(convert => input_clone))
-                    }).and_then(|transaction| response_with_model(&TransactionsResponse::from(transaction)))
-            }),
-    )
-}
-
-pub fn post_transactions_withdraw(ctx: &Context) -> ControllerFuture {
-    let transactions_service = ctx.transactions_service.clone();
-    let maybe_token = ctx.get_auth_token();
-    let body = ctx.body.clone();
-    Box::new(
-        maybe_token
-            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
-            .into_future()
-            .and_then(move |token| {
-                parse_body::<PostTransactionsWithdrawRequest>(body).and_then(move |input| {
+                parse_body::<PostTransactionsRequest>(body).and_then(move |input| {
                     let input_clone = input.clone();
                     transactions_service
-                        .withdraw(token, input.into())
+                        .create_transaction(token, input.into())
                         .map_err(ectx!(convert => input_clone))
+                        .and_then(|transactions| {
+                            let transactions: Vec<TransactionsResponse> = transactions.into_iter().map(From::from).collect();
+                            response_with_model(&transactions)
+                        })
                 })
-            }).and_then(|transactions| {
-                let transactions: Vec<TransactionsResponse> = transactions.into_iter().map(From::from).collect();
-                response_with_model(&transactions)
             }),
     )
 }
@@ -154,6 +115,22 @@ pub fn put_transactions_status(ctx: &Context, transaction_id: TransactionId) -> 
                             .update_transaction_status(token, transaction_id, new_status)
                             .map_err(ectx!(convert => transaction_id, new_status))
                     }).and_then(|transaction| response_with_model(&TransactionsResponse::from(transaction)))
+            }),
+    )
+}
+
+pub fn get_accounts_balances(ctx: &Context, account_id: AccountId) -> ControllerFuture {
+    let transactions_service = ctx.transactions_service.clone();
+    let maybe_token = ctx.get_auth_token();
+    Box::new(
+        maybe_token
+            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
+            .into_future()
+            .and_then(move |token| {
+                transactions_service
+                    .get_account_balance(token, account_id)
+                    .map_err(ectx!(convert))
+                    .and_then(|account| response_with_model(&AccountsResponse::from(account)))
             }),
     )
 }
