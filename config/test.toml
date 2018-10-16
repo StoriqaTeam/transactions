@@ -1,0 +1,17 @@
+[server]
+host = "0.0.0.0"
+port = 8000
+
+[auth]
+storiqa_jwt_public_key_base64 = "MIIBCgKCAQEAt3TQPCbcWM/Fba2s6V/WRuQv8SlEQp4F56fSY4LQ+yW2xY3f2fLOw/SurObHMQF7QpnQ7x/2zhGqe11Ad0MHbWG+OARR/B/76X8QhA3xEneZpgc8aykagl0Tr616tazEKr0JxGuUo3qHy+e/dqSQ9T04EjGqccfr3+gfmVZlzml2/kN2EmaFa28Q8NseY5a2TVL9XcEDHHpGHVpoRQI8ibfa92i2Lwo7E33Iz8hpbp+GgeyReua2z341nxSNqk0VSYa6KtNUk03G5YYmsrsoE+ECC69GAD07R4YcGqF4NRKSA0T3L8jY8rVbl5HUCIFuZynZEHWWpFvyMYW+9ffMfwIDAQAB"
+storiqa_jwt_valid_secs = 86400
+
+[client]
+dns_threads = 4
+storiqa_url = "https://stable.stq.cloud/graphql"
+
+[database]
+url = "postgresql://transactions:transactions@db-postgresql/transactions"
+
+[cpu_pool]
+size = 1

@@ -3,11 +3,11 @@ apiVersion: v1
 metadata:
   name: transactions
   labels:
-    stack: transactions
+    stack: payments
 spec:
   selector:
-    stack: transactions
-    app: gateway
+    stack: payments
+    app: transactions
   ports:
   - name: main
     protocol: TCP

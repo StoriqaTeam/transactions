@@ -1,24 +1,24 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: createdb-gateway
+  name: createdb-transactions
 spec:
   template:
     spec:
       restartPolicy: Never
       containers:
-      - name: createdb-gateway
+      - name: createdb-transactions
         image: postgres:10-alpine
         command:
         - bash
         - -x
         - -c
         - >
-          { PGPASSWORD=transactions psql -U gateway -h postgres -d gateway -ql; }
+          { PGPASSWORD=transactions psql -U transactions -h postgres -d transactions -ql; }
           || {
-          psql -h postgres -d postgres -c "CREATE ROLE gateway WITH PASSWORD 'gateway' LOGIN REPLICATION";
-          psql -h postgres -d postgres -c "CREATE DATABASE gateway OWNER gateway";
-          psql -h postgres -d gateway -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"' || true; }
+          psql -h postgres -d postgres -c "CREATE ROLE transactions WITH PASSWORD 'transactions' LOGIN REPLICATION";
+          psql -h postgres -d postgres -c "CREATE DATABASE transactions OWNER transactions";
+          psql -h postgres -d transactions -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"' || true; }
         env:
         - name: PGPASSWORD
           valueFrom:
