@@ -1,7 +1,7 @@
 apiVersion: apps/v1beta2
 kind: Deployment
 metadata:
-  name: transactions
+  name: payments-transactions
   labels:
     stack: payments
     app: transactions
@@ -13,7 +13,7 @@ spec:
   replicas: 1
   template:
     metadata:
-      name: transactions
+      name: payments-transactions
       labels:
         app: transactions
         stack: payments
@@ -21,7 +21,7 @@ spec:
       imagePullSecrets:
       - name: stq
       containers:
-      - name: gateway
+      - name: transactions
         image: storiqateam/payments-transactions
         ports:
         - containerPort: 8000
@@ -35,7 +35,7 @@ spec:
         - name: DATABASE_HOST
           value: postgres
         - name: DATABASE_URL
-          value: postgresql://transactions:transactions@db-postgresql/transactions
+          value: postgresql://transactions:transactions@postgres/transactions
         volumeMounts:
         - name: conf
           mountPath: /app/config/

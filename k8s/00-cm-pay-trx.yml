@@ -17,7 +17,7 @@ data:
     keys_url = "https://stable.stq.cloud/graphql"
 
     [database]
-    url = "postgresql://transactions:transactions@db-postgresql/transactions"
+    url = "postgresql://transactions:transactions@postgres/transactions"
 
     [cpu_pool]
     size = 1
