@@ -21,6 +21,7 @@ hyper = "0.12"
 hyper-tls = "0.3"
 log = "0.4"
 num = { version = "0.2", features = ["i128"] }
+rand = "0.5"
 r2d2 = "0.8.1"
 regex = "1"
 sentry = "0.12"

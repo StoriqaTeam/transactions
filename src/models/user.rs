@@ -40,7 +40,7 @@ impl Default for NewUser {
     fn default() -> Self {
         Self {
             id: UserId::generate(),
-            name: String::default(),
+            name: "Anonymous".to_string(),
             authentication_token: AuthenticationToken::default(),
         }
     }
