@@ -20,6 +20,7 @@ extern crate config as config_crate;
 extern crate http_router;
 extern crate base64;
 extern crate hyper_tls;
+extern crate rand;
 extern crate regex;
 #[macro_use]
 extern crate validator_derive;

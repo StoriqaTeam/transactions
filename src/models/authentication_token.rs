@@ -3,12 +3,15 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Debug, Display};
 
+use base64;
 use diesel::sql_types::VarChar;
+use rand::OsRng;
 use serde::{Serialize, Serializer};
-
 use validator::{Validate, ValidationError, ValidationErrors};
 
-#[derive(Deserialize, FromSqlRow, AsExpression, Clone, Default, PartialEq, Eq, Hash)]
+use prelude::*;
+
+#[derive(Deserialize, FromSqlRow, AsExpression, Clone, PartialEq, Eq, Hash)]
 #[sql_type = "VarChar"]
 pub struct AuthenticationToken(String);
 derive_newtype_sql!(authentication_token, VarChar, AuthenticationToken, AuthenticationToken);
@@ -42,6 +45,16 @@ impl Validate for AuthenticationToken {
         } else {
             Err(errors)
         }
+    }
+}
+
+impl Default for AuthenticationToken {
+    fn default() -> Self {
+        let mut gen = OsRng::new().unwrap();
+        let mut data = Vec::with_capacity(32);
+        data.resize(32, 0);
+        gen.fill_bytes(&mut data);
+        AuthenticationToken(base64::encode(&data))
     }
 }
 
