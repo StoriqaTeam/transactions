@@ -10,7 +10,7 @@ use api::responses::*;
 use models::*;
 use serde_qs;
 
-pub fn post_accounts(ctx: &Context) -> ControllerFuture {
+pub fn post_accounts(ctx: &Context, user_id: UserId) -> ControllerFuture {
     let accounts_service = ctx.accounts_service.clone();
     let maybe_token = ctx.get_auth_token();
     let body = ctx.body.clone();
@@ -23,7 +23,7 @@ pub fn post_accounts(ctx: &Context) -> ControllerFuture {
                     .and_then(move |input| {
                         let input_clone = input.clone();
                         accounts_service
-                            .create_account(token, input.into())
+                            .create_account(token, user_id, input.into())
                             .map_err(ectx!(convert => input_clone))
                     }).and_then(|account| response_with_model(&AccountsResponse::from(account)))
             }),
@@ -73,39 +73,7 @@ pub fn get_accounts(ctx: &Context, account_id: AccountId) -> ControllerFuture {
                 accounts_service
                     .get_account(token, account_id)
                     .map_err(ectx!(convert))
-                    .and_then(|account| response_with_model(&account.map(|account| AccountsResponse::from(account))))
-            }),
-    )
-}
-
-pub fn get_users_balances(ctx: &Context, user_id: UserId) -> ControllerFuture {
-    let accounts_service = ctx.accounts_service.clone();
-    let maybe_token = ctx.get_auth_token();
-    Box::new(
-        maybe_token
-            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
-            .into_future()
-            .and_then(move |token| {
-                accounts_service
-                    .get_user_balance(token, user_id)
-                    .map_err(ectx!(convert))
-                    .and_then(|balance| response_with_model(&BalancesResponse::from(balance)))
-            }),
-    )
-}
-
-pub fn get_accounts_balances(ctx: &Context, account_id: AccountId) -> ControllerFuture {
-    let accounts_service = ctx.accounts_service.clone();
-    let maybe_token = ctx.get_auth_token();
-    Box::new(
-        maybe_token
-            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
-            .into_future()
-            .and_then(move |token| {
-                accounts_service
-                    .get_account_balance(token, account_id)
-                    .map_err(ectx!(convert))
-                    .and_then(|balance| response_with_model(&balance.map(|balance| BalanceResponse::from(balance))))
+                    .and_then(|account| response_with_model(&account.map(AccountsResponse::from)))
             }),
     )
 }
@@ -142,6 +110,22 @@ pub fn delete_accounts(ctx: &Context, account_id: AccountId) -> ControllerFuture
                     .delete_account(token, account_id)
                     .map_err(ectx!(convert))
                     .and_then(|account| response_with_model(&AccountsResponse::from(account)))
+            }),
+    )
+}
+
+pub fn get_users_balances(ctx: &Context, user_id: UserId) -> ControllerFuture {
+    let accounts_service = ctx.accounts_service.clone();
+    let maybe_token = ctx.get_auth_token();
+    Box::new(
+        maybe_token
+            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
+            .into_future()
+            .and_then(move |token| {
+                accounts_service
+                    .get_user_balance(token, user_id)
+                    .map_err(ectx!(convert))
+                    .and_then(|balance| response_with_model(&BalancesResponse::from(balance)))
             }),
     )
 }

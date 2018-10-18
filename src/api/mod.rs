@@ -24,11 +24,11 @@ pub mod utils;
 
 use self::controllers::*;
 use self::error::*;
-use client::{HttpClientImpl, KeysClient, KeysClientImpl};
+use client::{BlockchainClient, BlockchainClientImpl, HttpClientImpl, KeysClient, KeysClientImpl};
 use models::*;
 use prelude::*;
-use repos::{AccountsRepoImpl, DbExecutorImpl, UsersRepoImpl};
-use services::{AccountsServiceImpl, AuthServiceImpl, UsersServiceImpl};
+use repos::{AccountsRepoImpl, DbExecutorImpl, TransactionsRepoImpl, UsersRepoImpl};
+use services::{AccountsServiceImpl, AuthServiceImpl, TransactionsServiceImpl, UsersServiceImpl};
 
 #[derive(Clone)]
 pub struct ApiService {
@@ -37,6 +37,7 @@ pub struct ApiService {
     db_pool: PgPool,
     cpu_pool: CpuPool,
     keys_client: Arc<dyn KeysClient>,
+    blockchain_client: Arc<dyn BlockchainClient>,
 }
 
 impl ApiService {
@@ -58,7 +59,8 @@ impl ApiService {
         ))?;
         let cpu_pool = CpuPool::new(config.cpu_pool.size);
         let client = HttpClientImpl::new(config);
-        let keys_client = KeysClientImpl::new(&config, client);
+        let keys_client = KeysClientImpl::new(&config, client.clone());
+        let blockchain_client = BlockchainClientImpl::new(&config, client);
 
         Ok(ApiService {
             config: config.clone(),
@@ -66,6 +68,7 @@ impl ApiService {
             db_pool,
             cpu_pool,
             keys_client: Arc::new(keys_client),
+            blockchain_client: Arc::new(blockchain_client),
         })
     }
 }
@@ -81,6 +84,7 @@ impl Service for ApiService {
         let db_pool = self.db_pool.clone();
         let cpu_pool = self.cpu_pool.clone();
         let keys_client = self.keys_client.clone();
+        let blockchain_client = self.blockchain_client.clone();
         let db_executor = DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone());
         Box::new(
             read_body(http_body)
@@ -90,12 +94,17 @@ impl Service for ApiService {
                         POST /v1/users => post_users,
                         GET /v1/users/me => get_users_me,
                         GET /v1/users/{user_id: UserId}/accounts => get_users_accounts,
-                        POST /v1/accounts => post_accounts,
+                        POST /v1/users/{user_id: UserId}/accounts => post_accounts,
                         GET /v1/accounts/{account_id: AccountId} => get_accounts,
                         PUT /v1/accounts/{account_id: AccountId} => put_accounts,
                         DELETE /v1/accounts/{account_id: AccountId} => delete_accounts,
                         GET /v1/accounts/{account_id: AccountId}/balances => get_accounts_balances,
+                        GET /v1/accounts/{account_id: AccountId}/transactions => get_accounts_transactions,
                         GET /v1/users/{user_id: UserId}/balances => get_users_balances,
+                        GET /v1/users/{user_id: UserId}/transactions => get_users_transactions,
+                        POST /v1/transactions => post_transactions,
+                        GET /v1/transactions/{transaction_id: TransactionId} => get_transactions,
+                        PUT /v1/transactions/{transaction_id: TransactionId}/status => put_transactions_status,
                         _ => not_found,
                     };
 
@@ -106,7 +115,15 @@ impl Service for ApiService {
                         auth_service.clone(),
                         Arc::new(AccountsRepoImpl),
                         db_executor.clone(),
+                        keys_client.clone(),
+                    ));
+                    let transactions_service = Arc::new(TransactionsServiceImpl::new(
+                        auth_service.clone(),
+                        Arc::new(TransactionsRepoImpl),
+                        Arc::new(AccountsRepoImpl),
+                        db_executor.clone(),
                         keys_client,
+                        blockchain_client,
                     ));
 
                     let ctx = Context {
@@ -116,6 +133,7 @@ impl Service for ApiService {
                         headers: parts.headers,
                         users_service,
                         accounts_service,
+                        transactions_service,
                     };
 
                     debug!("Received request {}", ctx);
@@ -136,6 +154,14 @@ impl Service for ApiService {
                             .status(401)
                             .header("Content-Type", "application/json")
                             .body(Body::from(r#"{"description": "Unauthorized"}"#))
+                            .unwrap())
+                    }
+                    ErrorKind::NotFound => {
+                        log_warn(&e);
+                        Ok(Response::builder()
+                            .status(404)
+                            .header("Content-Type", "application/json")
+                            .body(Body::from(r#"{"description": "Not found"}"#))
                             .unwrap())
                     }
                     ErrorKind::UnprocessableEntity(errors) => {
@@ -169,7 +195,7 @@ pub fn start_server(config: Config) {
                     let res: Result<_, hyper::Error> = Ok(api_clone.clone());
                     res
                 };
-                let addr = api.server_address.clone();
+                let addr = api.server_address;
                 let server = Server::bind(&api.server_address)
                     .serve(new_service)
                     .map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal => addr));

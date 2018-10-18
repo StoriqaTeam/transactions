@@ -7,18 +7,16 @@ use std::io::Write;
 #[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Eq, PartialEq, Hash)]
 #[sql_type = "VarChar"]
 #[serde(rename_all = "lowercase")]
-pub enum Currency {
-    Eth,
-    Stq,
-    Btc,
+pub enum AccountKind {
+    Cr,
+    Dr,
 }
 
-impl FromSql<VarChar, Pg> for Currency {
+impl FromSql<VarChar, Pg> for AccountKind {
     fn from_sql(data: Option<&[u8]>) -> deserialize::Result<Self> {
         match data {
-            Some(b"eth") => Ok(Currency::Eth),
-            Some(b"stq") => Ok(Currency::Stq),
-            Some(b"btc") => Ok(Currency::Btc),
+            Some(b"cr") => Ok(AccountKind::Cr),
+            Some(b"dr") => Ok(AccountKind::Dr),
             Some(v) => Err(format!(
                 "Unrecognized enum variant: {:?}",
                 String::from_utf8(v.to_vec()).unwrap_or_else(|_| "Non - UTF8 value".to_string())
@@ -29,12 +27,11 @@ impl FromSql<VarChar, Pg> for Currency {
     }
 }
 
-impl ToSql<VarChar, Pg> for Currency {
+impl ToSql<VarChar, Pg> for AccountKind {
     fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
         match self {
-            Currency::Eth => out.write_all(b"eth")?,
-            Currency::Stq => out.write_all(b"stq")?,
-            Currency::Btc => out.write_all(b"btc")?,
+            AccountKind::Cr => out.write_all(b"cr")?,
+            AccountKind::Dr => out.write_all(b"dr")?,
         };
         Ok(IsNull::No)
     }

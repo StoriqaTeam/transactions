@@ -4,6 +4,7 @@ use std::fmt::Display;
 use failure::{Backtrace, Context, Fail};
 use validator::ValidationErrors;
 
+use client::blockchain_gateway::ErrorKind as BlockchainClientErrorKind;
 use client::keys::ErrorKind as KeysClientErrorKind;
 use repos::{Error as ReposError, ErrorKind as ReposErrorKind};
 
@@ -23,6 +24,10 @@ pub enum ErrorKind {
     InvalidInput(ValidationErrors),
     #[fail(display = "service error - internal error")]
     Internal,
+    #[fail(display = "service error - not found")]
+    NotFound,
+    #[fail(display = "service error - balance failure")]
+    Balance,
 }
 
 #[allow(dead_code)]
@@ -39,8 +44,14 @@ pub enum ErrorContext {
     NoAuthToken,
     #[fail(display = "service error context - invalid auth token")]
     InvalidToken,
-    #[fail(display = "service error context - balance overflow")]
-    BalanceOverFlow,
+    #[fail(display = "service error context - no account found")]
+    NoAccount,
+    #[fail(display = "service error context - no transaction found")]
+    NoTransaction,
+    #[fail(display = "service error context - not enough founds")]
+    NotEnoughFounds,
+    #[fail(display = "service error context - invalid currency")]
+    InvalidCurrency,
 }
 
 derive_error_impls!();
@@ -68,6 +79,16 @@ impl From<KeysClientErrorKind> for ErrorKind {
             KeysClientErrorKind::Internal => ErrorKind::Internal,
             KeysClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
             KeysClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
+        }
+    }
+}
+
+impl From<BlockchainClientErrorKind> for ErrorKind {
+    fn from(err: BlockchainClientErrorKind) -> Self {
+        match err {
+            BlockchainClientErrorKind::Internal => ErrorKind::Internal,
+            BlockchainClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
+            BlockchainClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
         }
     }
 }

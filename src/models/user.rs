@@ -17,7 +17,7 @@ pub struct User {
 impl Default for User {
     fn default() -> Self {
         Self {
-            id: UserId::default(),
+            id: UserId::generate(),
             name: String::default(),
             authentication_token: AuthenticationToken::default(),
             created_at: SystemTime::now(),
@@ -39,7 +39,7 @@ pub struct NewUser {
 impl Default for NewUser {
     fn default() -> Self {
         Self {
-            id: UserId::default(),
+            id: UserId::generate(),
             name: String::default(),
             authentication_token: AuthenticationToken::default(),
         }

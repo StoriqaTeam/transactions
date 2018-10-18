@@ -1,6 +1,16 @@
+use uuid::Uuid;
+
 use models::*;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct CreateAccountAddressResponse {
-    pub account_address: AccountAddress,
+    pub id: Uuid,
+    pub currency: Currency,
+    pub address: AccountAddress,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct CreateBlockchainTxResponse {
+    #[serde(flatten)]
+    pub blockchain_tx: BlockchainTransaction,
 }

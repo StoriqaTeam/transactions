@@ -8,7 +8,8 @@ storiqa_jwt_valid_secs = 86400
 
 [client]
 dns_threads = 4
-keys_url = "https://stable.stq.cloud/graphql"
+keys_url = "https://keys.stq.cloud"
+blockchain_url = "https://blockchain.stq.cloud"
 
 [database]
 url = "postgresql://transactions:transactions@transactions-pg/transactions"

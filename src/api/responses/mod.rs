@@ -29,10 +29,9 @@ impl From<User> for UsersResponse {
 pub struct AccountsResponse {
     pub id: AccountId,
     pub user_id: UserId,
-    pub balance: Amount,
     pub currency: Currency,
-    pub account_address: AccountAddress,
-    pub name: String,
+    pub address: AccountAddress,
+    pub name: Option<String>,
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
 }
@@ -42,9 +41,8 @@ impl From<Account> for AccountsResponse {
         Self {
             id: account.id,
             user_id: account.user_id,
-            balance: account.balance,
             currency: account.currency,
-            account_address: account.account_address,
+            address: account.address,
             name: account.name,
             created_at: account.created_at,
             updated_at: account.updated_at,
@@ -79,6 +77,40 @@ impl From<Vec<Balance>> for BalancesResponse {
     fn from(balances: Vec<Balance>) -> Self {
         Self {
             data: balances.into_iter().map(From::from).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionsResponse {
+    pub id: TransactionId,
+    pub user_id: UserId,
+    pub dr_account_id: AccountId,
+    pub cr_account_id: AccountId,
+    pub currency: Currency,
+    pub value: Amount,
+    pub status: TransactionStatus,
+    pub blockchain_tx_id: Option<BlockchainTransactionId>,
+    pub hold_until: Option<SystemTime>,
+    pub created_at: SystemTime,
+    pub updated_at: SystemTime,
+}
+
+impl From<Transaction> for TransactionsResponse {
+    fn from(transaction: Transaction) -> Self {
+        Self {
+            id: transaction.id,
+            user_id: transaction.user_id,
+            dr_account_id: transaction.dr_account_id,
+            cr_account_id: transaction.cr_account_id,
+            currency: transaction.currency,
+            value: transaction.value,
+            status: transaction.status,
+            blockchain_tx_id: transaction.blockchain_tx_id,
+            hold_until: transaction.hold_until,
+            created_at: transaction.created_at,
+            updated_at: transaction.updated_at,
         }
     }
 }

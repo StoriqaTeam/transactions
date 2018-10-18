@@ -15,7 +15,7 @@ use diesel::sql_types::Numeric;
 /// that your db contains only limited precision numbers, i.e. no floating point and limited by u128 values.
 ///
 /// As a monetary amount it only implements checked_add and checked_sub
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, FromSqlRow, AsExpression, Default)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, FromSqlRow, AsExpression, Default, PartialOrd)]
 #[sql_type = "Numeric"]
 pub struct Amount(u128);
 
@@ -28,6 +28,10 @@ impl Amount {
     /// Make saubtraction, return None on overflow
     pub fn checked_sub(&self, other: Amount) -> Option<Self> {
         self.0.checked_sub(other.0).map(Amount)
+    }
+
+    pub fn new(v: u128) -> Self {
+        Amount(v)
     }
 }
 
@@ -103,7 +107,7 @@ fn pg_decimal_to_u128(numeric: &PgNumeric) -> deserialize::Result<u128> {
             .ok_or(Box::from(format!("Overflow in Pgnumeric to u128 (digits phase): {:#?}", numeric)) as Box<StdError + Send + Sync>)?;
     }
 
-    let correction_exp = 4 * ((weight as i32) - (digits.len() as i32) + 1);
+    let correction_exp = 4 * ((i32::from(weight)) - (digits.len() as i32) + 1);
     if correction_exp < 0 {
         return Err(Box::from(format!(
             "Negative correction exp is not supported in u128: {:#?}",
@@ -148,14 +152,14 @@ mod tests {
 
             match sign {
                 0 => PgNumeric::Positive {
-                    weight: weight,
+                    weight,
                     scale: scale as u16,
-                    digits: digits,
+                    digits,
                 },
                 0x4000 => PgNumeric::Negative {
-                    weight: weight,
+                    weight,
                     scale: scale as u16,
-                    digits: digits,
+                    digits,
                 },
                 _ => PgNumeric::NaN,
             }

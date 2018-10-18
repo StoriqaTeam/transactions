@@ -6,14 +6,16 @@ use hyper::{header::HeaderValue, header::AUTHORIZATION, Body, HeaderMap, Method,
 
 use super::error::*;
 use models::*;
-use services::{AccountsService, UsersService};
+use services::{AccountsService, TransactionsService, UsersService};
 
 mod accounts;
 mod fallback;
+mod transactions;
 mod users;
 
 pub use self::accounts::*;
 pub use self::fallback::*;
+pub use self::transactions::*;
 pub use self::users::*;
 
 pub type ControllerFuture = Box<Future<Item = Response<Body>, Error = Error> + Send>;
@@ -26,6 +28,7 @@ pub struct Context {
     pub headers: HeaderMap<HeaderValue>,
     pub users_service: Arc<dyn UsersService>,
     pub accounts_service: Arc<dyn AccountsService>,
+    pub transactions_service: Arc<dyn TransactionsService>,
 }
 
 impl Context {
@@ -40,7 +43,7 @@ impl Context {
                 } else {
                     None
                 }
-            }).map(|t| AuthenticationToken::new(t))
+            }).map(AuthenticationToken::new)
     }
 }
 

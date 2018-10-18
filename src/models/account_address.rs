@@ -1,12 +1,14 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::{self, Display};
 
 use diesel::sql_types::VarChar;
+use uuid::Uuid;
 use validator::{Validate, ValidationError, ValidationErrors};
 
 use models::*;
 
-#[derive(Deserialize, FromSqlRow, AsExpression, Clone, Default, PartialEq, Eq, Hash, Serialize, Debug)]
+#[derive(Deserialize, FromSqlRow, AsExpression, Clone, PartialEq, Eq, Hash, Serialize, Debug)]
 #[sql_type = "VarChar"]
 pub struct AccountAddress(String);
 derive_newtype_sql!(account_address, VarChar, AccountAddress, AccountAddress);
@@ -41,35 +43,38 @@ impl AccountAddress {
     }
 }
 
+impl Default for AccountAddress {
+    fn default() -> Self {
+        AccountAddress(Uuid::new_v4().to_string())
+    }
+}
+
+impl Display for AccountAddress {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&self.0.to_string())
+    }
+}
+
 #[derive(Debug, Validate, Clone, Serialize)]
 pub struct CreateAccountAddress {
-    pub id: AccountId,
-    #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
-    pub name: String,
-    pub user_id: UserId,
+    pub id: Uuid,
     pub currency: Currency,
 }
 
 impl Default for CreateAccountAddress {
     fn default() -> Self {
         Self {
-            id: AccountId::default(),
-            name: String::default(),
-            user_id: UserId::default(),
             currency: Currency::Eth,
+            id: Uuid::new_v4(),
         }
     }
 }
 
-impl From<(CreateAccountAddress, AccountAddress)> for NewAccount {
-    fn from(req: (CreateAccountAddress, AccountAddress)) -> Self {
+impl From<CreateAccount> for CreateAccountAddress {
+    fn from(acc: CreateAccount) -> Self {
         Self {
-            id: req.0.id,
-            name: req.0.name,
-            currency: req.0.currency,
-            user_id: req.0.user_id,
-            balance: Amount::default(),
-            account_address: req.1,
+            id: Uuid::new_v4(),
+            currency: acc.currency,
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use diesel::pg::PgConnection;
-use failure::Error as FailureError;
+use diesel::result::Error as DieselError;
 use futures_cpupool::CpuPool;
 
 use super::error::*;
@@ -63,7 +63,7 @@ impl DbExecutor for DbExecutorImpl {
         let db_pool = self.db_pool.clone();
         Box::new(self.db_thread_pool.spawn_fn(move || {
             DB_CONN.with(move |tls_conn_cell| -> Result<T, E> {
-                let _ = put_connection_into_tls(db_pool, tls_conn_cell)?;
+                put_connection_into_tls(&db_pool, tls_conn_cell)?;
                 f().map_err(move |e| {
                     remove_connection_from_tls_if_broken(tls_conn_cell);
                     e
@@ -81,13 +81,23 @@ impl DbExecutor for DbExecutorImpl {
         let db_pool = self.db_pool.clone();
         Box::new(self.db_thread_pool.spawn_fn(move || {
             DB_CONN.with(move |tls_conn_cell| -> Result<T, E> {
-                let _ = put_connection_into_tls(db_pool, tls_conn_cell)?;
-                with_tls_connection(move |conn| {
-                    conn.transaction::<_, FailureError, _>(|| f().map_err(From::from))
-                        .map_err(ectx!(ErrorSource::Transaction, ErrorKind::Internal))
-                }).map_err(|e| {
+                put_connection_into_tls(&db_pool, tls_conn_cell)?;
+                let mut err: Option<E> = None;
+                let res = {
+                    let err_ref = &mut err;
+                    with_tls_connection(move |conn| {
+                        conn.transaction(|| {
+                            f().map_err(|e| {
+                                *err_ref = Some(e);
+                                DieselError::RollbackTransaction
+                            })
+                        }).map_err(ectx!(ErrorSource::Diesel, ErrorKind::Internal))
+                    })
+                };
+                res.map_err(|e| {
+                    let e: E = err.unwrap_or_else(|| e.into());
                     remove_connection_from_tls_if_broken(tls_conn_cell);
-                    e.into()
+                    e
                 })
             })
         }))
@@ -101,7 +111,7 @@ impl DbExecutor for DbExecutorImpl {
         E: From<Error> + Fail,
     {
         self.execute_transaction(|| {
-            f()?;
+            let _ = f()?;
             let e: Error = ErrorKind::Internal.into();
             Err(e.into())
         })
@@ -129,14 +139,14 @@ where
 
 /// Checkout connection from db_pool and put it into thead local storage
 /// if there is no connection already in thread local storage
-fn put_connection_into_tls(db_pool: PgPool, tls_conn_cell: &RefCell<Option<PgPooledConnection>>) -> Result<(), Error> {
+fn put_connection_into_tls(db_pool: &PgPool, tls_conn_cell: &RefCell<Option<PgPooledConnection>>) -> Result<(), Error> {
     let mut maybe_conn = tls_conn_cell.borrow_mut();
     if maybe_conn.is_none() {
         match db_pool.get() {
             Ok(conn) => *maybe_conn = Some(conn),
             Err(e) => {
                 let e: Error = ectx!(err e, ErrorSource::R2D2, ErrorKind::Internal);
-                return Err(e.into());
+                return Err(e);
             }
         }
     }

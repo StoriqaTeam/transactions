@@ -34,7 +34,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Balance'
+                $ref: '#/components/schemas/Account'
   /users/{userId}/balances:
     get:
       summary: Returns total balances of a user
@@ -102,7 +102,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
-  /accounts:
     post:
       summary: >-
         Creates account for a user
@@ -112,6 +111,8 @@ paths:
         - Bearer: []
       tags:
         - accounts
+      parameters:
+        - $ref: '#/components/parameters/userIdParam'
       responses:
         200:
           description: Ok
@@ -225,32 +226,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
-    post:
-      summary: Create a transactions for a user
-      description: Only users with `userId` are allowed to create a transaction. The transaction will be put into queue. Once finished, callback will be executed.
-      security:
-        - Bearer: []
-      tags:
-        - transactions
-      parameters:
-        - $ref: '#/components/parameters/userIdParam'
-      responses:
-        204:
-          description: Transaction was put into queue
-        400:
-          $ref: '#/components/responses/BadRequest'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        422:
-          $ref: '#/components/responses/UnprocessableEntity'
-        500:
-          $ref: '#/components/responses/Internal'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TransactionCreateInput'
-
   '/users/{userId}/accounts/{accountId}/transactions':
     get:
       summary: Lists all transactions of a user's account
@@ -275,24 +250,58 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
-  '/users/{userId}/transactions/{transactionId}':
-    delete:
-      summary: Cancels a transaction for a user
-      description: Only users with `userId` are allowed to create a transaction. The transaction can only be canceled if it is on hold.
+  '/transactions/{transactionId}':
+    get:
+      summary: Get transaction by id
+      description: Only users with `userId` are allowed to get a transaction.
       security:
         - Bearer: []
       tags:
         - transactions
       parameters:
-        - $ref: '#/components/parameters/userIdParam'
         - $ref: '#/components/parameters/transactionIdParam'
       responses:
-        204:
-          description: Transaction was cancelled successfully
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
         401:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
+  '/transactions':
+    post:
+      summary: Create a transactions beetween accounts inside payments system
+      description: Only users with `userId` are allowed to create a transaction. The transaction will be executed immediately.
+      security:
+        - Bearer: []
+      tags:
+        - transactions
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        422:
+          $ref: '#/components/responses/UnprocessableEntity'
+        500:
+          $ref: '#/components/responses/Internal'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionCreateInput'
+  
 
 components:
   responses:
@@ -354,8 +363,6 @@ components:
                 type: string
                 example: Internal server error
 
-
-
   schemas:
     ValidationErrors:
       type: array
@@ -410,43 +417,7 @@ components:
       format: uint256
       description: Monetary value - either fiat or blockchain
       example: 185000000000000000000
-    TransactionCreateInput:
-      type: object
-      required:
-        - id
-        - from
-        - to
-        - toType
-        - toCurrency
-        - value
-      properties:
-        id:
-          $ref: '#/components/schemas/Id'
-        from:
-          $ref: '#/components/schemas/AccountAddress'
-        to:
-          description: >
-            Generally you make a transaction using blockchain address.
-            However, when working with obfuscated accounts you get back
-            only account id in our system (we need that to hide blockchain
-            address so that a user couldn't find it by phone)
-          oneOf:
-            - $ref: '#/components/schemas/AccountId'
-            - $ref: '#/components/schemas/AccountAddress'
-          discriminator:
-            propertyName: toType
-          example:
-            jghkdfgdjfgkdf7gd | 0x89595fa59d69d696d9d96
-        toType:
-          type: string
-          enum: [account|address]
-        toCurrency:
-          $ref: '#/components/schemas/Currency'
-        value:
-          $ref: '#/components/schemas/Value'
-        holdUntil:
-          $ref: '#/components/schemas/Timestamp'
-
+      
     Transaction:
       type: object
       required:
@@ -471,7 +442,45 @@ components:
           $ref: '#/components/schemas/Timestamp'
         holdUntil:
           $ref: '#/components/schemas/Timestamp'
-
+          
+    TransactionCreateInput:
+      type: object
+      required:
+        - userId
+        - from
+        - to
+        - toType
+        - currency
+        - value
+        - fee
+      properties:
+        userId:
+          $ref: '#/components/schemas/UserId'
+        from:
+          $ref: '#/components/schemas/AccountId'
+        to:
+          description: >
+            Generally you make a transaction using blockchain address.
+            However, when working with obfuscated accounts you get back
+            only account id in our system (we need that to hide blockchain
+            address so that a user couldn't find it by phone)
+          oneOf:
+            - $ref: '#/components/schemas/AccountId'
+            - $ref: '#/components/schemas/AccountAddress'
+          discriminator:
+            propertyName: toType
+          example:
+            jghkdfgdjfgkdf7gd | 0x89595fa59d69d696d9d96
+        toType:
+          type: string
+          enum: [account|address]
+        currency:
+          $ref: '#/components/schemas/Currency'
+        value:
+          $ref: '#/components/schemas/Value'
+        fee:
+          $ref: '#/components/schemas/Value'
+          
     AccountAddress:
       type: string
       description: Either blockchain address or fiat account number (depending on currency)

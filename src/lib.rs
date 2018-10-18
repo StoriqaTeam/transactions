@@ -92,5 +92,5 @@ fn create_db_pool(config: &Config) -> PgPool {
     let manager = ConnectionManager::<PgConnection>::new(database_url.clone());
     r2d2::Pool::builder()
         .build(manager)
-        .expect(&format!("Failed to connect to db with url: {}", database_url))
+        .unwrap_or_else(|_| panic!("Failed to connect to db with url: {}", database_url))
 }

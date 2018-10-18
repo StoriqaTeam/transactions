@@ -27,6 +27,6 @@ pub fn get_users_me(ctx: &Context) -> ControllerFuture {
             .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
             .into_future()
             .and_then(move |maybe_token| users_service.find_user_by_authentication_token(maybe_token).map_err(ectx!(convert)))
-            .and_then(|user| response_with_model(&user.map(|user| UsersResponse::from(user)))),
+            .and_then(|user| response_with_model(&user.map(UsersResponse::from))),
     )
 }
