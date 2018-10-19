@@ -41,6 +41,9 @@ __Transactions__
 | 1  | 35            | 36            | 9     | done    | 0xcdef76796      |
 |    |               |               |       |         |                  |
 
+
+
+
 &nbsp;
 
 2) User makes a 3 `wei` withdrawal
@@ -63,6 +66,25 @@ __Transactions__
 | 3  | 36            | 49            | 5     | done    |                  |
 |    |               |               |       |         |                  |
 
+### Blockchain status changing
+
+# Ethereum
+< $20 / $200 - 0 conf
+< $50 / $200 - 1 conf
+< $200 / $200 - 2 conf
+< $500 / $200 - 3 conf
+< $1000 / $200 - 4 conf
+< $2000 / $200 - 5 conf
+< $3000 / $200 - 6 conf
+< $5000 / $200 - 8 conf
+> $5000 / $200 - 12 conf
+
+# Bitcoin
+
+< $100 / $6400 - 0 conf
+< $500 / $6400 - 1 conf
+< $1000 / $6400 - 2 conf
+> $1000 / $6400 - 3 conf
 
 ### Operations example cases
 

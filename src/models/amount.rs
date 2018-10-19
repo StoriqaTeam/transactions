@@ -33,6 +33,10 @@ impl Amount {
     pub fn new(v: u128) -> Self {
         Amount(v)
     }
+
+    pub fn raw(&self) -> u128 {
+        self.0
+    }
 }
 
 impl<'a> From<&'a Amount> for PgNumeric {

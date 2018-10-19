@@ -72,12 +72,6 @@ pub trait TransactionsService: Send + Sync + 'static {
         token: AuthenticationToken,
         account_id: AccountId,
     ) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
-    fn update_transaction_status(
-        &self,
-        token: AuthenticationToken,
-        transaction_id: TransactionId,
-        transaction_status: TransactionStatus,
-    ) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     fn create_transaction_ethereum(
         &self,
         token: AuthenticationToken,
@@ -497,28 +491,6 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     return Err(ectx!(err ErrorContext::NoAccount, ErrorKind::NotFound => account_id));
                 }
                 transactions_repo.list_for_account(account_id).map_err(ectx!(convert => account_id))
-            })
-        }))
-    }
-    fn update_transaction_status(
-        &self,
-        token: AuthenticationToken,
-        transaction_id: TransactionId,
-        transaction_status: TransactionStatus,
-    ) -> Box<Future<Item = Transaction, Error = Error> + Send> {
-        let transactions_repo = self.transactions_repo.clone();
-        let db_executor = self.db_executor.clone();
-        Box::new(self.auth_service.authenticate(token).and_then(move |user| {
-            db_executor.execute_transaction(move || {
-                let transaction = transactions_repo
-                    .update_status(transaction_id, transaction_status)
-                    .map_err(ectx!(try convert=> transaction_id, transaction_status))?;
-
-                if transaction.user_id != user.id {
-                    return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                }
-
-                Ok(transaction)
             })
         }))
     }

@@ -1,8 +1,10 @@
+use std::fmt::{self, Display};
+use std::io::Write;
+
 use diesel::deserialize::{self, FromSql};
 use diesel::pg::Pg;
 use diesel::serialize::{self, IsNull, Output, ToSql};
 use diesel::sql_types::VarChar;
-use std::io::Write;
 
 #[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Eq, PartialEq, Hash)]
 #[sql_type = "VarChar"]
@@ -37,5 +39,15 @@ impl ToSql<VarChar, Pg> for Currency {
             Currency::Btc => out.write_all(b"btc")?,
         };
         Ok(IsNull::No)
+    }
+}
+
+impl Display for Currency {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Currency::Eth => f.write_str("eth"),
+            Currency::Stq => f.write_str("stq"),
+            Currency::Btc => f.write_str("btc"),
+        }
     }
 }

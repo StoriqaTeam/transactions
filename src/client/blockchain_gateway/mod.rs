@@ -20,11 +20,11 @@ use utils::read_body;
 pub trait BlockchainClient: Send + Sync + 'static {
     fn post_ethereum_transaction(
         &self,
-        transaction: BlockchainTransaction,
+        transaction: BlockchainTransactionRaw,
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
     fn post_bitcoin_transaction(
         &self,
-        transaction: BlockchainTransaction,
+        transaction: BlockchainTransactionRaw,
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
     fn get_bitcoin_utxos(&self, address: AccountAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send>;
     fn get_ethereum_nonce(&self, address: AccountAddress) -> Box<Future<Item = u64, Error = Error> + Send>;
@@ -75,7 +75,7 @@ impl BlockchainClientImpl {
 impl BlockchainClient for BlockchainClientImpl {
     fn post_ethereum_transaction(
         &self,
-        transaction: BlockchainTransaction,
+        transaction: BlockchainTransactionRaw,
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         let client = self.clone();
         Box::new(
@@ -87,7 +87,7 @@ impl BlockchainClient for BlockchainClientImpl {
     }
     fn post_bitcoin_transaction(
         &self,
-        transaction: BlockchainTransaction,
+        transaction: BlockchainTransactionRaw,
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         let client = self.clone();
         Box::new(
@@ -119,13 +119,13 @@ pub struct BlockchainClientMock;
 impl BlockchainClient for BlockchainClientMock {
     fn post_ethereum_transaction(
         &self,
-        _post_transaction: BlockchainTransaction,
+        _post_transaction: BlockchainTransactionRaw,
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         Box::new(Ok(BlockchainTransactionId::default()).into_future())
     }
     fn post_bitcoin_transaction(
         &self,
-        _post_transaction: BlockchainTransaction,
+        _post_transaction: BlockchainTransactionRaw,
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         Box::new(Ok(BlockchainTransactionId::default()).into_future())
     }

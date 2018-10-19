@@ -13,6 +13,31 @@ table! {
 }
 
 table! {
+    blockchain_transactions (hash) {
+        hash -> Varchar,
+        from_ -> Varchar,
+        to_ -> Varchar,
+        block_number -> Int8,
+        currency -> Varchar,
+        value -> Numeric,
+        fee -> Numeric,
+        confirmations -> Int4,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+table! {
+    seen_hashes (hash) {
+        hash -> Varchar,
+        block_number -> Int8,
+        currency -> Varchar,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+table! {
     transactions (id) {
         id -> Uuid,
         user_id -> Uuid,
@@ -41,8 +66,4 @@ table! {
 joinable!(accounts -> users (user_id));
 joinable!(transactions -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(
-    accounts,
-    transactions,
-    users,
-);
+allow_tables_to_appear_in_same_query!(accounts, blockchain_transactions, seen_hashes, transactions, users,);

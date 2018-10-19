@@ -28,7 +28,7 @@ pub trait KeysClient: Send + Sync + 'static {
         &self,
         token: AuthenticationToken,
         create_blockchain_tx: CreateBlockchainTx,
-    ) -> Box<Future<Item = BlockchainTransaction, Error = Error> + Send>;
+    ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -98,7 +98,7 @@ impl KeysClient for KeysClientImpl {
         &self,
         token: AuthenticationToken,
         create_blockchain_tx: CreateBlockchainTx,
-    ) -> Box<Future<Item = BlockchainTransaction, Error = Error> + Send> {
+    ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
         let client = self.clone();
         Box::new(
             serde_json::to_string(&create_blockchain_tx)
@@ -129,7 +129,7 @@ impl KeysClient for KeysClientMock {
         &self,
         _token: AuthenticationToken,
         _create_blockchain_tx: CreateBlockchainTx,
-    ) -> Box<Future<Item = BlockchainTransaction, Error = Error> + Send> {
-        Box::new(Ok(BlockchainTransaction::default()).into_future())
+    ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
+        Box::new(Ok(BlockchainTransactionRaw::default()).into_future())
     }
 }

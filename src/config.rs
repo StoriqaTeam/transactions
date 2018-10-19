@@ -10,6 +10,7 @@ pub struct Config {
     pub database: Database,
     pub client: Client,
     pub cpu_pool: CpuPool,
+    pub rabbit: Rabbit,
     pub sentry: Option<SentryConfig>,
 }
 
@@ -34,6 +35,14 @@ pub struct Database {
 #[derive(Debug, Deserialize, Clone)]
 pub struct CpuPool {
     pub size: usize,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Rabbit {
+    pub url: String,
+    pub thread_pool_size: usize,
+    pub connection_timeout_secs: usize,
+    pub connection_pool_size: usize,
 }
 
 impl Config {
