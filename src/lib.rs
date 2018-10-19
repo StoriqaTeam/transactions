@@ -111,7 +111,7 @@ pub fn start_server() {
                         let worker_clone = worker_clone.clone();
                         stream
                             .for_each(move |message| {
-                                debug!("got message: {:?}", message);
+                                info!("got message: {:?}", message);
                                 let delivery_tag = message.delivery_tag;
                                 let worker_clone = worker_clone.clone();
                                 let publisher_clone = publisher_clone.clone();

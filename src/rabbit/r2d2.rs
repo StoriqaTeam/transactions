@@ -46,6 +46,7 @@ impl RabbitHeartbeatHandle {
 
 impl Drop for RabbitHeartbeatHandle {
     fn drop(&mut self) {
+        error!("stopped heartb7bhgbhyb");
         let handle = self.0.take();
         if let Some(h) = handle {
             h.stop();

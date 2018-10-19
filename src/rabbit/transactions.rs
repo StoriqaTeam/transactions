@@ -64,7 +64,7 @@ impl TransactionConsumerImpl {
                 .and_then(move |queue| {
                     self_clone.get_channel().and_then(move |channel| {
                         channel
-                            .basic_consume(&queue, "", BasicConsumeOptions::default(), FieldTable::new())
+                            .basic_consume(&queue, "kfjds", BasicConsumeOptions::default(), FieldTable::new())
                             .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     })
                 }),
@@ -83,7 +83,7 @@ impl TransactionConsumerImpl {
                 .and_then(move |queue| {
                     self_clone.get_channel().and_then(move |channel| {
                         channel
-                            .basic_consume(&queue, "", BasicConsumeOptions::default(), FieldTable::new())
+                            .basic_consume(&queue, "kfjds", BasicConsumeOptions::default(), FieldTable::new())
                             .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     })
                 }),
@@ -101,8 +101,9 @@ impl TransactionConsumerImpl {
                 ).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                 .and_then(move |queue| {
                     self_clone.get_channel().and_then(move |channel| {
+                    debug!("dfasds dfssdfads ff");
                         channel
-                            .basic_consume(&queue, "", BasicConsumeOptions::default(), FieldTable::new())
+                            .basic_consume(&queue, "kfjds", BasicConsumeOptions::default(), Default::default())
                             .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     })
                 }),
