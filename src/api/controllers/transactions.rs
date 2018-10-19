@@ -99,26 +99,6 @@ pub fn get_accounts_transactions(ctx: &Context, account_id: AccountId) -> Contro
     )
 }
 
-pub fn put_transactions_status(ctx: &Context, transaction_id: TransactionId) -> ControllerFuture {
-    let transactions_service = ctx.transactions_service.clone();
-    let maybe_token = ctx.get_auth_token();
-    let body = ctx.body.clone();
-    Box::new(
-        maybe_token
-            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
-            .into_future()
-            .and_then(move |token| {
-                parse_body::<PutTransactionsRequest>(body)
-                    .and_then(move |input| {
-                        let new_status = input.into();
-                        transactions_service
-                            .update_transaction_status(token, transaction_id, new_status)
-                            .map_err(ectx!(convert => transaction_id, new_status))
-                    }).and_then(|transaction| response_with_model(&TransactionsResponse::from(transaction)))
-            }),
-    )
-}
-
 pub fn get_accounts_balances(ctx: &Context, account_id: AccountId) -> ControllerFuture {
     let transactions_service = ctx.transactions_service.clone();
     let maybe_token = ctx.get_auth_token();

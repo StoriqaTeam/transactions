@@ -11,7 +11,7 @@ use schema::transactions::dsl::*;
 pub trait TransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewTransaction) -> RepoResult<Transaction>;
     fn get(&self, transaction_id: TransactionId) -> RepoResult<Option<Transaction>>;
-    fn update_status(&self, transaction_id: TransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction>;
+    fn update_status(&self, blockchain_tx_id: BlockchainTransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction>;
     fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Transaction>;
     fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount>;
     fn list_for_user(&self, user_id_arg: UserId, offset: TransactionId, limit: i64) -> RepoResult<Vec<Transaction>>;
@@ -46,15 +46,15 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
-    fn update_status(&self, transaction_id_arg: TransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction> {
+    fn update_status(&self, blockchain_tx_id_: BlockchainTransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction> {
         with_tls_connection(|conn| {
-            let f = transactions.filter(id.eq(transaction_id_arg));
+            let f = transactions.filter(blockchain_tx_id.eq(blockchain_tx_id_.clone()));
             diesel::update(f)
                 .set(status.eq(transaction_status))
                 .get_result(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
-                    ectx!(err e, error_kind => transaction_id_arg, transaction_status)
+                    ectx!(err e, error_kind => blockchain_tx_id_, transaction_status)
                 })
         })
     }
@@ -230,10 +230,11 @@ pub mod tests {
             trans.dr_account_id = acc2.id;
             trans.user_id = user.id;
             trans.value = Amount::new(123);
+            trans.blockchain_tx_id = Some(BlockchainTransactionId::default());
 
             let transaction = transactions_repo.create(trans)?;
             let transaction_status = TransactionStatus::Done;
-            let res = transactions_repo.update_status(transaction.id, transaction_status);
+            let res = transactions_repo.update_status(transaction.blockchain_tx_id.unwrap(), transaction_status);
             assert!(res.is_ok());
             res
         }));
