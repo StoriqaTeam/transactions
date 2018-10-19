@@ -4,6 +4,7 @@ use futures::future;
 use futures_cpupool::CpuPool;
 use lapin_futures::channel::BasicConsumeOptions;
 use lapin_futures::channel::Channel;
+use lapin_futures::channel::QueueDeclareOptions;
 use lapin_futures::consumer::Consumer;
 use lapin_futures::types::FieldTable;
 use r2d2::PooledConnection;
@@ -52,8 +53,14 @@ impl TransactionConsumerImpl {
         let self_clone = self.clone();
         let btc_transactions: Box<Future<Item = Consumer<TcpStream>, Error = Error>> = Box::new(
             channel
-                .queue_declare("btc_transactions", Default::default(), Default::default())
-                .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
+                .queue_declare(
+                    "btc_transactions",
+                    QueueDeclareOptions {
+                        durable: true,
+                        ..Default::default()
+                    },
+                    Default::default(),
+                ).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                 .and_then(move |queue| {
                     self_clone.get_channel().and_then(move |channel| {
                         channel
@@ -65,8 +72,14 @@ impl TransactionConsumerImpl {
         let self_clone = self.clone();
         let stq_transactions: Box<Future<Item = Consumer<TcpStream>, Error = Error>> = Box::new(
             channel
-                .queue_declare("stq_transactions", Default::default(), Default::default())
-                .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
+                .queue_declare(
+                    "stq_transactions",
+                    QueueDeclareOptions {
+                        durable: true,
+                        ..Default::default()
+                    },
+                    Default::default(),
+                ).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                 .and_then(move |queue| {
                     self_clone.get_channel().and_then(move |channel| {
                         channel
@@ -78,8 +91,14 @@ impl TransactionConsumerImpl {
         let self_clone = self.clone();
         let eth_transactions: Box<Future<Item = Consumer<TcpStream>, Error = Error>> = Box::new(
             channel
-                .queue_declare("eth_transactions", Default::default(), Default::default())
-                .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
+                .queue_declare(
+                    "eth_transactions",
+                    QueueDeclareOptions {
+                        durable: true,
+                        ..Default::default()
+                    },
+                    Default::default(),
+                ).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                 .and_then(move |queue| {
                     self_clone.get_channel().and_then(move |channel| {
                         channel
