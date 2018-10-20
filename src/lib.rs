@@ -62,7 +62,7 @@ use self::models::NewUser;
 use self::prelude::*;
 use self::repos::{
     BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError, SeenHashesRepoImpl, TransactionsRepoImpl, UsersRepo,
-    UsersRepoImpl,
+    UsersRepoImpl, AcountsRepoImpl
 };
 use config::Config;
 use rabbit::{ErrorKind, ErrorSource};
@@ -90,9 +90,10 @@ pub fn start_server() {
         let cpu_pool = CpuPool::new(1);
         let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
         let transactions_repo = Arc::new(TransactionsRepoImpl);
+        let acounts_repo = Arc::new(AcountsRepoImpl);
         let seen_hashes_repo = Arc::new(SeenHashesRepoImpl);
         let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoImpl);
-        let worker = BlockchainWorkerImpl::new(transactions_repo, seen_hashes_repo, blockchain_transactions_repo, db_executor);
+        let worker = BlockchainWorkerImpl::new(transactions_repo, acounts_repo, seen_hashes_repo, blockchain_transactions_repo, db_executor);
         debug!("Started creating rabbit connection pool");
         let rabbit_thread_pool = futures_cpupool::CpuPool::new(config_clone.rabbit.thread_pool_size);
         let f = RabbitConnectionManager::create(&config_clone)

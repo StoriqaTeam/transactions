@@ -12,6 +12,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewTransaction) -> RepoResult<Transaction>;
     fn get(&self, transaction_id: TransactionId) -> RepoResult<Option<Transaction>>;
     fn update_status(&self, blockchain_tx_id: BlockchainTransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction>;
+    fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>>;
     fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Transaction>;
     fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount>;
     fn list_for_user(&self, user_id_arg: UserId, offset: TransactionId, limit: i64) -> RepoResult<Vec<Transaction>>;
@@ -37,6 +38,19 @@ impl TransactionsRepo for TransactionsRepoImpl {
         with_tls_connection(|conn| {
             transactions
                 .filter(id.eq(transaction_id_arg))
+                .limit(1)
+                .get_result(conn)
+                .optional()
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => transaction_id_arg)
+                })
+        })
+    }
+    fn get_by_blockchain_tx(&self, blockchain_tx_id_: BlockchainTransactionId) -> RepoResult<Option<Transaction>> {
+        with_tls_connection(|conn| {
+            transactions
+                .filter(blockchain_tx_id.eq(blockchain_tx_id_))
                 .limit(1)
                 .get_result(conn)
                 .optional()
