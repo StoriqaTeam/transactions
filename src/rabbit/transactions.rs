@@ -13,6 +13,7 @@ use tokio::net::tcp::TcpStream;
 use super::error::*;
 use super::r2d2::RabbitConnectionManager;
 use super::r2d2::RabbitPool;
+use models::*;
 use prelude::*;
 
 #[derive(Clone)]
@@ -26,21 +27,15 @@ impl TransactionConsumerImpl {
         Self { rabbit_pool, thread_pool }
     }
 
-    pub fn init(&self) -> impl Future<Item = Vec<Consumer<TcpStream>>, Error = Error> {
+    pub fn subscribe(&self) -> impl Future<Item = Vec<(Consumer<TcpStream>, Channel<TcpStream>)>, Error = Error> {
         let self_clone = self.clone();
-        self.get_channel().and_then(move |channel| self_clone.declare(&channel))
-    }
-
-    pub fn ack(&self, delivery_tag: u64) -> impl Future<Item = (), Error = IoError> {
-        self.get_channel()
-            .map_err(From::from)
-            .and_then(move |channel| channel.basic_ack(delivery_tag, false))
-    }
-
-    pub fn nack(&self, delivery_tag: u64) -> impl Future<Item = (), Error = IoError> {
-        self.get_channel()
-            .map_err(From::from)
-            .and_then(move |channel| channel.basic_nack(delivery_tag, false, true))
+        let fs = vec![Currency::Btc, Currency::Eth, Currency::Stq].into_iter().map(move |currency| {
+            let self_clone2 = self_clone.clone();
+            self_clone
+                .get_channel()
+                .and_then(move |channel| self_clone2.subscribe_for_currency(&channel, currency))
+        });
+        future::join_all(fs)
     }
 
     fn get_channel(&self) -> impl Future<Item = PooledConnection<RabbitConnectionManager>, Error = Error> {
@@ -49,65 +44,27 @@ impl TransactionConsumerImpl {
             .spawn_fn(move || rabbit_pool.get().map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal)))
     }
 
-    fn declare(&self, channel: &Channel<TcpStream>) -> impl Future<Item = Vec<Consumer<TcpStream>>, Error = Error> {
-        let self_clone = self.clone();
-        let btc_transactions: Box<Future<Item = Consumer<TcpStream>, Error = Error>> = Box::new(
-            channel
-                .queue_declare(
-                    "btc_transactions",
-                    QueueDeclareOptions {
-                        durable: true,
-                        ..Default::default()
-                    },
-                    Default::default(),
-                ).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
-                .and_then(move |queue| {
-                    self_clone.get_channel().and_then(move |channel| {
-                        channel
-                            .basic_consume(&queue, "kfjds", BasicConsumeOptions::default(), FieldTable::new())
-                            .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
-                    })
-                }),
-        );
-        let self_clone = self.clone();
-        let stq_transactions: Box<Future<Item = Consumer<TcpStream>, Error = Error>> = Box::new(
-            channel
-                .queue_declare(
-                    "stq_transactions",
-                    QueueDeclareOptions {
-                        durable: true,
-                        ..Default::default()
-                    },
-                    Default::default(),
-                ).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
-                .and_then(move |queue| {
-                    self_clone.get_channel().and_then(move |channel| {
-                        channel
-                            .basic_consume(&queue, "kfjds", BasicConsumeOptions::default(), FieldTable::new())
-                            .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
-                    })
-                }),
-        );
-        let self_clone = self.clone();
-        let eth_transactions: Box<Future<Item = Consumer<TcpStream>, Error = Error>> = Box::new(
-            channel
-                .queue_declare(
-                    "eth_transactions",
-                    QueueDeclareOptions {
-                        durable: true,
-                        ..Default::default()
-                    },
-                    Default::default(),
-                ).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
-                .and_then(move |queue| {
-                    self_clone.get_channel().and_then(move |channel| {
-                    debug!("dfasds dfssdfads ff");
-                        channel
-                            .basic_consume(&queue, "kfjds", BasicConsumeOptions::default(), Default::default())
-                            .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
-                    })
-                }),
-        );
-        future::join_all(vec![btc_transactions, stq_transactions, eth_transactions]).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
+    fn subscribe_for_currency(
+        &self,
+        channel: &Channel<TcpStream>,
+        currency: Currency,
+    ) -> impl Future<Item = (Consumer<TcpStream>, Channel<TcpStream>), Error = Error> {
+        let queue_name = format!("{}_transactions", currency);
+        let channel_clone = channel.clone();
+        channel
+            .queue_declare(
+                &queue_name,
+                QueueDeclareOptions {
+                    durable: true,
+                    ..Default::default()
+                },
+                Default::default(),
+            ).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
+            .and_then(move |queue| {
+                channel_clone
+                    .basic_consume(&queue, "", BasicConsumeOptions::default(), FieldTable::new())
+                    .map(move |consumer| (consumer, channel_clone))
+                    .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
+            })
     }
 }
