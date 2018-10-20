@@ -105,24 +105,24 @@ pub fn start_server() {
                 let publisher = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
                 let publisher_clone = publisher.clone();
                 let worker_clone = worker.clone();
-                publisher.init().and_then(move |consumers| {
-                    let futures = consumers.into_iter().map(move |stream| {
-                        let publisher_clone = publisher_clone.clone();
+                publisher.init().and_then(move |consumer_and_chans| {
+                    let futures = consumer_and_chans.into_iter().map(move |(stream, channel)| {
                         let worker_clone = worker_clone.clone();
+                        warn!("HERERE!!!!!!!!!!!!!!!");
                         stream
                             .for_each(move |message| {
                                 debug!("got message: {:?}", message);
                                 let delivery_tag = message.delivery_tag;
                                 let worker_clone = worker_clone.clone();
-                                let publisher_clone = publisher_clone.clone();
+                                let channel = channel.clone();
                                 String::from_utf8(message.data)
                                     .map_err(|_| IoErrorKind::Other.into())
                                     .into_future()
                                     .and_then(|s| serde_json::from_str(&s).map_err(|_| IoErrorKind::Other.into()).into_future())
                                     .and_then(move |blockchain_transaction| worker_clone.work(blockchain_transaction))
                                     .then(move |res| match res {
-                                        Ok(_) => Either::A(publisher_clone.ack(delivery_tag)),
-                                        Err(_) => Either::B(publisher_clone.nack(delivery_tag)),
+                                        Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
+                                        Err(_) => Either::B(channel.basic_nack(delivery_tag, false, true)),
                                     })
                             }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     });
