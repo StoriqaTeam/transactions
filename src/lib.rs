@@ -105,10 +105,9 @@ pub fn start_server() {
                 let publisher = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
                 let publisher_clone = publisher.clone();
                 let worker_clone = worker.clone();
-                publisher.init().and_then(move |consumer_and_chans| {
+                publisher.subscribe().and_then(move |consumer_and_chans| {
                     let futures = consumer_and_chans.into_iter().map(move |(stream, channel)| {
                         let worker_clone = worker_clone.clone();
-                        warn!("HERERE!!!!!!!!!!!!!!!");
                         stream
                             .for_each(move |message| {
                                 debug!("got message: {:?}", message);
