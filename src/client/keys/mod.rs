@@ -18,15 +18,9 @@ use config::Config;
 use utils::read_body;
 
 pub trait KeysClient: Send + Sync + 'static {
-    fn create_account_address(
-        &self,
-        token: AuthenticationToken,
-        user_id: UserId,
-        create_account: CreateAccountAddress,
-    ) -> Box<Future<Item = AccountAddress, Error = Error> + Send>;
+    fn create_account_address(&self, create_account: CreateAccountAddress) -> Box<Future<Item = AccountAddress, Error = Error> + Send>;
     fn sign_transaction(
         &self,
-        token: AuthenticationToken,
         create_blockchain_tx: CreateBlockchainTx,
     ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send>;
 }
@@ -35,6 +29,8 @@ pub trait KeysClient: Send + Sync + 'static {
 pub struct KeysClientImpl {
     cli: Arc<HttpClient>,
     keys_url: String,
+    keys_user_id: UserId,
+    keys_token: AuthenticationToken,
 }
 
 impl KeysClientImpl {
@@ -42,6 +38,8 @@ impl KeysClientImpl {
         Self {
             cli: Arc::new(cli),
             keys_url: config.client.keys_url.clone(),
+            keys_user_id: config.auth.keys_user_id.clone(),
+            keys_token: config.auth.keys_token.clone(),
         }
     }
 
@@ -49,7 +47,6 @@ impl KeysClientImpl {
         &self,
         query: &str,
         body: String,
-        token: &AuthenticationToken,
         method: Method,
     ) -> impl Future<Item = T, Error = Error> + Send {
         let query = query.to_string();
@@ -60,7 +57,7 @@ impl KeysClientImpl {
         let mut builder = Request::builder();
         let url = format!("{}{}", self.keys_url, query);
         builder.uri(url).method(method);
-        builder.header("Authorization", format!("Bearer {}", token.raw()));
+        builder.header("Authorization", format!("Bearer {}", self.keys_token.raw()));
         builder
             .body(Body::from(body))
             .map_err(ectx!(ErrorSource::Hyper, ErrorKind::MalformedInput => query3))
@@ -75,13 +72,9 @@ impl KeysClientImpl {
 }
 
 impl KeysClient for KeysClientImpl {
-    fn create_account_address(
-        &self,
-        token: AuthenticationToken,
-        user_id: UserId,
-        create_account: CreateAccountAddress,
-    ) -> Box<Future<Item = AccountAddress, Error = Error> + Send> {
+    fn create_account_address(&self, create_account: CreateAccountAddress) -> Box<Future<Item = AccountAddress, Error = Error> + Send> {
         let client = self.clone();
+        let user_id = self.keys_user_id;
         Box::new(
             serde_json::to_string(&create_account)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_account))
@@ -89,24 +82,24 @@ impl KeysClient for KeysClientImpl {
                 .and_then(move |body| {
                     let url = format!("/users/{}/keys", user_id);
                     client
-                        .exec_query::<CreateAccountAddressResponse>(&url, body, &token, Method::POST)
+                        .exec_query::<CreateAccountAddressResponse>(&url, body, Method::POST)
                         .map(|resp_data| resp_data.address)
                 }),
         )
     }
     fn sign_transaction(
         &self,
-        token: AuthenticationToken,
         create_blockchain_tx: CreateBlockchainTx,
     ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
         let client = self.clone();
+        let user_id = self.keys_user_id;
         Box::new(
             serde_json::to_string(&create_blockchain_tx)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_blockchain_tx))
                 .into_future()
                 .and_then(move |body| {
                     client
-                        .exec_query::<CreateBlockchainTxResponse>("/transactions", body, &token, Method::POST)
+                        .exec_query::<CreateBlockchainTxResponse>("/transactions", body, Method::POST)
                         .map(|resp_data| resp_data.blockchain_tx)
                 }),
         )
@@ -117,17 +110,11 @@ impl KeysClient for KeysClientImpl {
 pub struct KeysClientMock;
 
 impl KeysClient for KeysClientMock {
-    fn create_account_address(
-        &self,
-        _token: AuthenticationToken,
-        _user_id: UserId,
-        _create_account: CreateAccountAddress,
-    ) -> Box<Future<Item = AccountAddress, Error = Error> + Send> {
+    fn create_account_address(&self, _create_account: CreateAccountAddress) -> Box<Future<Item = AccountAddress, Error = Error> + Send> {
         Box::new(Ok(AccountAddress::default()).into_future())
     }
     fn sign_transaction(
         &self,
-        _token: AuthenticationToken,
         _create_blockchain_tx: CreateBlockchainTx,
     ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
         Box::new(Ok(BlockchainTransactionRaw::default()).into_future())

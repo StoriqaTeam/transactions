@@ -3,6 +3,7 @@ use std::env;
 use sentry_integration::SentryConfig;
 
 use config_crate::{Config as RawConfig, ConfigError, Environment, File};
+use models::*;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
@@ -11,6 +12,7 @@ pub struct Config {
     pub client: Client,
     pub cpu_pool: CpuPool,
     pub rabbit: Rabbit,
+    pub auth: Auth,
     pub sentry: Option<SentryConfig>,
 }
 
@@ -35,6 +37,12 @@ pub struct Database {
 #[derive(Debug, Deserialize, Clone)]
 pub struct CpuPool {
     pub size: usize,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Auth {
+    pub keys_token: AuthenticationToken,
+    pub keys_user_id: UserId,
 }
 
 #[derive(Debug, Deserialize, Clone)]

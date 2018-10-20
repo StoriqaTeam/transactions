@@ -53,7 +53,7 @@ pub trait TransactionsService: Send + Sync + 'static {
     ) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
     fn create_transaction_local(&self, input: CreateTransactionLocal) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     fn deposit_funds(&self, token: AuthenticationToken, input: DepositFounds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
-    fn withdraw(&self, token: AuthenticationToken, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
+    fn withdraw(&self, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
     fn get_transaction(
         &self,
         token: AuthenticationToken,
@@ -74,7 +74,6 @@ pub trait TransactionsService: Send + Sync + 'static {
     ) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
     fn create_transaction_ethereum(
         &self,
-        token: AuthenticationToken,
         user_id: UserId,
         dr_acc: Account,
         cr_acc: Account,
@@ -84,7 +83,6 @@ pub trait TransactionsService: Send + Sync + 'static {
     ) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     fn create_transaction_bitcoin(
         &self,
-        token: AuthenticationToken,
         user_id: UserId,
         dr_acc: Account,
         cr_acc: Account,
@@ -165,7 +163,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             .map(|tr| vec![tr]),
                     ),
                     CrReceiptType::Address(cr_account_address) => {
-                        Either::B(service.withdraw(token, Withdraw::new(&input, dr_acc, cr_account_address)))
+                        Either::B(service.withdraw(Withdraw::new(&input, dr_acc, cr_account_address)))
                     }
                 })
         }))
@@ -199,7 +197,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 }),
         )
     }
-    fn withdraw(&self, token: AuthenticationToken, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send> {
+    fn withdraw(&self, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send> {
         let accounts_repo = self.accounts_repo.clone();
         let transactions_repo = self.transactions_repo.clone();
         let db_executor = self.db_executor.clone();
@@ -236,25 +234,13 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 }).and_then(move |(dr_acc, cr_accs)| {
                     iter_ok::<_, Error>(cr_accs).fold(vec![], move |mut transactions, (cr_acc, value)| {
                         match currency {
-                            Currency::Eth => service.create_transaction_ethereum(
-                                token.clone(),
-                                user_id,
-                                dr_acc.clone(),
-                                cr_acc,
-                                value,
-                                fee,
-                                Currency::Eth,
-                            ),
-                            Currency::Stq => service.create_transaction_ethereum(
-                                token.clone(),
-                                user_id,
-                                dr_acc.clone(),
-                                cr_acc,
-                                value,
-                                fee,
-                                Currency::Stq,
-                            ),
-                            Currency::Btc => service.create_transaction_bitcoin(token.clone(), user_id, dr_acc.clone(), cr_acc, value, fee),
+                            Currency::Eth => {
+                                service.create_transaction_ethereum(user_id, dr_acc.clone(), cr_acc, value, fee, Currency::Eth)
+                            }
+                            Currency::Stq => {
+                                service.create_transaction_ethereum(user_id, dr_acc.clone(), cr_acc, value, fee, Currency::Stq)
+                            }
+                            Currency::Btc => service.create_transaction_bitcoin(user_id, dr_acc.clone(), cr_acc, value, fee),
                         }.then(|res| {
                             if let Ok(r) = res {
                                 transactions.push(r);
@@ -268,7 +254,6 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
 
     fn create_transaction_bitcoin(
         &self,
-        token: AuthenticationToken,
         user_id: UserId,
         dr_acc: Account,
         cr_acc: Account,
@@ -312,7 +297,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         CreateBlockchainTx::new(dr_acc.address, cr_acc.address, Currency::Btc, value, fee, None, Some(utxos));
 
                     let raw = keys_client
-                        .sign_transaction(token.clone(), create_blockchain_input.clone())
+                        .sign_transaction(create_blockchain_input.clone())
                         .map_err(ectx!(try convert => create_blockchain_input))
                         .wait()?;
 
@@ -337,7 +322,6 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
 
     fn create_transaction_ethereum(
         &self,
-        token: AuthenticationToken,
         user_id: UserId,
         dr_acc: Account,
         cr_acc: Account,
@@ -382,7 +366,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         CreateBlockchainTx::new(dr_acc.address, cr_acc.address, currency, value, fee, Some(nonce), None);
 
                     let raw = keys_client
-                        .sign_transaction(token.clone(), create_blockchain_input.clone())
+                        .sign_transaction(create_blockchain_input.clone())
                         .map_err(ectx!(try convert => create_blockchain_input))
                         .wait()?;
 
@@ -739,7 +723,7 @@ mod tests {
         withdraw.value = Amount::new(100);
         withdraw.dr_account = dr_account;
 
-        let transaction = core.run(trans_service.withdraw(token.clone(), withdraw));
+        let transaction = core.run(trans_service.withdraw(withdraw));
         assert!(transaction.is_ok());
     }
     #[test]
