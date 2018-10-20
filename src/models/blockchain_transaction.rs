@@ -7,8 +7,8 @@ use schema::blockchain_transactions;
 #[serde(rename_all = "camelCase")]
 pub struct BlockchainTransaction {
     pub hash: BlockchainTransactionId,
-    pub from: String,
-    pub to: String,
+    pub from: AccountAddress,
+    pub to: AccountAddress,
     pub block_number: u64,
     pub currency: Currency,
     pub value: Amount,
@@ -19,8 +19,8 @@ pub struct BlockchainTransaction {
 #[derive(Debug, Queryable, Clone)]
 pub struct BlockchainTransactionDB {
     pub hash: BlockchainTransactionId,
-    pub from_: String,
-    pub to_: String,
+    pub from_: AccountAddress,
+    pub to_: AccountAddress,
     pub block_number: i64,
     pub currency: Currency,
     pub value: Amount,
@@ -49,8 +49,8 @@ impl From<BlockchainTransaction> for NewBlockchainTransactionDB {
 #[table_name = "blockchain_transactions"]
 pub struct NewBlockchainTransactionDB {
     pub hash: BlockchainTransactionId,
-    pub from_: String,
-    pub to_: String,
+    pub from_: AccountAddress,
+    pub to_: AccountAddress,
     pub block_number: i64,
     pub currency: Currency,
     pub value: Amount,
@@ -62,8 +62,8 @@ impl Default for NewBlockchainTransactionDB {
     fn default() -> Self {
         Self {
             hash: BlockchainTransactionId::default(),
-            from_: String::default(),
-            to_: String::default(),
+            from_: AccountAddress::default(),
+            to_: AccountAddress::default(),
             block_number: 0,
             currency: Currency::Eth,
             value: Amount::default(),

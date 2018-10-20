@@ -213,6 +213,15 @@ impl TransactionsRepo for TransactionsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == transaction_id).nth(0).cloned())
     }
+    fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>> {
+        let data = self.data.lock().unwrap();
+        Ok(data
+            .iter()
+            .filter(|x| x.blockchain_tx_id == Some(blockchain_tx_id.clone()))
+            .nth(0)
+            .cloned())
+    }
+
     fn update_status(&self, blockchain_tx_id: BlockchainTransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction> {
         let mut data = self.data.lock().unwrap();
         let u = data
