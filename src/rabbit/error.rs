@@ -41,6 +41,8 @@ pub enum ErrorContext {
     RabbitChannel,
     #[fail(display = "rabbit error context - error acquiring heartbeat handle")]
     HeartbeatHandle,
+    #[fail(display = "rabbit error context - error during heartbeat")]
+    Heartbeat,
     #[fail(display = "rabbit error context - connection timeout")]
     ConnectionTimeout,
     #[fail(display = "rabbit error context - attempted to connect again in process of establishing a connection")]
