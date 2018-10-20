@@ -37,9 +37,16 @@ impl TransactionConsumerImpl {
     }
 
     fn get_channel(&self) -> impl Future<Item = PooledConnection<RabbitConnectionManager>, Error = Error> {
-        let rabbit_pool = self.rabbit_pool.clone();
-        self.thread_pool
-            .spawn_fn(move || rabbit_pool.get().map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal)))
+        // unresolved at the moment - ideally we want to call get on other thread, since it's blocking
+        // on the other hand doing so we escape from the thread that has tokio core reference and
+        // therefore cannot do spawns
+        // let rabbit_pool = self.rabbit_pool.clone();
+        // self.thread_pool
+        //     .spawn_fn(move || rabbit_pool.get().map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal)))
+        self.rabbit_pool
+            .get()
+            .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
+            .into_future()
     }
 
     fn subscribe_for_currency(

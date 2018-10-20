@@ -18,7 +18,7 @@ keys_token = "MIIBCgKCAQEAt3TQPCbcWM/Fba2s6V/WRuQv8SlEQp4F56fSY4LQ+yW2xY3f2fLOw/
 keys_user_id = "d214c8e0-5e70-4723-b9a6-bc9196adbbb4"
 
 [rabbit]
-url = "amqp://guest:guest@localhost:5672//?heartbeat=15&frame_max=131072"
+url = "amqp://guest:guest@localhost:5672//?heartbeat=3&frame_max=131072"
 thread_pool_size = 2
 connection_timeout_secs = 10
 connection_pool_size = 10
