@@ -50,13 +50,13 @@ impl TransactionsRepo for TransactionsRepoImpl {
     fn get_by_blockchain_tx(&self, blockchain_tx_id_: BlockchainTransactionId) -> RepoResult<Option<Transaction>> {
         with_tls_connection(|conn| {
             transactions
-                .filter(blockchain_tx_id.eq(blockchain_tx_id_))
+                .filter(blockchain_tx_id.eq(blockchain_tx_id_.clone()))
                 .limit(1)
                 .get_result(conn)
                 .optional()
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
-                    ectx!(err e, error_kind => transaction_id_arg)
+                    ectx!(err e, error_kind => blockchain_tx_id_)
                 })
         })
     }

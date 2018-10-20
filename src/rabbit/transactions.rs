@@ -1,5 +1,3 @@
-use std::io::Error as IoError;
-
 use futures::future;
 use futures_cpupool::CpuPool;
 use lapin_futures::channel::BasicConsumeOptions;

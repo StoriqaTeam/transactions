@@ -15,10 +15,9 @@ extern crate serde_qs;
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-extern crate lapin_async;
-#[macro_use]
-extern crate lapin_futures;
 extern crate config as config_crate;
+extern crate lapin_async;
+extern crate lapin_futures;
 #[macro_use]
 extern crate http_router;
 extern crate base64;
@@ -61,13 +60,13 @@ use futures_cpupool::CpuPool;
 use self::models::NewUser;
 use self::prelude::*;
 use self::repos::{
-    BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError, SeenHashesRepoImpl, TransactionsRepoImpl, UsersRepo,
-    UsersRepoImpl, AcountsRepoImpl
+    AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError, SeenHashesRepoImpl,
+    TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
 };
 use config::Config;
 use rabbit::{ErrorKind, ErrorSource};
 use rabbit::{RabbitConnectionManager, TransactionConsumerImpl};
-use services::BlockchainWorkerImpl;
+use services::BlockchainFetcher;
 use utils::log_error;
 
 pub fn hello() {
@@ -90,10 +89,16 @@ pub fn start_server() {
         let cpu_pool = CpuPool::new(1);
         let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
         let transactions_repo = Arc::new(TransactionsRepoImpl);
-        let acounts_repo = Arc::new(AcountsRepoImpl);
+        let accounts_repo = Arc::new(AccountsRepoImpl);
         let seen_hashes_repo = Arc::new(SeenHashesRepoImpl);
         let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoImpl);
-        let worker = BlockchainWorkerImpl::new(transactions_repo, acounts_repo, seen_hashes_repo, blockchain_transactions_repo, db_executor);
+        let fetcher = BlockchainFetcher::new(
+            transactions_repo,
+            accounts_repo,
+            seen_hashes_repo,
+            blockchain_transactions_repo,
+            db_executor,
+        );
         debug!("Started creating rabbit connection pool");
         let rabbit_thread_pool = futures_cpupool::CpuPool::new(config_clone.rabbit.thread_pool_size);
         let f = RabbitConnectionManager::create(&config_clone)
@@ -104,22 +109,21 @@ pub fn start_server() {
                     .expect("Cannot build rabbit connection pool");
                 debug!("Finished creating rabbit connection pool");
                 let publisher = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
-                let publisher_clone = publisher.clone();
-                let worker_clone = worker.clone();
+                let fetcher_clone = fetcher.clone();
                 publisher.subscribe().and_then(move |consumer_and_chans| {
                     let futures = consumer_and_chans.into_iter().map(move |(stream, channel)| {
-                        let worker_clone = worker_clone.clone();
+                        let fetcher_clone = fetcher_clone.clone();
                         stream
                             .for_each(move |message| {
                                 info!("got message: {:?}", message);
                                 let delivery_tag = message.delivery_tag;
-                                let worker_clone = worker_clone.clone();
+                                let fetcher_clone = fetcher_clone.clone();
                                 let channel = channel.clone();
                                 String::from_utf8(message.data)
                                     .map_err(|_| IoErrorKind::Other.into())
                                     .into_future()
                                     .and_then(|s| serde_json::from_str(&s).map_err(|_| IoErrorKind::Other.into()).into_future())
-                                    .and_then(move |blockchain_transaction| worker_clone.work(blockchain_transaction))
+                                    .and_then(move |blockchain_transaction| fetcher_clone.process(blockchain_transaction))
                                     .then(move |res| match res {
                                         Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
                                         Err(_) => Either::B(channel.basic_nack(delivery_tag, false, true)),

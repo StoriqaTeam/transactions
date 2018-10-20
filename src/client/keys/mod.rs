@@ -92,7 +92,6 @@ impl KeysClient for KeysClientImpl {
         create_blockchain_tx: CreateBlockchainTx,
     ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
         let client = self.clone();
-        let user_id = self.keys_user_id;
         Box::new(
             serde_json::to_string(&create_blockchain_tx)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_blockchain_tx))
