@@ -51,7 +51,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             String::from_utf8(data.clone())
                 .map_err(ectx!(ErrorContext::UTF8, ErrorKind::Internal => data_clone))
                 .into_future()
-                .and_then(|s| serde_json::from_str(&s).map_err(ectx!(ErrorContext::Json, ErrorKind::Internal => data)))
+                .and_then(|s| serde_json::from_str(&s).map_err(ectx!(ErrorContext::Json, ErrorKind::Internal => s)))
                 .and_then(move |blockchain_transaction: BlockchainTransaction| {
                     db_executor
                         .execute_transaction(move || -> Result<(), RepoError> {

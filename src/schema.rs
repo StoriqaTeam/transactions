@@ -66,4 +66,10 @@ table! {
 joinable!(accounts -> users (user_id));
 joinable!(transactions -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(accounts, blockchain_transactions, seen_hashes, transactions, users,);
+allow_tables_to_appear_in_same_query!(
+    accounts,
+    blockchain_transactions,
+    seen_hashes,
+    transactions,
+    users,
+);
