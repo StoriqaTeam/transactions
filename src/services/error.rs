@@ -35,6 +35,8 @@ pub enum ErrorKind {
 pub enum ErrorSource {
     #[fail(display = "service error source - r2d2")]
     R2D2,
+    #[fail(display = "service error source - repos")]
+    Repo,
 }
 
 #[allow(dead_code)]
@@ -52,6 +54,10 @@ pub enum ErrorContext {
     NotEnoughFounds,
     #[fail(display = "service error context - invalid currency")]
     InvalidCurrency,
+    #[fail(display = "service error context - invalid utf8 bytes")]
+    UTF8,
+    #[fail(display = "service error context - failed to parse string to json")]
+    Json,
 }
 
 derive_error_impls!();
