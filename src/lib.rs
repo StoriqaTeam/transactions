@@ -48,14 +48,16 @@ mod sentry_integration;
 mod services;
 mod utils;
 
-use std::io::ErrorKind as IoErrorKind;
 use std::sync::Arc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use diesel::pg::PgConnection;
 use diesel::r2d2::ConnectionManager;
 use futures::future::{self, Either};
 use futures_cpupool::CpuPool;
+use tokio::prelude::*;
+use tokio::timer::Delay;
 
 use self::models::NewUser;
 use self::prelude::*;
@@ -68,6 +70,8 @@ use rabbit::{ErrorKind, ErrorSource};
 use rabbit::{RabbitConnectionManager, TransactionConsumerImpl};
 use services::BlockchainFetcher;
 use utils::log_error;
+
+pub const DELAY_BEFORE_NACK: u64 = 1000;
 
 pub fn hello() {
     println!("Hello world");
@@ -129,7 +133,8 @@ pub fn start_server() {
                                     Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
                                     Err(e) => {
                                         log_error(&e);
-                                        Either::B(channel.basic_nack(delivery_tag, false, true))
+                                        let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
+                                        Either::B(Delay::new(when).then(move |_| channel.basic_nack(delivery_tag, false, true)))
                                     }
                                 })
                             }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
