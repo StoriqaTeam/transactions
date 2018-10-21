@@ -1,5 +1,4 @@
 use std::fmt::{self, Debug};
-use std::io::Error as IoError;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -8,12 +7,11 @@ use std::time::Duration;
 use failure::Compat;
 use futures::future::Either;
 use lapin_async::connection::{ConnectingState, ConnectionState};
-use lapin_futures::channel::{Channel, ConfirmSelectOptions};
+use lapin_futures::channel::Channel;
 use lapin_futures::client::{Client, ConnectionOptions, HeartbeatHandle};
 use prelude::*;
 use r2d2::{ManageConnection, Pool};
 use regex::Regex;
-use tokio;
 use tokio::net::tcp::TcpStream;
 use tokio::timer::timeout::Timeout;
 use tokio_core::reactor::Core;
@@ -162,10 +160,9 @@ impl RabbitConnectionManager {
     ) -> impl Future<Item = (Client<TcpStream>, RabbitHeartbeatHandle), Error = Error> {
         let address_clone = address.clone();
         let address_clone2 = address.clone();
-        let address_clone3 = address.clone();
         info!("Connecting to rabbit at `{}`", address);
         TcpStream::connect(&address)
-            .map_err(ectx!(ErrorSource::Io, ErrorContext::TcpConnection, ErrorKind::Internal => address_clone3))
+            .map_err(ectx!(ErrorSource::Io, ErrorContext::TcpConnection, ErrorKind::Internal => address_clone))
             .and_then(move |stream| {
                 info!("TCP connection established. Handshake with rabbit...");
                 Client::connect(stream, options)

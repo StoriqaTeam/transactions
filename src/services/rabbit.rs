@@ -1,5 +1,3 @@
-use std::io::Error as IoError;
-use std::io::ErrorKind as IoErrorKind;
 use std::sync::Arc;
 
 use super::error::*;
@@ -11,6 +9,8 @@ use serde_json;
 
 pub const ETHERIUM_PRICE: u128 = 200; // 200$, price of 1 eth in gwei
 pub const BLOCKCHAIN_PRICE: u128 = 6400; // 6400$ price in satoshi
+pub const SATOSHI: u128 = 1000000000;
+pub const GWEI: u128 = 1000000000;
 
 #[derive(Clone)]
 pub struct BlockchainFetcher<E: DbExecutor> {
@@ -67,14 +67,14 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $5000 / $200 - 8 conf
                                 // > $5000 / $200 - 12 conf
                                 Currency::Eth | Currency::Stq => match blockchain_transaction.value.raw() {
-                                    x if x < (20 * 1000000000 / ETHERIUM_PRICE) => 0,
-                                    x if x < (50 * 1000000000 / ETHERIUM_PRICE) => 1,
-                                    x if x < (200 * 1000000000 / ETHERIUM_PRICE) => 2,
-                                    x if x < (500 * 1000000000 / ETHERIUM_PRICE) => 3,
-                                    x if x < (1000 * 1000000000 / ETHERIUM_PRICE) => 4,
-                                    x if x < (2000 * 1000000000 / ETHERIUM_PRICE) => 5,
-                                    x if x < (3000 * 1000000000 / ETHERIUM_PRICE) => 6,
-                                    x if x < (5000 * 1000000000 / ETHERIUM_PRICE) => 8,
+                                    x if x < (20 * GWEI / ETHERIUM_PRICE) => 0,
+                                    x if x < (50 * GWEI / ETHERIUM_PRICE) => 1,
+                                    x if x < (200 * GWEI / ETHERIUM_PRICE) => 2,
+                                    x if x < (500 * GWEI / ETHERIUM_PRICE) => 3,
+                                    x if x < (1000 * GWEI / ETHERIUM_PRICE) => 4,
+                                    x if x < (2000 * GWEI / ETHERIUM_PRICE) => 5,
+                                    x if x < (3000 * GWEI / ETHERIUM_PRICE) => 6,
+                                    x if x < (5000 * GWEI / ETHERIUM_PRICE) => 8,
                                     _ => 12,
                                 },
                                 // # Bitcoin
@@ -83,9 +83,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $1000 / $6400 - 2 conf
                                 // > $1000 / $6400 - 3 conf
                                 Currency::Btc => match blockchain_transaction.value.raw() {
-                                    x if x < (100 * 1000000000 / BLOCKCHAIN_PRICE) => 0,
-                                    x if x < (500 * 1000000000 / BLOCKCHAIN_PRICE) => 1,
-                                    x if x < (1000 * 1000000000 / BLOCKCHAIN_PRICE) => 2,
+                                    x if x < (100 * SATOSHI / BLOCKCHAIN_PRICE) => 0,
+                                    x if x < (500 * SATOSHI / BLOCKCHAIN_PRICE) => 1,
+                                    x if x < (1000 * SATOSHI / BLOCKCHAIN_PRICE) => 2,
                                     _ => 3,
                                 },
                             };
@@ -104,15 +104,18 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                             }
 
                             // withdraw
-                            if transactions_repo
-                                .get_by_blockchain_tx(blockchain_transaction.hash.clone())?
-                                .is_some()
+                            if let Some(transaction) = transactions_repo.get_by_blockchain_tx(blockchain_transaction.hash.clone())? {
+                                if transaction.status != TransactionStatus::Done {
+                                    transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Done)?;
+                                    //adding blockchain transaction to db
+                                    blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
+                                    //adding blockchain hash to already seen
+                                    seen_hashes_repo.create(blockchain_transaction.clone().into())?;
+                                }
+                            } else if let Some(cr_account) =
+                                accounts_repo.get_by_address(blockchain_transaction.to.clone(), AccountKind::Cr)?
                             {
-                                transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Done)?;
-                            }
-
-                            // deposit
-                            if let Some(cr_account) = accounts_repo.get_by_address(blockchain_transaction.to.clone(), AccountKind::Cr)? {
+                                // deposit
                                 if let Some(dr_account) =
                                     accounts_repo.get_by_address(blockchain_transaction.to.clone(), AccountKind::Dr)?
                                 {
@@ -128,15 +131,12 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                         hold_until: None,
                                     };
                                     transactions_repo.create(new_transaction)?;
+                                    //adding blockchain transaction to db
+                                    blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
+                                    //adding blockchain hash to already seen
+                                    seen_hashes_repo.create(blockchain_transaction.clone().into())?;
                                 }
                             }
-
-                            //adding blockchain transaction to db
-                            blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
-
-                            //adding blockchain hash to already seen
-                            seen_hashes_repo.create(blockchain_transaction.clone().into())?;
-
                             Ok(())
                         }).map_err(ectx!(ErrorSource::Repo, ErrorKind::Internal))
                 }),
