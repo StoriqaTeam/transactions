@@ -100,22 +100,29 @@ pub fn start_server() {
             db_executor,
         );
         debug!("Started creating rabbit connection pool");
+
         let rabbit_thread_pool = futures_cpupool::CpuPool::new(config_clone.rabbit.thread_pool_size);
-        let f = RabbitConnectionManager::create(&config_clone)
-            .and_then(move |rabbit_connection_manager| {
-                let rabbit_connection_pool = r2d2::Pool::builder()
-                    .max_size(config_clone.rabbit.connection_pool_size as u32)
-                    .build(rabbit_connection_manager)
-                    .expect("Cannot build rabbit connection pool");
-                debug!("Finished creating rabbit connection pool");
-                let publisher = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
-                let fetcher_clone = fetcher.clone();
-                publisher.subscribe().and_then(move |consumer_and_chans| {
+        let rabbit_connection_manager = core
+            .run(RabbitConnectionManager::create(&config_clone))
+            .map_err(|e| {
+                log_error(&e);
+            }).unwrap();
+        let rabbit_connection_pool = r2d2::Pool::builder()
+            .max_size(config_clone.rabbit.connection_pool_size as u32)
+            .build(rabbit_connection_manager)
+            .expect("Cannot build rabbit connection pool");
+        debug!("Finished creating rabbit connection pool");
+        let publisher = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
+        loop {
+            let fetcher_clone = fetcher.clone();
+            let subscription = publisher
+                .subscribe()
+                .and_then(move |consumer_and_chans| {
                     let futures = consumer_and_chans.into_iter().map(move |(stream, channel)| {
                         let fetcher_clone = fetcher_clone.clone();
                         stream
                             .for_each(move |message| {
-                                info!("got message: {:?}", message);
+                                trace!("got message: {:?}", message);
                                 let delivery_tag = message.delivery_tag;
                                 let fetcher_clone = fetcher_clone.clone();
                                 let channel = channel.clone();
@@ -131,11 +138,11 @@ pub fn start_server() {
                             }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     });
                     future::join_all(futures)
-                })
-            }).map_err(|e| {
-                log_error(&e);
-            });
-        let _ = core.run(f.and_then(|_| futures::future::empty::<(), ()>()));
+                }).map_err(|e| {
+                    log_error(&e);
+                });
+            let _ = core.run(subscription);
+        }
     });
 
     api::start_server(config);
