@@ -124,17 +124,14 @@ pub fn start_server() {
                             .for_each(move |message| {
                                 trace!("got message: {:?}", message);
                                 let delivery_tag = message.delivery_tag;
-                                let fetcher_clone = fetcher_clone.clone();
                                 let channel = channel.clone();
-                                String::from_utf8(message.data)
-                                    .map_err(|_| IoErrorKind::Other.into())
-                                    .into_future()
-                                    .and_then(|s| serde_json::from_str(&s).map_err(|_| IoErrorKind::Other.into()).into_future())
-                                    .and_then(move |blockchain_transaction| fetcher_clone.process(blockchain_transaction))
-                                    .then(move |res| match res {
-                                        Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
-                                        Err(_) => Either::B(channel.basic_nack(delivery_tag, false, true)),
-                                    })
+                                fetcher_clone.process(message.data).then(move |res| match res {
+                                    Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
+                                    Err(e) => {
+                                        log_error(&e);
+                                        Either::B(channel.basic_nack(delivery_tag, false, true))
+                                    }
+                                })
                             }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     });
                     future::join_all(futures)
