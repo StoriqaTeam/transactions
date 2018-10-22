@@ -280,6 +280,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         status: TransactionStatus::Pending,
                         blockchain_tx_id: None,
                         hold_until: None,
+                        fee,
                     };
                     let transaction = transactions_repo
                         .create(new_transaction.clone())
@@ -349,6 +350,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         status: TransactionStatus::Pending,
                         blockchain_tx_id: None,
                         hold_until: None,
+                        fee,
                     };
                     let transaction = transactions_repo
                         .create(new_transaction.clone())

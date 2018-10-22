@@ -8,9 +8,10 @@ use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, SeenHashesRepo
 use serde_json;
 
 pub const ETHERIUM_PRICE: u128 = 200; // 200$, price of 1 eth in gwei
-pub const BLOCKCHAIN_PRICE: u128 = 6400; // 6400$ price in satoshi
-pub const SATOSHI: u128 = 1000000000;
-pub const GWEI: u128 = 1000000000;
+pub const STQ_PRICE: f64 = 0.0025; // 0,0025$, price of 1 stq in gwei
+pub const GWEI: u128 = 1_000_000_000_000_000_000;
+pub const BITCOIN_PRICE: u128 = 6400; // 6400$ price in satoshi
+pub const SATOSHI: u128 = 1_000_000_000;
 
 #[derive(Clone)]
 pub struct BlockchainFetcher<E: DbExecutor> {
@@ -66,7 +67,28 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $3000 / $200 - 6 conf
                                 // < $5000 / $200 - 8 conf
                                 // > $5000 / $200 - 12 conf
-                                Currency::Eth | Currency::Stq => match blockchain_transaction.value.raw() {
+                                Currency::Stq => match blockchain_transaction.value.raw() {
+                                    x if x < (((20f64  / STQ_PRICE) as u128) * GWEI) => 0,
+                                    x if x < (((50f64  / STQ_PRICE) as u128) * GWEI) => 1,
+                                    x if x < (((200f64  / STQ_PRICE) as u128) * GWEI) => 2,
+                                    x if x < (((500f64  / STQ_PRICE) as u128) * GWEI) => 3,
+                                    x if x < (((1000f64  / STQ_PRICE) as u128) * GWEI) => 4,
+                                    x if x < (((2000f64  / STQ_PRICE) as u128) * GWEI) => 5,
+                                    x if x < (((3000f64  / STQ_PRICE) as u128) * GWEI) => 6,
+                                    x if x < (((5000f64  / STQ_PRICE) as u128) * GWEI) => 8,
+                                    _ => 12,
+                                },
+                                // # Ethereum
+                                // < $20 / $200 - 0 conf
+                                // < $50 / $200 - 1 conf
+                                // < $200 / $200 - 2 conf
+                                // < $500 / $200 - 3 conf
+                                // < $1000 / $200 - 4 conf
+                                // < $2000 / $200 - 5 conf
+                                // < $3000 / $200 - 6 conf
+                                // < $5000 / $200 - 8 conf
+                                // > $5000 / $200 - 12 conf
+                                Currency::Eth => match blockchain_transaction.value.raw() {
                                     x if x < (20 * GWEI / ETHERIUM_PRICE) => 0,
                                     x if x < (50 * GWEI / ETHERIUM_PRICE) => 1,
                                     x if x < (200 * GWEI / ETHERIUM_PRICE) => 2,
@@ -83,9 +105,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $1000 / $6400 - 2 conf
                                 // > $1000 / $6400 - 3 conf
                                 Currency::Btc => match blockchain_transaction.value.raw() {
-                                    x if x < (100 * SATOSHI / BLOCKCHAIN_PRICE) => 0,
-                                    x if x < (500 * SATOSHI / BLOCKCHAIN_PRICE) => 1,
-                                    x if x < (1000 * SATOSHI / BLOCKCHAIN_PRICE) => 2,
+                                    x if x < (100 * SATOSHI / BITCOIN_PRICE) => 0,
+                                    x if x < (500 * SATOSHI / BITCOIN_PRICE) => 1,
+                                    x if x < (1000 * SATOSHI / BITCOIN_PRICE) => 2,
                                     _ => 3,
                                 },
                             };
@@ -129,6 +151,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                         status: TransactionStatus::Done,
                                         blockchain_tx_id: Some(blockchain_transaction.hash.clone()),
                                         hold_until: None,
+                                        fee: blockchain_transaction.fee,
                                     };
                                     transactions_repo.create(new_transaction)?;
                                     //adding blockchain transaction to db
