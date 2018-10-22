@@ -99,7 +99,7 @@ impl AccountsRepo for AccountsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == account_id).nth(0).cloned().unwrap())
     }
-    fn list_for_user(&self, user_id_arg: UserId, _offset: AccountId, _limit: i64) -> RepoResult<Vec<Account>> {
+    fn list_for_user(&self, user_id_arg: UserId, _offset: i64, _limit: i64) -> RepoResult<Vec<Account>> {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id_arg).collect())
     }
@@ -242,7 +242,7 @@ impl TransactionsRepo for TransactionsRepoMock {
             .cloned();
         Ok(u.unwrap())
     }
-    fn list_for_user(&self, user_id: UserId, _offset: TransactionId, _limit: i64) -> RepoResult<Vec<Transaction>> {
+    fn list_for_user(&self, user_id: UserId, _offset: i64, _limit: i64) -> RepoResult<Vec<Transaction>> {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id).collect())
     }

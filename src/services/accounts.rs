@@ -48,7 +48,7 @@ pub trait AccountsService: Send + Sync + 'static {
         &self,
         token: AuthenticationToken,
         user_id: UserId,
-        offset: AccountId,
+        offset: i64,
         limit: i64,
     ) -> Box<Future<Item = Vec<Account>, Error = Error> + Send>;
     fn get_account_balance(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Balance, Error = Error> + Send>;
@@ -157,7 +157,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
         &self,
         token: AuthenticationToken,
         user_id: UserId,
-        offset: AccountId,
+        offset: i64,
         limit: i64,
     ) -> Box<Future<Item = Vec<Account>, Error = Error> + Send> {
         let accounts_repo = self.accounts_repo.clone();
@@ -298,7 +298,7 @@ mod tests {
         new_account.name = "test test test acc".to_string();
         new_account.user_id = user_id;
 
-        let account = core.run(service.get_accounts_for_user(token, new_account.user_id, new_account.id, 10));
+        let account = core.run(service.get_accounts_for_user(token, new_account.user_id, 0, 10));
         assert!(account.is_ok());
     }
     #[test]

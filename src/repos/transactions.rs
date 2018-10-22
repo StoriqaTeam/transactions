@@ -15,7 +15,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>>;
     fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Transaction>;
     fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount>;
-    fn list_for_user(&self, user_id_arg: UserId, offset: TransactionId, limit: i64) -> RepoResult<Vec<Transaction>>;
+    fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId) -> RepoResult<Vec<Transaction>>;
 }
 
@@ -101,13 +101,9 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 .ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))
         })
     }
-    fn list_for_user(&self, user_id_arg: UserId, offset: TransactionId, limit: i64) -> RepoResult<Vec<Transaction>> {
+    fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>> {
         with_tls_connection(|conn| {
-            let query = transactions
-                .filter(user_id.eq(user_id_arg))
-                .order(id)
-                .filter(id.ge(offset))
-                .limit(limit);
+            let query = transactions.filter(user_id.eq(user_id_arg)).order(id).offset(offset).limit(limit);
             query.get_results(conn).map_err(move |e| {
                 let error_kind = ErrorKind::from(&e);
                 ectx!(err e, error_kind => user_id_arg, offset, limit)
@@ -278,7 +274,7 @@ pub mod tests {
             trans.value = Amount::new(123);
 
             let transaction = transactions_repo.create(trans)?;
-            let res = transactions_repo.list_for_user(user.id, transaction.id, 1);
+            let res = transactions_repo.list_for_user(user.id, 0, 1);
             assert!(res.is_ok());
             res
         }));

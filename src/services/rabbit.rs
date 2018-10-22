@@ -68,14 +68,14 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $5000 / $200 - 8 conf
                                 // > $5000 / $200 - 12 conf
                                 Currency::Stq => match blockchain_transaction.value.raw() {
-                                    x if x < (((20f64  / STQ_PRICE) as u128) * GWEI) => 0,
-                                    x if x < (((50f64  / STQ_PRICE) as u128) * GWEI) => 1,
-                                    x if x < (((200f64  / STQ_PRICE) as u128) * GWEI) => 2,
-                                    x if x < (((500f64  / STQ_PRICE) as u128) * GWEI) => 3,
-                                    x if x < (((1000f64  / STQ_PRICE) as u128) * GWEI) => 4,
-                                    x if x < (((2000f64  / STQ_PRICE) as u128) * GWEI) => 5,
-                                    x if x < (((3000f64  / STQ_PRICE) as u128) * GWEI) => 6,
-                                    x if x < (((5000f64  / STQ_PRICE) as u128) * GWEI) => 8,
+                                    x if x < (((20f64 / STQ_PRICE) as u128) * GWEI) => 0,
+                                    x if x < (((50f64 / STQ_PRICE) as u128) * GWEI) => 1,
+                                    x if x < (((200f64 / STQ_PRICE) as u128) * GWEI) => 2,
+                                    x if x < (((500f64 / STQ_PRICE) as u128) * GWEI) => 3,
+                                    x if x < (((1000f64 / STQ_PRICE) as u128) * GWEI) => 4,
+                                    x if x < (((2000f64 / STQ_PRICE) as u128) * GWEI) => 5,
+                                    x if x < (((3000f64 / STQ_PRICE) as u128) * GWEI) => 6,
+                                    x if x < (((5000f64 / STQ_PRICE) as u128) * GWEI) => 8,
                                     _ => 12,
                                 },
                                 // # Ethereum

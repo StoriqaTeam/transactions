@@ -14,7 +14,7 @@ pub trait AccountsRepo: Send + Sync + 'static {
     fn get(&self, account_id: AccountId) -> RepoResult<Option<Account>>;
     fn update(&self, account_id: AccountId, payload: UpdateAccount) -> RepoResult<Account>;
     fn delete(&self, account_id: AccountId) -> RepoResult<Account>;
-    fn list_for_user(&self, user_id_arg: UserId, offset: AccountId, limit: i64) -> RepoResult<Vec<Account>>;
+    fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Account>>;
     fn get_balance_for_user(&self, user_id: UserId) -> RepoResult<Vec<Balance>>;
     fn inc_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
     fn dec_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
@@ -68,13 +68,9 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
             })
         })
     }
-    fn list_for_user(&self, user_id_arg: UserId, offset: AccountId, limit: i64) -> RepoResult<Vec<Account>> {
+    fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Account>> {
         with_tls_connection(|conn| {
-            let query = accounts
-                .filter(user_id.eq(user_id_arg))
-                .order(id)
-                .filter(id.ge(offset))
-                .limit(limit);
+            let query = accounts.filter(user_id.eq(user_id_arg)).order(id).offset(offset).limit(limit);
             query.get_results(conn).map_err(move |e| {
                 let error_kind = ErrorKind::from(&e);
                 ectx!(err e, error_kind => user_id_arg, offset, limit)
@@ -295,7 +291,7 @@ pub mod tests {
             let mut new_account = NewAccount::default();
             new_account.user_id = user.id;
             let account = accounts_repo.create(new_account).unwrap();
-            let res = accounts_repo.list_for_user(user.id, account.id, 1);
+            let res = accounts_repo.list_for_user(user.id, 0, 1);
             assert!(res.is_ok());
             res
         }));
