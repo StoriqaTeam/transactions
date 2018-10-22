@@ -83,7 +83,7 @@ impl KeysClient for KeysClientImpl {
                     let url = format!("/users/{}/keys", user_id);
                     client
                         .exec_query::<CreateAccountAddressResponse>(&url, body, Method::POST)
-                        .map(|resp_data| resp_data.address)
+                        .map(|resp_data| resp_data.blockchain_address)
                 }),
         )
     }
@@ -99,7 +99,7 @@ impl KeysClient for KeysClientImpl {
                 .and_then(move |body| {
                     client
                         .exec_query::<CreateBlockchainTxResponse>("/transactions", body, Method::POST)
-                        .map(|resp_data| resp_data.blockchain_tx)
+                        .map(|resp_data| resp_data.raw)
                 }),
         )
     }
