@@ -205,6 +205,7 @@ impl TransactionsRepo for TransactionsRepoMock {
             hold_until: payload.hold_until,
             created_at: SystemTime::now(),
             updated_at: SystemTime::now(),
+            fee: payload.fee,
         };
         data.push(res.clone());
         Ok(res)

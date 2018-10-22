@@ -50,6 +50,7 @@ table! {
         hold_until -> Nullable<Timestamp>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        fee -> Numeric,
     }
 }
 

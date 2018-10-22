@@ -18,6 +18,7 @@ pub struct Transaction {
     pub hold_until: Option<SystemTime>,
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
+    pub fee: Amount,
 }
 
 impl Default for Transaction {
@@ -34,6 +35,7 @@ impl Default for Transaction {
             hold_until: None,
             created_at: SystemTime::now(),
             updated_at: SystemTime::now(),
+            fee: Amount::default(),
         }
     }
 }
@@ -50,6 +52,7 @@ pub struct NewTransaction {
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
     pub hold_until: Option<SystemTime>,
+    pub fee: Amount,
 }
 
 impl Default for NewTransaction {
@@ -64,6 +67,7 @@ impl Default for NewTransaction {
             status: TransactionStatus::Pending,
             blockchain_tx_id: None,
             hold_until: None,
+            fee: Amount::default(),
         }
     }
 }
@@ -128,6 +132,7 @@ impl NewTransaction {
             hold_until: create.hold_until,
             status: TransactionStatus::Done,
             blockchain_tx_id: None,
+            fee: Amount::default(),
         }
     }
 }
@@ -165,6 +170,7 @@ impl NewTransaction {
             dr_account_id,
             status: TransactionStatus::Done,
             blockchain_tx_id: Some(deposit.blockchain_tx_id),
+            fee: Amount::default(),
         }
     }
 }
