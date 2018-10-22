@@ -28,7 +28,7 @@ pipeline:
   test:
     image: rust:1.29.0-stretch
     environment:
-    - RUN_MODE=k8s
+    - RUN_MODE=test
     - DATABASE_HOST=db-postgresql
     - DATABASE_URL=postgresql://transactions:transactions@db-postgresql/transactions
     - RUST_BACKTRACE=1
