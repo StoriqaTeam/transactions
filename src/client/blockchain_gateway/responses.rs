@@ -12,3 +12,9 @@ pub struct GetBitcoinUtxosResponse {
     #[serde(flatten)]
     pub utxos: Vec<BitcoinUtxos>,
 }
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TxHashResponse {
+    pub tx_hash: BlockchainTransactionId,
+}

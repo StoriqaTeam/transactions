@@ -82,7 +82,8 @@ impl BlockchainClient for BlockchainClientImpl {
             serde_json::to_string(&transaction)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => transaction))
                 .into_future()
-                .and_then(move |body| client.exec_query::<BlockchainTransactionId>("/ethereum/transactions/raw", Some(body), Method::POST)),
+                .and_then(move |body| client.exec_query::<TxHashResponse>("/ethereum/transactions/raw", Some(body), Method::POST))
+                .map(|resp| resp.tx_hash),
         )
     }
     fn post_bitcoin_transaction(
@@ -94,7 +95,8 @@ impl BlockchainClient for BlockchainClientImpl {
             serde_json::to_string(&transaction)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => transaction))
                 .into_future()
-                .and_then(move |body| client.exec_query::<BlockchainTransactionId>("/ethereum/transactions/raw", Some(body), Method::POST)),
+                .and_then(move |body| client.exec_query::<TxHashResponse>("/ethereum/transactions/raw", Some(body), Method::POST))
+                .map(|resp| resp.tx_hash),
         )
     }
     fn get_bitcoin_utxos(&self, address: AccountAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send> {
