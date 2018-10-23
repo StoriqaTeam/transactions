@@ -123,6 +123,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             // check that cr account exists and it is belonging to one user
                             let to = input.to.clone();
                             let input_type = input.to_type.clone();
+                            let currency = input.to_currency;
                             match input_type {
                                 ReceiptType::Account => {
                                     let cr_account_id = to.clone().to_account_id().map_err(
@@ -142,7 +143,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                                     let cr_account_address = to.to_account_address();
                                     let cr_account_address_clone = cr_account_address.clone();
                                     let cr_acc = accounts_repo
-                                        .get_by_address(cr_account_address.clone(), AccountKind::Cr)
+                                        .get_by_address(cr_account_address.clone(), currency, AccountKind::Cr)
                                         .map_err(ectx!(try ErrorKind::Internal => cr_account_address))?;
                                     if let Some(cr_acc) = cr_acc {
                                         if cr_acc.user_id != user.id {
@@ -198,7 +199,6 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         )
     }
     fn withdraw(&self, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send> {
-        let accounts_repo = self.accounts_repo.clone();
         let transactions_repo = self.transactions_repo.clone();
         let db_executor = self.db_executor.clone();
         let currency = input.currency;
@@ -226,7 +226,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             return Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => value));
                         }
 
-                        accounts_repo
+                        transactions_repo
                             .get_with_enough_value(value, currency, user_id)
                             .map_err(ectx!(convert ErrorContext::NotEnoughFounds => value, currency, user_id))
                             .map(|cr_accs| (input.dr_account, cr_accs))
@@ -492,9 +492,10 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 .and_then(move |_| {
                     db_executor.execute_transaction(move || {
                         let address = input.address.clone();
+                        let currency = input.currency;
                         // check that cr account exists and it is belonging to one user
                         let cr_acc = accounts_repo
-                            .get_by_address(address.clone(), AccountKind::Cr)
+                            .get_by_address(address.clone(), currency, AccountKind::Cr)
                             .map_err(ectx!(try convert => address, AccountKind::Cr))?;
                         let cr_acc = cr_acc.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => user.id))?;
                         if cr_acc.user_id != user.id {
@@ -504,7 +505,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         let address = input.address.clone();
                         // check that dr account exists and it is belonging to one user
                         let dr_acc = accounts_repo
-                            .get_by_address(address.clone(), AccountKind::Dr)
+                            .get_by_address(address.clone(), currency, AccountKind::Dr)
                             .map_err(ectx!(try convert => address, AccountKind::Dr))?;
                         let dr_acc = dr_acc.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => user.id))?;
                         if dr_acc.user_id != user.id {

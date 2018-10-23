@@ -134,13 +134,17 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                     //adding blockchain hash to already seen
                                     seen_hashes_repo.create(blockchain_transaction.clone().into())?;
                                 }
-                            } else if let Some(cr_account) =
-                                accounts_repo.get_by_address(blockchain_transaction.to.clone(), AccountKind::Cr)?
-                            {
+                            } else if let Some(cr_account) = accounts_repo.get_by_address(
+                                blockchain_transaction.to.clone(),
+                                blockchain_transaction.currency,
+                                AccountKind::Cr,
+                            )? {
                                 // deposit
-                                if let Some(dr_account) =
-                                    accounts_repo.get_by_address(blockchain_transaction.to.clone(), AccountKind::Dr)?
-                                {
+                                if let Some(dr_account) = accounts_repo.get_by_address(
+                                    blockchain_transaction.to.clone(),
+                                    blockchain_transaction.currency,
+                                    AccountKind::Dr,
+                                )? {
                                     let new_transaction = NewTransaction {
                                         id: TransactionId::generate(),
                                         user_id: cr_account.user_id,
