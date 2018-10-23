@@ -66,8 +66,8 @@ use self::repos::{
     TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
 };
 use config::Config;
+use rabbit::{ConnectionHooks, RabbitConnectionManager, TransactionConsumerImpl};
 use rabbit::{ErrorKind, ErrorSource};
-use rabbit::{RabbitConnectionManager, TransactionConsumerImpl};
 use services::BlockchainFetcher;
 use utils::log_error;
 
@@ -113,6 +113,7 @@ pub fn start_server() {
             }).unwrap();
         let rabbit_connection_pool = r2d2::Pool::builder()
             .max_size(config_clone.rabbit.connection_pool_size as u32)
+            .connection_customizer(Box::new(ConnectionHooks))
             .build(rabbit_connection_manager)
             .expect("Cannot build rabbit connection pool");
         debug!("Finished creating rabbit connection pool");
