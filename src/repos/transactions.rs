@@ -144,7 +144,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
-    fn get_with_enough_value(&self, value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<(Account, Amount)>> {
+    fn get_with_enough_value(&self, mut value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<(Account, Amount)>> {
         with_tls_connection(|conn| {
             // get all cr accounts
             let cr_sum_accounts = sql_query(
@@ -164,7 +164,10 @@ impl TransactionsRepo for TransactionsRepoImpl {
 
             // get all dr accounts
             let dr_sum_accounts: Vec<TransactionSum> =
-                sql_query("SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions GROUP BY dr_account_id")
+                sql_query(
+                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE currency = ? AND user_id = ? GROUP BY dr_account_id")
+                    .bind::<VarChar, _>(currency_)
+                    .bind::<SqlUuid, _>(user_id_)
                     .get_results(conn)
                     .map_err(move |e| {
                         let error_kind = ErrorKind::from(&e);
@@ -181,13 +184,10 @@ impl TransactionsRepo for TransactionsRepoImpl {
             // filtering accounts with empty balance
             let mut remaining_accounts: HashMap<AccountId, Amount> = cr_sum_accounts.into_iter().filter(|(_, sum)| sum.raw() > 0).collect();
 
-            let ids: Vec<AccountId> = remaining_accounts.keys().cloned().collect();
-
             // filtering accounts with pending transactions
             let pending_accounts: Vec<Transaction> = transactions
                 .filter(user_id.eq(&user_id_))
                 .filter(currency.eq(currency_))
-                .filter(cr_account_id.eq_any(ids.clone()).or(dr_account_id.eq_any(ids)))
                 .filter(status.eq(TransactionStatus::Pending))
                 .get_results(conn)
                 .map_err(move |e| {
@@ -200,53 +200,38 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 remaining_accounts.remove(&acc.dr_account_id);
             }
 
-            // getting acc with balance > value
-            let res = if let Some(acc) = remaining_accounts.clone().into_iter().filter(|(_, sum)| sum >= &value_).nth(0) {
-                let mut hash = HashMap::new();
-                hash.insert(acc.0, acc.1);
-                hash
-            } else {
-                remaining_accounts
-                    .into_iter()
-                    .scan(
-                        value_,
-                        |remaining_balance, (account_id_, account_balance)| match *remaining_balance {
-                            x if x == Amount::new(0) => None,
-                            x if x <= account_balance => {
-                                let balance_to_sub = *remaining_balance;
-                                *remaining_balance = Amount::new(0);
-                                Some((account_id_, balance_to_sub))
-                            }
-                            x if x > account_balance => {
-                                if let Some(new_balance) = remaining_balance.checked_sub(account_balance) {
-                                    let balance_to_sub = account_balance;
-                                    *remaining_balance = new_balance;
-                                    Some((account_id_, balance_to_sub))
-                                } else {
-                                    None
-                                }
-                            }
-                            _ => None,
-                        },
-                    ).collect()
-            };
+            let res_account_ids: Vec<AccountId> = remaining_accounts.keys().cloned().collect();
 
-            let res_account_ids: Vec<AccountId> = res.keys().cloned().collect();
-
+            // filtering accounts only DR
             let res_accounts: Vec<Account> = Accounts::accounts
                 .filter(Accounts::id.eq_any(res_account_ids))
+                .filter(Accounts::kind.eq(AccountKind::Dr))
                 .get_results(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
                     ectx!(try err e, error_kind)
                 })?;
 
-            let r = res_accounts
+            let res_accounts: Vec<(Account, Amount)> = res_accounts
                 .into_iter()
                 .map(|acc| {
-                    let sum = res.get(&acc.id).cloned().unwrap_or_default();
-                    (acc, sum)
+                    let balance = remaining_accounts.get(&acc.id).cloned().unwrap_or_default();
+                    (acc, balance)
                 }).collect();
+
+            // calculating accounts to take
+            let mut r = vec![];
+            for (acc, balance) in res_accounts {
+                if balance >= value_ {
+                    r.push((acc, value_));
+                } else {
+                    if let Some(new_balance) = value_.checked_sub(balance) {
+                        value_ = new_balance;
+                        r.push((acc, balance));
+                    }
+                }
+            }
+
             Ok(r)
         })
     }
