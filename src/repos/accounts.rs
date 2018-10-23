@@ -18,7 +18,7 @@ pub trait AccountsRepo: Send + Sync + 'static {
     fn get_balance_for_user(&self, user_id: UserId) -> RepoResult<Vec<Balance>>;
     fn inc_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
     fn dec_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
-    fn get_by_address(&self, address_: AccountAddress, kind_: AccountKind) -> RepoResult<Option<Account>>;
+    fn get_by_address(&self, address_: AccountAddress, currency: Currency, kind_: AccountKind) -> RepoResult<Option<Account>>;
     fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<(Account, Amount)>>;
 }
 
@@ -135,11 +135,12 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
             })
         })
     }
-    fn get_by_address(&self, address_: AccountAddress, kind_: AccountKind) -> RepoResult<Option<Account>> {
+    fn get_by_address(&self, address_: AccountAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
         with_tls_connection(|conn| {
             accounts
                 .filter(address.eq(address_.clone()))
                 .filter(kind.eq(kind_))
+                .filter(currency.eq(currency_))
                 .get_result(conn)
                 .optional()
                 .map_err(move |e| {
@@ -343,7 +344,7 @@ pub mod tests {
             let mut new_account = NewAccount::default();
             new_account.user_id = user.id;
             let account = accounts_repo.create(new_account).unwrap();
-            let res = accounts_repo.get_by_address(account.address, AccountKind::Cr);
+            let res = accounts_repo.get_by_address(account.address, account.currency, AccountKind::Cr);
             assert!(res.is_ok());
             res
         }));

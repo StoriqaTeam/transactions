@@ -152,9 +152,13 @@ impl AccountsRepo for AccountsRepoMock {
             .cloned();
         Ok(u.unwrap())
     }
-    fn get_by_address(&self, address_: AccountAddress, kind_: AccountKind) -> RepoResult<Option<Account>> {
+    fn get_by_address(&self, address_: AccountAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
         let data = self.data.lock().unwrap();
-        let u = data.iter().filter(|x| x.address == address_ && x.kind == kind_).nth(0).cloned();
+        let u = data
+            .iter()
+            .filter(|x| x.address == address_ && x.kind == kind_ && x.currency == currency_)
+            .nth(0)
+            .cloned();
         Ok(u)
     }
     fn get_with_enough_value(&self, value: Amount, currency: Currency, _user_id: UserId) -> RepoResult<Vec<(Account, Amount)>> {
@@ -299,6 +303,20 @@ impl TransactionsRepo for TransactionsRepoMock {
             }).nth(0)
             .cloned();
         Ok(u.unwrap())
+    }
+
+    fn get_with_enough_value(&self, value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<(Account, Amount)>> {
+        let data = self.data.lock().unwrap();
+        Ok(data
+            .clone()
+            .into_iter()
+            .filter(|x| x.currency == currency_ && x.value > value_ && user_id_ == x.user_id)
+            .map(|t| {
+                let mut acc = Account::default();
+                acc.balance = t.value;
+                acc.id = t.cr_account_id;
+                (acc, value_)
+            }).collect())
     }
 }
 

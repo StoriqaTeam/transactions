@@ -1,11 +1,17 @@
+use std::collections::HashMap;
+
 use diesel;
 use diesel::dsl::sum;
+use diesel::sql_query;
+use diesel::sql_types::Uuid as SqlUuid;
+use diesel::sql_types::VarChar;
 
 use super::error::*;
 use super::executor::with_tls_connection;
 use super::*;
 use models::*;
 use prelude::*;
+use schema::accounts::dsl as Accounts;
 use schema::transactions::dsl::*;
 
 pub trait TransactionsRepo: Send + Sync + 'static {
@@ -17,6 +23,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId) -> RepoResult<Vec<Transaction>>;
+    fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<(Account, Amount)>>;
 }
 
 #[derive(Clone, Default)]
@@ -135,6 +142,112 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     let error_kind = ErrorKind::from(&e);
                     ectx!(err e, error_kind => transaction_id_arg, blockchain_tx_id_)
                 })
+        })
+    }
+    fn get_with_enough_value(&self, value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<(Account, Amount)>> {
+        with_tls_connection(|conn| {
+            // get all cr accounts
+            let cr_sum_accounts = sql_query(
+                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = ? AND user_id = ? GROUP BY cr_account_id")
+                .bind::<VarChar, _>(currency_)
+                .bind::<SqlUuid, _>(user_id_)
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(try err e, error_kind)
+                })?;
+
+            let mut cr_sum_accounts = cr_sum_accounts
+                .into_iter()
+                .map(|r: TransactionSum| (r.account_id, r.sum))
+                .collect::<HashMap<AccountId, Amount>>();
+
+            // get all dr accounts
+            let dr_sum_accounts: Vec<TransactionSum> =
+                sql_query("SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions GROUP BY dr_account_id")
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
+
+            // get accounts balance
+            for tr in dr_sum_accounts {
+                if let Some(cr_sum) = cr_sum_accounts.get_mut(&tr.account_id) {
+                    *cr_sum = cr_sum.checked_sub(tr.sum).unwrap_or_default();
+                }
+            }
+
+            // filtering accounts with empty balance
+            let mut remaining_accounts: HashMap<AccountId, Amount> = cr_sum_accounts.into_iter().filter(|(_, sum)| sum.raw() > 0).collect();
+
+            let ids: Vec<AccountId> = remaining_accounts.keys().cloned().collect();
+
+            // filtering accounts with pending transactions
+            let pending_accounts: Vec<Transaction> = transactions
+                .filter(user_id.eq(&user_id_))
+                .filter(currency.eq(currency_))
+                .filter(cr_account_id.eq_any(ids.clone()).or(dr_account_id.eq_any(ids)))
+                .filter(status.eq(TransactionStatus::Pending))
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(try err e, error_kind => value_, currency_, user_id_)
+                })?;
+
+            for acc in pending_accounts {
+                remaining_accounts.remove(&acc.cr_account_id);
+                remaining_accounts.remove(&acc.dr_account_id);
+            }
+
+            // getting acc with balance > value
+            let res = if let Some(acc) = remaining_accounts.clone().into_iter().filter(|(_, sum)| sum >= &value_).nth(0) {
+                let mut hash = HashMap::new();
+                hash.insert(acc.0, acc.1);
+                hash
+            } else {
+                remaining_accounts
+                    .into_iter()
+                    .scan(
+                        value_,
+                        |remaining_balance, (account_id_, account_balance)| match *remaining_balance {
+                            x if x == Amount::new(0) => None,
+                            x if x <= account_balance => {
+                                let balance_to_sub = *remaining_balance;
+                                *remaining_balance = Amount::new(0);
+                                Some((account_id_, balance_to_sub))
+                            }
+                            x if x > account_balance => {
+                                if let Some(new_balance) = remaining_balance.checked_sub(account_balance) {
+                                    let balance_to_sub = account_balance;
+                                    *remaining_balance = new_balance;
+                                    Some((account_id_, balance_to_sub))
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        },
+                    ).collect()
+            };
+
+            let res_account_ids: Vec<AccountId> = res.keys().cloned().collect();
+
+            let res_accounts: Vec<Account> = Accounts::accounts
+                .filter(Accounts::id.eq_any(res_account_ids))
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(try err e, error_kind)
+                })?;
+
+            let r = res_accounts
+                .into_iter()
+                .map(|acc| {
+                    let sum = res.get(&acc.id).cloned().unwrap_or_default();
+                    (acc, sum)
+                }).collect();
+            Ok(r)
         })
     }
 }
@@ -365,6 +478,35 @@ pub mod tests {
             let transaction = transactions_repo.create(trans)?;
             let tx = BlockchainTransactionId::default();
             let res = transactions_repo.update_blockchain_tx(transaction.id, tx);
+            assert!(res.is_ok());
+            res
+        }));
+    }
+    #[test]
+    fn transactions_get_min_enough_value() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let accounts_repo = AccountsRepoImpl::default();
+        let users_repo = UsersRepoImpl::default();
+        let transactions_repo = TransactionsRepoImpl::default();
+        let new_user = NewUser::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let user = users_repo.create(new_user)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc1 = accounts_repo.create(new_account)?;
+            let mut new_account = NewAccount::default();
+            new_account.user_id = user.id;
+            let acc2 = accounts_repo.create(new_account)?;
+
+            let mut trans = NewTransaction::default();
+            trans.cr_account_id = acc1.id;
+            trans.dr_account_id = acc2.id;
+            trans.user_id = user.id;
+            trans.value = Amount::new(123);
+
+            let _ = transactions_repo.create(trans).unwrap();
+            let res = accounts_repo.get_with_enough_value(Amount::new(123), Currency::Eth, user.id);
             assert!(res.is_ok());
             res
         }));

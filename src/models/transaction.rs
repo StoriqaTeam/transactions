@@ -1,5 +1,7 @@
 use std::time::SystemTime;
 
+use diesel::sql_types::Numeric;
+use diesel::sql_types::Uuid as SqlUuid;
 use validator::Validate;
 
 use models::*;
@@ -19,6 +21,14 @@ pub struct Transaction {
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
     pub fee: Amount,
+}
+
+#[derive(Debug, Queryable, Clone, QueryableByName)]
+pub struct TransactionSum {
+    #[sql_type = "SqlUuid"]
+    pub account_id: AccountId,
+    #[sql_type = "Numeric"]
+    pub sum: Amount,
 }
 
 impl Default for Transaction {
