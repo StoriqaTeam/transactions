@@ -226,10 +226,20 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             return Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => value));
                         }
 
-                        transactions_repo
+                        let txs = transactions_repo
                             .get_with_enough_value(value, currency, user_id)
-                            .map_err(ectx!(convert ErrorContext::NotEnoughFounds => value, currency, user_id))
-                            .map(|cr_accs| (input.dr_account, cr_accs))
+                            .map_err(ectx!(try convert ErrorContext::NotEnoughFounds => value, currency, user_id))?;
+
+                        //double check
+                        for tx in &txs {
+                            let tx_id = tx.0.id;
+                            let needed_amount = tx.1;
+                            let balance = transactions_repo.get_account_balance(tx_id).map_err(ectx!(try convert => tx_id))?;
+                            if balance < needed_amount {
+                                return Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => balance, needed_amount));
+                            }
+                        }
+                        Ok((input.dr_account, txs))
                     })
                 }).and_then(move |(dr_acc, cr_accs)| {
                     iter_ok::<_, Error>(cr_accs).fold(vec![], move |mut transactions, (cr_acc, value)| {
