@@ -290,7 +290,7 @@ pub mod tests {
             let user = users_repo.create(new_user)?;
             let mut new_account = NewAccount::default();
             new_account.user_id = user.id;
-            let account = accounts_repo.create(new_account).unwrap();
+            let _ = accounts_repo.create(new_account).unwrap();
             let res = accounts_repo.list_for_user(user.id, 0, 1);
             assert!(res.is_ok());
             res

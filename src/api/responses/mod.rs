@@ -32,6 +32,7 @@ pub struct AccountsResponse {
     pub currency: Currency,
     pub address: AccountAddress,
     pub name: Option<String>,
+    pub balance: Amount,
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
 }
@@ -44,6 +45,7 @@ impl From<Account> for AccountsResponse {
             currency: account.currency,
             address: account.address,
             name: account.name,
+            balance: account.balance,
             created_at: account.created_at,
             updated_at: account.updated_at,
         }

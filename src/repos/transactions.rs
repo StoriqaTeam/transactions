@@ -273,7 +273,7 @@ pub mod tests {
             trans.user_id = user.id;
             trans.value = Amount::new(123);
 
-            let transaction = transactions_repo.create(trans)?;
+            let _ = transactions_repo.create(trans)?;
             let res = transactions_repo.list_for_user(user.id, 0, 1);
             assert!(res.is_ok());
             res

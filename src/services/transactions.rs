@@ -567,7 +567,7 @@ mod tests {
         let mut dr_account = CreateAccount::default();
         dr_account.name = "test test test acc".to_string();
         dr_account.user_id = user_id;
-        let dr_account = core.run(acc_service.create_account(token.clone(), user_id, dr_account)).unwrap();
+        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100501);
@@ -578,9 +578,7 @@ mod tests {
 ;        let mut cr_account = CreateAccount::default();
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
-        let cr_account = core
-            .run(acc_service.create_account(token.clone(), user_id, cr_account.clone()))
-            .unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account.clone())).unwrap();
 
         let mut new_transaction = CreateTransactionLocal::default();
         new_transaction.value = Amount::new(100500);
@@ -601,7 +599,7 @@ mod tests {
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
 
-        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100500);
@@ -623,14 +621,14 @@ mod tests {
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
 
-        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100500);
         new_transaction.address = cr_account.address;
         new_transaction.user_id = user_id;
 
-        let transaction = core.run(trans_service.deposit_funds(token.clone(), new_transaction)).unwrap();
+        let _ = core.run(trans_service.deposit_funds(token.clone(), new_transaction)).unwrap();
 
         let transactions = core.run(trans_service.get_transactions_for_user(token, user_id, 0, 10));
         assert!(transactions.is_ok());
@@ -646,7 +644,7 @@ mod tests {
         let mut dr_account = CreateAccount::default();
         dr_account.name = "test test test acc".to_string();
         dr_account.user_id = user_id;
-        let dr_account = core.run(acc_service.create_account(token.clone(), user_id, dr_account)).unwrap();
+        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100501);
@@ -657,7 +655,7 @@ mod tests {
         let mut cr_account = CreateAccount::default();
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
-        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
         let mut new_transaction = CreateTransactionLocal::default();
         new_transaction.value = Amount::new(100500);
@@ -678,7 +676,7 @@ mod tests {
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
 
-        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
         let mut new_transaction = DepositFounds::default();
         new_transaction.value = Amount::new(100500);
@@ -698,7 +696,7 @@ mod tests {
         let mut dr_account = CreateAccount::default();
         dr_account.name = "test test test acc".to_string();
         dr_account.user_id = user_id;
-        let dr_account = core.run(acc_service.create_account(token.clone(), user_id, dr_account)).unwrap();
+        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
         //depositing on withdraw account
         let mut deposit = DepositFounds::default();
@@ -711,7 +709,7 @@ mod tests {
         let mut cr_account = CreateAccount::default();
         cr_account.name = "test test test acc".to_string();
         cr_account.user_id = user_id;
-        let cr_account = core.run(acc_service.create_account(token.clone(), user_id, cr_account)).unwrap();
+        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
         //depositin on random account
         let mut deposit = DepositFounds::default();
@@ -739,8 +737,7 @@ mod tests {
         new_account.name = "test test test acc".to_string();
         new_account.user_id = user_id;
 
-        core.run(acc_service.create_account(token.clone(), user_id, new_account.clone()))
-            .unwrap();
+        core.run(acc_service.create_account(token.clone(), new_account.clone())).unwrap();
 
         let account = core.run(trans_service.get_account_balance(token, new_account.id));
         assert!(account.is_ok());

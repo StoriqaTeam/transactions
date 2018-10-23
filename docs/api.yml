@@ -102,6 +102,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
+  /accounts:
     post:
       summary: >-
         Creates account for a user
@@ -111,8 +112,6 @@ paths:
         - Bearer: []
       tags:
         - accounts
-      parameters:
-        - $ref: '#/components/parameters/userIdParam'
       responses:
         200:
           description: Ok
