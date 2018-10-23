@@ -119,7 +119,9 @@ pub fn start_server() {
         debug!("Finished creating rabbit connection pool");
         let publisher = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
         loop {
+            debug!("Subscribing to rabbit");
             let fetcher_clone = fetcher.clone();
+            let duration = Duration::from_secs(config_clone.rabbit.restart_subscription_secs as u64);
             let subscription = publisher
                 .subscribe()
                 .and_then(move |consumer_and_chans| {
@@ -144,7 +146,7 @@ pub fn start_server() {
                 }).map_err(|e| {
                     log_error(&e);
                 });
-            let _ = core.run(subscription);
+            let _ = core.run(Timeout::new(subscription, duration));
         }
     });
 
