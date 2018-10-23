@@ -1,24 +1,27 @@
 use std::fmt::{self, Debug};
+use std::io::Error as IoError;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use failure;
 use failure::Compat;
 use futures::future::Either;
 use lapin_async::connection::{ConnectingState, ConnectionState};
-use lapin_futures::channel::Channel;
+use lapin_futures::channel::{Channel, ConfirmSelectOptions};
 use lapin_futures::client::{Client, ConnectionOptions, HeartbeatHandle};
 use prelude::*;
-use r2d2::{ManageConnection, Pool};
+use r2d2::{CustomizeConnection, ManageConnection, Pool};
 use regex::Regex;
+use tokio;
 use tokio::net::tcp::TcpStream;
 use tokio::timer::timeout::Timeout;
 use tokio_core::reactor::Core;
 
 use super::error::*;
 use config::Config;
-use log_error;
+use utils::log_error;
 
 pub type RabbitPool = Pool<RabbitConnectionManager>;
 
@@ -54,6 +57,29 @@ impl Drop for RabbitHeartbeatHandle {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ConnectionHooks;
+
+impl CustomizeConnection<Channel<TcpStream>, Compat<Error>> for ConnectionHooks {
+    #[allow(unused_variables)]
+    fn on_acquire(&self, conn: &mut Channel<TcpStream>) -> Result<(), Compat<Error>> {
+        trace!("Acquired rabbitmq channel");
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
+    fn on_release(&self, conn: Channel<TcpStream>) {
+        trace!("Released rabbitmq channel");
+        thread::spawn(move || {
+            let res = conn.close(0, "Released from pool").wait();
+            if let Err(e) = res {
+                let e: Error = ectx!(err format_err!("{}", e), ErrorContext::ChannelClose, ErrorKind::Internal);
+                log_error(&e);
+            };
+        });
+    }
+}
+
 impl RabbitConnectionManager {
     pub fn create(config: &Config) -> impl Future<Item = Self, Error = Error> {
         let connection_timeout = Duration::from_secs(config.rabbit.connection_timeout_secs as u64);
@@ -72,9 +98,10 @@ impl RabbitConnectionManager {
                         }
                     }),
                     connection_timeout,
-                ).map_err(
-                    move |_| ectx!(err ErrorSource::Timeout, ErrorContext::ConnectionTimeout, ErrorKind::Internal => connection_timeout),
-                )
+                ).map_err(move |e| {
+                    let e: failure::Error = e.into_inner().map(|e| e.into()).unwrap_or(format_err!("Timeout error"));
+                    ectx!(err e, ErrorSource::Timeout, ErrorContext::ConnectionTimeout, ErrorKind::Internal => connection_timeout)
+                })
             })
     }
 
@@ -160,9 +187,10 @@ impl RabbitConnectionManager {
     ) -> impl Future<Item = (Client<TcpStream>, RabbitHeartbeatHandle), Error = Error> {
         let address_clone = address.clone();
         let address_clone2 = address.clone();
+        let address_clone3 = address.clone();
         info!("Connecting to rabbit at `{}`", address);
         TcpStream::connect(&address)
-            .map_err(ectx!(ErrorSource::Io, ErrorContext::TcpConnection, ErrorKind::Internal => address_clone))
+            .map_err(ectx!(ErrorSource::Io, ErrorContext::TcpConnection, ErrorKind::Internal => address_clone3))
             .and_then(move |stream| {
                 info!("TCP connection established. Handshake with rabbit...");
                 Client::connect(stream, options)

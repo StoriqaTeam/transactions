@@ -47,6 +47,8 @@ pub enum ErrorContext {
     ConnectionTimeout,
     #[fail(display = "rabbit error context - attempted to connect again in process of establishing a connection")]
     AlreadyConnecting,
+    #[fail(display = "rabbit error context - attempted to close the channel, but failed")]
+    ChannelClose,
 }
 
 derive_error_impls!();
