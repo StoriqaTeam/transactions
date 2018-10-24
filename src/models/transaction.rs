@@ -289,3 +289,52 @@ impl Default for BitcoinUtxos {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct TransactionOut {
+    pub id: TransactionId,
+    pub from: Vec<TransactionAddressInfo>,
+    pub to: Vec<TransactionAddressInfo>,
+    pub currency: Currency,
+    pub value: Amount,
+    pub fee: Amount,
+    pub status: TransactionStatus,
+    pub blockchain_tx_id: Option<BlockchainTransactionId>,
+    pub created_at: SystemTime,
+    pub updated_at: SystemTime,
+}
+
+impl TransactionOut {
+    pub fn new (transaction: Transaction, from: Vec<TransactionAddressInfo>, to: Vec<TransactionAddressInfo>) -> Self {
+       Self {
+            id: transaction.id,
+            from,
+            to,
+            currency: transaction.currency,
+            value: transaction.value,
+            fee: transaction.fee,
+            status: transaction.status,
+            blockchain_tx_id: transaction.blockchain_tx_id,
+            created_at: transaction.created_at,
+            updated_at: transaction.updated_at,
+       } 
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TransactionAddressInfo {
+    pub account_id: Option<AccountId>,
+    pub owner_name: Option<String>,
+    pub blockchain_address: AccountAddress,
+}
+
+impl TransactionAddressInfo {
+    pub fn new (account_id: Option<AccountId>, blockchain_address: AccountAddress) -> Self {
+        Self {
+            account_id,
+            owner_name: None,
+            blockchain_address,
+        }
+    }
+}
+

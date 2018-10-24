@@ -28,6 +28,19 @@ table! {
 }
 
 table! {
+    pending_blockchain_transactions (hash) {
+        hash -> Varchar,
+        from_ -> Varchar,
+        to_ -> Varchar,
+        currency -> Varchar,
+        value -> Numeric,
+        fee -> Numeric,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+table! {
     seen_hashes (hash) {
         hash -> Varchar,
         block_number -> Int8,
@@ -86,6 +99,7 @@ joinable!(transactions -> users (user_id));
 allow_tables_to_appear_in_same_query!(
     accounts,
     blockchain_transactions,
+    pending_blockchain_transactions,
     seen_hashes,
     strange_blockchain_transactions,
     transactions,
