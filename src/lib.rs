@@ -145,7 +145,11 @@ pub fn start_server() {
                                     Err(e) => {
                                         log_error(&e);
                                         let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
-                                        Either::B(Delay::new(when).then(move |_| channel.basic_nack(delivery_tag, false, true)))
+                                        let f = Delay::new(when).then(move |_| channel.basic_nack(delivery_tag, false, true));
+                                        tokio::spawn(f.map_err(|e| {
+                                            error!("Error sending nack: {}", e);
+                                        }));
+                                        Either::B(future::ok(()))
                                     }
                                 })
                             }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
