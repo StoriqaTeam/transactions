@@ -4,7 +4,7 @@ use std::sync::Arc;
 use super::error::*;
 use models::*;
 use prelude::*;
-use repos::error::Error as RepoError;
+use repos::error::{Error as RepoError, ErrorContext as RepoErrorContex, ErrorKind as RepoErrorKind};
 use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, SeenHashesRepo, TransactionsRepo};
 use serde_json;
 
@@ -127,32 +127,36 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                             }
 
                             //getting all from transactions to without repeats
-                            let mut from = blockchain_transaction.from.clone().into_iter().fold(HashMap::new(), |mut acc, x| {
-                                {
-                                    let balance = acc.entry(x.address).or_insert_with(Amount::default);
-                                    if let Some(new_balance) = balance.checked_add(x.value) {
-                                        *balance = new_balance;
-                                    }
+                            let mut from = HashMap::new();
+                            for x in blockchain_transaction.from.clone() {
+                                let balance = from.entry(x.address).or_insert_with(Amount::default);
+                                if let Some(new_balance) = balance.checked_add(x.value) {
+                                    *balance = new_balance;
+                                } else {
+                                    return Err(ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => balance, x.value));
                                 }
-                                acc
-                            });
+                            }
 
                             //getting all to transactions to without repeats
-                            let mut to = blockchain_transaction.to.clone().into_iter().fold(HashMap::new(), |mut acc, x| {
-                                {
-                                    let balance = acc.entry(x.address).or_insert_with(Amount::default);
-                                    if let Some(new_balance) = balance.checked_add(x.value) {
-                                        *balance = new_balance;
-                                    }
+                            let mut to = HashMap::new();
+                            for x in blockchain_transaction.to.clone() {
+                                let balance = from.entry(x.address).or_insert_with(Amount::default);
+                                if let Some(new_balance) = balance.checked_add(x.value) {
+                                    *balance = new_balance;
+                                } else {
+                                    return Err(ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => balance, x.value));
                                 }
-                                acc
-                            });
+                            }
 
                             //sub balance `to` from `from`
                             for (address, value) in &to {
                                 if let Some(from_balance) = from.get_mut(&address) {
                                     if let Some(new_balance) = from_balance.checked_sub(*value) {
                                         *from_balance = new_balance;
+                                    } else {
+                                        return Err(
+                                            ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => from_balance, value),
+                                        );
                                     }
                                 }
                             }
