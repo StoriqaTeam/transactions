@@ -48,14 +48,12 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let accounts_repo = self.accounts_repo.clone();
         let blockchain_transactions_repo = self.blockchain_transactions_repo.clone();
         let db_executor = self.db_executor.clone();
-        info!("Processing tx");
         Box::new(
             String::from_utf8(data.clone())
                 .map_err(ectx!(ErrorContext::UTF8, ErrorKind::Internal => data_clone))
                 .into_future()
                 .and_then(|s| serde_json::from_str(&s).map_err(ectx!(ErrorContext::Json, ErrorKind::Internal => s)))
                 .and_then(move |blockchain_transaction: BlockchainTransaction| {
-                    info!("Going to db");
                     db_executor
                         .execute_transaction(move || -> Result<(), RepoError> {
                             let enough_confirms = match blockchain_transaction.currency {
@@ -113,12 +111,12 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                     _ => 3,
                                 },
                             };
-                            info!("Checking confirms");
+
                             //checking for enough confirmations
                             if blockchain_transaction.confirmations < enough_confirms {
                                 return Ok(());
                             }
-                            info!("Checking seen");
+
                             //checking blockchain hash already seen
                             if seen_hashes_repo
                                 .get(blockchain_transaction.hash.clone(), blockchain_transaction.currency)?
@@ -126,7 +124,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                             {
                                 return Ok(());
                             }
-                            info!("Checking withdraw");
+
                             // withdraw
                             if let Some(transaction) = transactions_repo.get_by_blockchain_tx(blockchain_transaction.hash.clone())? {
                                 if transaction.status != TransactionStatus::Done {

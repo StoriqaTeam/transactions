@@ -134,25 +134,18 @@ pub fn start_server() {
                     let futures = consumer_and_chans.into_iter().map(move |(stream, channel)| {
                         let fetcher_clone = fetcher_clone.clone();
                         let consumers_to_close = consumers_to_close.clone();
-                        {
-                            let mut consumers_to_close_lock = consumers_to_close.lock().unwrap();
-                            consumers_to_close_lock.push((channel.clone(), stream.consumer_tag.clone()));
-                        }
+                        let mut consumers_to_close = consumers_to_close.lock().unwrap();
+                        consumers_to_close.push((channel.clone(), stream.consumer_tag.clone()));
                         stream
                             .for_each(move |message| {
                                 trace!("got message: {:?}", message);
-                                info!("Got message");
                                 let delivery_tag = message.delivery_tag;
                                 let channel = channel.clone();
                                 let channel2 = channel.clone();
                                 let message_clone = message.clone();
                                 let f = fetcher_clone.process(message.data).then(move |res| match res {
-                                    Ok(_) => {
-                                        info!("Doing ack");
-                                        Either::A(channel.basic_ack(delivery_tag, false)),
-                                    }
+                                    Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
                                     Err(e) => {
-                                        info!("Doing nack");
                                         log_error(&e);
                                         let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
                                         Either::B(Delay::new(when).then(move |_| channel.basic_nack(delivery_tag, false, true)))
