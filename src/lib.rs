@@ -149,7 +149,7 @@ pub fn start_server() {
                                 let f = fetcher_clone.process(message.data).then(move |res| match res {
                                     Ok(_) => {
                                         info!("Doing ack");
-                                        Either::A(channel.basic_ack(delivery_tag, false))
+                                        Either::A(channel.basic_ack(delivery_tag, false)),
                                     }
                                     Err(e) => {
                                         info!("Doing nack");
