@@ -93,7 +93,7 @@ pub fn start_server() {
     thread::spawn(move || {
         let mut core = tokio_core::reactor::Core::new().unwrap();
         let db_pool = create_db_pool(&config_clone);
-        let cpu_pool = CpuPool::new(1);
+        let cpu_pool = CpuPool::new(config_clone.rabbit.thread_pool_size);
         let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
         let transactions_repo = Arc::new(TransactionsRepoImpl);
         let accounts_repo = Arc::new(AccountsRepoImpl);
@@ -123,13 +123,12 @@ pub fn start_server() {
         let publisher = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
         loop {
             info!("Subscribing to rabbit");
-            let counters = Arc::new(Mutex::new((0usize, 0usize, 0usize, 0usize, 0usize, 0usize, 0usize)));
+            let counters = Arc::new(Mutex::new((0usize, 0usize, 0usize, 0usize, 0usize)));
             let counters_clone = counters.clone();
             let consumers_to_close: Arc<Mutex<Vec<(Channel<TcpStream>, String)>>> = Arc::new(Mutex::new(Vec::new()));
             let consumers_to_close_clone = consumers_to_close.clone();
             let fetcher_clone = fetcher.clone();
             let resubscribe_duration = Duration::from_secs(config_clone.rabbit.restart_subscription_secs as u64);
-            let ack_timeout_duration = Duration::from_secs(config_clone.rabbit.ack_timeout_secs as u64);
             let subscription = publisher
                 .subscribe()
                 .and_then(move |consumer_and_chans| {
@@ -143,17 +142,15 @@ pub fn start_server() {
                         drop(consumers_to_close_lock);
                         stream
                             .for_each(move |message| {
-                                trace!("got message: {:?}", message);
+                                trace!("got message: {}", MessageDelivery::new(message.clone()));
+                                let delivery_tag = message.delivery_tag;
                                 let mut counters = counters_clone.lock().unwrap();
                                 counters.0 += 1;
                                 drop(counters);
                                 let counters_clone2 = counters_clone.clone();
-                                let counters_clone3 = counters_clone.clone();
-                                let delivery_tag = message.delivery_tag;
+
                                 let channel = channel.clone();
-                                let channel2 = channel.clone();
-                                let message_clone = message.clone();
-                                let f = fetcher_clone.process(message.data).then(move |res| match res {
+                                fetcher_clone.process(message.data).then(move |res| match res {
                                     Ok(_) => {
                                         let counters_clone = counters_clone2.clone();
                                         let mut counters = counters_clone2.lock().unwrap();
@@ -172,42 +169,19 @@ pub fn start_server() {
                                         drop(counters);
                                         log_error(&e);
                                         let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
-                                        Either::B(Delay::new(when).then(move |_| {
+                                        let f = Delay::new(when).then(move |_| {
                                             channel.basic_nack(delivery_tag, false, true).inspect(move |_| {
                                                 let mut counters = counters_clone.lock().unwrap();
                                                 counters.4 += 1;
                                                 drop(counters);
                                             })
-                                        }))
+                                        });
+                                        tokio::spawn(f.map_err(|e| {
+                                            error!("Error sending nack: {}", e);
+                                        }));
+                                        Either::B(future::ok(()))
                                     }
-                                });
-                                let f_with_timeout = Timeout::new(f, ack_timeout_duration).map_err(move |e| {
-                                    let inner = e.into_inner();
-                                    if inner.is_none() {
-                                        // timeout case
-                                        let counters_clone = counters_clone3.clone();
-                                        let mut counters = counters_clone3.lock().unwrap();
-                                        counters.5 += 1;
-                                        drop(counters);
-                                        let f = channel2.basic_nack(delivery_tag, false, true);
-                                        tokio::spawn(
-                                            f.inspect(move |_| {
-                                                let mut counters = counters_clone.lock().unwrap();
-                                                counters.6 += 1;
-                                                drop(counters);
-                                            }).map_err(|e| {
-                                                error!("Error sending nack {}", e);
-                                            }),
-                                        );
-                                    }
-                                    // let e: failure::Error = inner
-                                    //     .map(|err| err.into())
-                                    //     .unwrap_or(format_err!("Ack timeout error for message {}", MessageDelivery::new(message_clone)));
-                                    // log_error(&e.compat());
-                                    ()
-                                });
-                                tokio::spawn(f_with_timeout);
-                                future::ok(())
+                                })
                             }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     });
                     future::join_all(futures)
@@ -218,17 +192,21 @@ pub fn start_server() {
                 .run(Timeout::new(subscription, resubscribe_duration).then(move |_| {
                     let counters = counters_clone.lock().unwrap();
                     info!(
-                        "Total messages: {}, tried to ack: {}, acked: {}, tried to nack: {}, nacked: {}, tried to (ack timeout): {}, nacked (ack timeout): {}",
-                        counters.0, counters.1, counters.2, counters.3, counters.4, counters.5, counters.6
+                        "Total messages: {}, tried to ack: {}, acked: {}, tried to nack: {}, nacked: {}",
+                        counters.0, counters.1, counters.2, counters.3, counters.4
                     );
                     drop(counters);
                     let fs: Vec<_> = consumers_to_close_clone
                         .lock()
                         .unwrap()
                         .iter_mut()
-                        .map(|tuple| {
-                            trace!("Canceling {} with channel {}", tuple.1, tuple.0.id);
-                            tuple.0.cancel_consumer(tuple.1.to_string())
+                        .map(|(channel, consumer_tag)| {
+                            let mut channel = channel.clone();
+                            let consumer_tag = consumer_tag.clone();
+                            trace!("Canceling {} with channel `{}`", consumer_tag, channel.id);
+                            channel
+                                .cancel_consumer(consumer_tag.to_string())
+                                .and_then(move |_| channel.close(0, "Cancelled on consumer resubscribe"))
                         }).collect();
                     future::join_all(fs)
                 })).map(|_| ())

@@ -8,7 +8,7 @@ use failure;
 use failure::Compat;
 use futures::future::Either;
 use lapin_async::connection::{ConnectingState, ConnectionState};
-use lapin_futures::channel::Channel;
+use lapin_futures::channel::{BasicQosOptions, Channel};
 use lapin_futures::client::{Client, ConnectionOptions, HeartbeatHandle};
 use prelude::*;
 use r2d2::{CustomizeConnection, ManageConnection, Pool};
@@ -21,6 +21,7 @@ use super::error::*;
 use config::Config;
 use utils::log_error;
 
+const CONSUMER_PREFETCH_COUNT: u16 = 1000;
 pub type RabbitPool = Pool<RabbitConnectionManager>;
 
 #[derive(Clone)]
@@ -69,11 +70,9 @@ impl CustomizeConnection<Channel<TcpStream>, Compat<Error>> for ConnectionHooks 
     fn on_release(&self, conn: Channel<TcpStream>) {
         trace!("Released rabbitmq channel");
         thread::spawn(move || {
-            let res = conn.close(0, "Released from pool").wait();
-            if let Err(e) = res {
-                let e: Error = ectx!(err format_err!("{}", e), ErrorContext::ChannelClose, ErrorKind::Internal);
-                log_error(&e);
-            };
+            // We ignore the error here, because the channel might be evicted from the pool
+            // because it was already closed
+            let _ = conn.close(0, "Released from pool").wait();
         });
     }
 }
@@ -247,9 +246,16 @@ impl ManageConnection for RabbitConnectionManager {
             .create_channel()
             .wait()
             .map_err(ectx!(ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))
-            .map_err(|e: Error| e.compat());
+            .map_err(|e: Error| e.compat())?;
+        let _ = ch
+            .basic_qos(BasicQosOptions {
+                prefetch_count: CONSUMER_PREFETCH_COUNT,
+                ..Default::default()
+            }).wait()
+            .map_err(ectx!(ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))
+            .map_err(|e: Error| e.compat())?;
         trace!("Rabbit channel is created");
-        ch
+        Ok(ch)
     }
     fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         self.repair_if_tcp_is_broken();

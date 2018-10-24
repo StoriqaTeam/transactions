@@ -52,7 +52,6 @@ pub struct Rabbit {
     pub connection_timeout_secs: usize,
     pub connection_pool_size: usize,
     pub restart_subscription_secs: usize,
-    pub ack_timeout_secs: usize,
 }
 
 impl Config {
