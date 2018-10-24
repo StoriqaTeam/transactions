@@ -140,18 +140,21 @@ pub fn start_server() {
                                 trace!("got message: {:?}", message);
                                 let delivery_tag = message.delivery_tag;
                                 let channel = channel.clone();
-                                fetcher_clone.process(message.data).then(move |res| match res {
-                                    Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
-                                    Err(e) => {
-                                        log_error(&e);
-                                        let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
-                                        let f = Delay::new(when).then(move |_| channel.basic_nack(delivery_tag, false, true));
-                                        tokio::spawn(f.map_err(|e| {
+                                tokio::spawn(
+                                    fetcher_clone
+                                        .process(message.data)
+                                        .then(move |res| match res {
+                                            Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
+                                            Err(e) => {
+                                                log_error(&e);
+                                                let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
+                                                Either::B(Delay::new(when).then(move |_| channel.basic_nack(delivery_tag, false, true)))
+                                            }
+                                        }).map_err(|e| {
                                             error!("Error sending nack: {}", e);
-                                        }));
-                                        Either::B(future::ok(()))
-                                    }
-                                })
+                                        }),
+                                );
+                                future::ok(())
                             }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     });
                     future::join_all(futures)
