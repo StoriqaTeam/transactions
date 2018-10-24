@@ -143,71 +143,75 @@ pub fn start_server() {
                         drop(consumers_to_close_lock);
                         stream
                             .for_each(move |message| {
-                                trace!("got message: {:?}", message);
+                                trace!("got message: {}", MessageDelivery::new(message.clone()));
+                                let delivery_tag = message.delivery_tag;
+                                let done = Arc::new(Mutex::new(false));
+                                let done_clone = done.clone();
+                                let when = Instant::now() + ack_timeout_duration;
+                                let timeout_channel = channel.clone();
+                                let counters_clone4 = counters_clone.clone();
+                                let ensure_response_f = Delay::new(when).then(move |_| {
+                                    let done = done_clone.lock().unwrap();
+                                    if !*done {
+                                        {
+                                            let mut counters = counters_clone4.lock().unwrap();
+                                            counters.5 += 1;
+                                        }
+                                        Either::A(timeout_channel.basic_nack(delivery_tag, false, true).inspect(move |_| {
+                                            let mut counters = counters_clone4.lock().unwrap();
+                                            counters.6 += 1;
+                                        }))
+                                    } else {
+                                        Either::B(future::ok(()))
+                                    }
+                                });
+                                tokio::spawn(ensure_response_f.map_err(|e| {
+                                    error!("Error sending nack on ack timeout consumer: {}", e);
+                                }));
+
                                 let mut counters = counters_clone.lock().unwrap();
                                 counters.0 += 1;
                                 drop(counters);
                                 let counters_clone2 = counters_clone.clone();
-                                let counters_clone3 = counters_clone.clone();
-                                let delivery_tag = message.delivery_tag;
+
                                 let channel = channel.clone();
-                                let channel2 = channel.clone();
-                                let message_clone = message.clone();
-                                let f = fetcher_clone.process(message.data).then(move |res| match res {
-                                    Ok(_) => {
-                                        let counters_clone = counters_clone2.clone();
-                                        let mut counters = counters_clone2.lock().unwrap();
-                                        counters.1 += 1;
-                                        drop(counters);
-                                        Either::A(channel.basic_ack(delivery_tag, false).inspect(move |_| {
-                                            let mut counters = counters_clone.lock().unwrap();
-                                            counters.2 += 1;
+                                fetcher_clone.process(message.data).then(move |res| {
+                                    let mut done = done.lock().unwrap();
+                                    *done = true;
+                                    drop(done);
+                                    match res {
+                                        Ok(_) => {
+                                            let counters_clone = counters_clone2.clone();
+                                            let mut counters = counters_clone2.lock().unwrap();
+                                            counters.1 += 1;
                                             drop(counters);
-                                        }))
-                                    }
-                                    Err(e) => {
-                                        let counters_clone = counters_clone2.clone();
-                                        let mut counters = counters_clone2.lock().unwrap();
-                                        counters.3 += 1;
-                                        drop(counters);
-                                        log_error(&e);
-                                        let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
-                                        Either::B(Delay::new(when).then(move |_| {
-                                            channel.basic_nack(delivery_tag, false, true).inspect(move |_| {
+                                            Either::A(channel.basic_ack(delivery_tag, false).inspect(move |_| {
                                                 let mut counters = counters_clone.lock().unwrap();
-                                                counters.4 += 1;
+                                                counters.2 += 1;
                                                 drop(counters);
-                                            })
-                                        }))
+                                            }))
+                                        }
+                                        Err(e) => {
+                                            let counters_clone = counters_clone2.clone();
+                                            let mut counters = counters_clone2.lock().unwrap();
+                                            counters.3 += 1;
+                                            drop(counters);
+                                            log_error(&e);
+                                            let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
+                                            let f = Delay::new(when).then(move |_| {
+                                                channel.basic_nack(delivery_tag, false, true).inspect(move |_| {
+                                                    let mut counters = counters_clone.lock().unwrap();
+                                                    counters.4 += 1;
+                                                    drop(counters);
+                                                })
+                                            });
+                                            tokio::spawn(f.map_err(|e| {
+                                                error!("Error sending nack: {}", e);
+                                            }));
+                                            Either::B(future::ok(()))
+                                        }
                                     }
-                                });
-                                let f_with_timeout = Timeout::new(f, ack_timeout_duration).map_err(move |e| {
-                                    let inner = e.into_inner();
-                                    if inner.is_none() {
-                                        // timeout case
-                                        let counters_clone = counters_clone3.clone();
-                                        let mut counters = counters_clone3.lock().unwrap();
-                                        counters.5 += 1;
-                                        drop(counters);
-                                        let f = channel2.basic_nack(delivery_tag, false, true);
-                                        tokio::spawn(
-                                            f.inspect(move |_| {
-                                                let mut counters = counters_clone.lock().unwrap();
-                                                counters.6 += 1;
-                                                drop(counters);
-                                            }).map_err(|e| {
-                                                error!("Error sending nack {}", e);
-                                            }),
-                                        );
-                                    }
-                                    // let e: failure::Error = inner
-                                    //     .map(|err| err.into())
-                                    //     .unwrap_or(format_err!("Ack timeout error for message {}", MessageDelivery::new(message_clone)));
-                                    // log_error(&e.compat());
-                                    ()
-                                });
-                                tokio::spawn(f_with_timeout);
-                                future::ok(())
+                                })
                             }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     });
                     future::join_all(futures)
