@@ -145,7 +145,11 @@ pub fn start_server() {
                                     Err(e) => {
                                         log_error(&e);
                                         let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
-                                        Either::B(Delay::new(when).then(move |_| channel.basic_nack(delivery_tag, false, true)))
+                                        let f = Delay::new(when).then(move |_| channel.basic_nack(delivery_tag, false, true));
+                                        tokio::spawn(f.map_err(|e| {
+                                            error!("Error sending nack: {}", e);
+                                        }));
+                                        Either::B(future::ok(()))
                                     }
                                 })
                             }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
@@ -161,7 +165,7 @@ pub fn start_server() {
                         .unwrap()
                         .iter_mut()
                         .map(|tuple| {
-                            info!("Canceling {} with channel {}", tuple.1, tuple.0.id);
+                            trace!("Canceling {} with channel {}", tuple.1, tuple.0.id);
                             tuple.0.cancel_consumer(tuple.1.to_string())
                         }).collect();
                     future::join_all(fs)
