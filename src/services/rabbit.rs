@@ -5,7 +5,7 @@ use super::error::*;
 use models::*;
 use prelude::*;
 use repos::error::{Error as RepoError, ErrorContext as RepoErrorContex, ErrorKind as RepoErrorKind};
-use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, SeenHashesRepo, TransactionsRepo};
+use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, SeenHashesRepo, StrangeBlockchainTransactionsRepo, TransactionsRepo};
 use serde_json;
 
 pub const ETHERIUM_PRICE: u128 = 200; // 200$, price of 1 eth in gwei
@@ -20,6 +20,7 @@ pub struct BlockchainFetcher<E: DbExecutor> {
     accounts_repo: Arc<AccountsRepo>,
     seen_hashes_repo: Arc<SeenHashesRepo>,
     blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
+    strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
     db_executor: E,
 }
 
@@ -29,6 +30,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         accounts_repo: Arc<AccountsRepo>,
         seen_hashes_repo: Arc<SeenHashesRepo>,
         blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
+        strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
         db_executor: E,
     ) -> Self {
         BlockchainFetcher {
@@ -36,6 +38,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             accounts_repo,
             seen_hashes_repo,
             blockchain_transactions_repo,
+            strange_blockchain_transactions_repo,
             db_executor,
         }
     }
@@ -48,6 +51,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let seen_hashes_repo = self.seen_hashes_repo.clone();
         let accounts_repo = self.accounts_repo.clone();
         let blockchain_transactions_repo = self.blockchain_transactions_repo.clone();
+        let strange_blockchain_transactions_repo = self.strange_blockchain_transactions_repo.clone();
         let db_executor = self.db_executor.clone();
         Box::new(
             String::from_utf8(data.clone())
@@ -174,23 +178,37 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                     to_not_exists &= accounts_repo
                                         .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Cr)?
                                         .is_none()
-                                        && accounts_repo
-                                            .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Dr)?
-                                            .is_none()
                                 }
-                                if accounts_repo.get(transaction.dr_account_id)?.is_some() && to_not_exists {
-                                    if transaction.status != TransactionStatus::Done {
-                                        transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Done)?;
-                                    } else {
-                                        //transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Unknown)?;
-                                    }
+
+                                // checking that `from` value is equal to our transaction value
+                                let mut values_are_equal = true;
+                                for (address, value) in from {
+                                    if accounts_repo
+                                        .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Dr)?
+                                        .is_some() {
+                                            values_are_equal = value == transaction.value;
+                                        }
+                                }
+                                if accounts_repo.get(transaction.dr_account_id)?.is_none() {
+                                    let comment = format!("Withdraw transaction dr account {} does not exists.", transaction.dr_account_id);
+                                    let new_strange = (blockchain_transaction.clone(), comment).into();
+                                    strange_blockchain_transactions_repo.create(new_strange)?;
+                                } else if !to_not_exists {
+                                    let comment = "Withdraw transaction contains our account in `to` field.".to_string();
+                                    let new_strange = (blockchain_transaction.clone(), comment).into();
+                                    strange_blockchain_transactions_repo.create(new_strange)?;
+                                } else if !values_are_equal {
+                                    let comment = "Withdraw transaction value and value in our transaction are not equal.".to_string();
+                                    let new_strange = (blockchain_transaction.clone(), comment).into();
+                                    strange_blockchain_transactions_repo.create(new_strange)?;
+                                } else if transaction.status == TransactionStatus::Done {
+                                    let comment = "Withdraw transaction is already in done state.".to_string();
+                                    let new_strange = (blockchain_transaction.clone(), comment).into();
+                                    strange_blockchain_transactions_repo.create(new_strange)?;
                                 } else {
-                                    //transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Unknown)?;
+                                    transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Done)?;
+                                    blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
                                 }
-                                //adding blockchain transaction to db
-                                blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
-                                //adding blockchain hash to already seen
-                                seen_hashes_repo.create(blockchain_transaction.clone().into())?;
                             } else {
                                 // checking that `from` accounts not exist
                                 let mut from_not_exists = true;
@@ -198,11 +216,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                     from_not_exists &= accounts_repo
                                         .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Cr)?
                                         .is_none()
-                                        && accounts_repo
-                                            .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Dr)?
-                                            .is_none()
                                 }
-
                                 if from_not_exists {
                                     // deposit
                                     for (blockchain_transaction_to, blockchain_transaction_value) in to {
@@ -240,12 +254,17 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                         if added_transactions {
                                             //adding blockchain transaction to db
                                             blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
-                                            //adding blockchain hash to already seen
-                                            seen_hashes_repo.create(blockchain_transaction.clone().into())?;
                                         }
                                     }
+                                } else {
+                                    let comment = "Withdraw transaction hash does not exists, but `from` field contains our account.".to_string();
+                                    let new_strange = (blockchain_transaction.clone(), comment).into();
+                                    strange_blockchain_transactions_repo.create(new_strange)?;
                                 }
+
                             }
+                            //adding blockchain hash to already seen 
+                            seen_hashes_repo.create(blockchain_transaction.clone().into())?;
                             Ok(())
                         }).map_err(ectx!(ErrorSource::Repo, ErrorKind::Internal))
                 }),

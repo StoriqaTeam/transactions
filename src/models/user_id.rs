@@ -32,6 +32,6 @@ impl FromStr for UserId {
 
 impl Display for UserId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(&format!("{}", self.0,))
+        f.write_str(&format!("{}", self.0.hyphenated()))
     }
 }
