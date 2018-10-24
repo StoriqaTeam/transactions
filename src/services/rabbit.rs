@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::error::*;
@@ -125,43 +126,112 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 return Ok(());
                             }
 
+                            //getting all from transactions to without repeats
+                            let mut from = blockchain_transaction.from.clone().into_iter().fold(HashMap::new(), |mut acc, x| {
+                                {
+                                    let balance = acc.entry(x.address).or_insert_with(Amount::default);
+                                    if let Some(new_balance) = balance.checked_add(x.value) {
+                                        *balance = new_balance;
+                                    }
+                                }
+                                acc
+                            });
+
+                            //getting all to transactions to without repeats
+                            let mut to = blockchain_transaction.to.clone().into_iter().fold(HashMap::new(), |mut acc, x| {
+                                {
+                                    let balance = acc.entry(x.address).or_insert_with(Amount::default);
+                                    if let Some(new_balance) = balance.checked_add(x.value) {
+                                        *balance = new_balance;
+                                    }
+                                }
+                                acc
+                            });
+
+                            //sub balance `to` from `from`
+                            for (address, value) in &to {
+                                if let Some(from_balance) = from.get_mut(&address) {
+                                    if let Some(new_balance) = from_balance.checked_sub(*value) {
+                                        *from_balance = new_balance;
+                                    }
+                                }
+                            }
+
+                            //deleting `from` from `to`
+                            for (address, _) in &from {
+                                to.remove(&address);
+                            }
+
                             // withdraw
                             if let Some(transaction) = transactions_repo.get_by_blockchain_tx(blockchain_transaction.hash.clone())? {
-                                if transaction.status != TransactionStatus::Done {
-                                    transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Done)?;
-                                    //adding blockchain transaction to db
-                                    blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
-                                    //adding blockchain hash to already seen
-                                    seen_hashes_repo.create(blockchain_transaction.clone().into())?;
+                                // checking that `from` account exists in accounts but no `to` in accounts
+                                let mut to_not_exists = true;
+                                for (address, _) in to {
+                                    to_not_exists &= accounts_repo
+                                        .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Cr)?
+                                        .is_none()
+                                        && accounts_repo
+                                            .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Dr)?
+                                            .is_none()
                                 }
-                            } else if let Some(cr_account) = accounts_repo.get_by_address(
-                                blockchain_transaction.to.clone(),
-                                blockchain_transaction.currency,
-                                AccountKind::Cr,
-                            )? {
-                                // deposit
-                                if let Some(dr_account) = accounts_repo.get_by_address(
-                                    blockchain_transaction.to.clone(),
-                                    blockchain_transaction.currency,
-                                    AccountKind::Dr,
-                                )? {
-                                    let new_transaction = NewTransaction {
-                                        id: TransactionId::generate(),
-                                        user_id: cr_account.user_id,
-                                        dr_account_id: dr_account.id,
-                                        cr_account_id: cr_account.id,
-                                        currency: blockchain_transaction.currency,
-                                        value: blockchain_transaction.value,
-                                        status: TransactionStatus::Done,
-                                        blockchain_tx_id: Some(blockchain_transaction.hash.clone()),
-                                        hold_until: None,
-                                        fee: blockchain_transaction.fee,
-                                    };
-                                    transactions_repo.create(new_transaction)?;
-                                    //adding blockchain transaction to db
-                                    blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
-                                    //adding blockchain hash to already seen
-                                    seen_hashes_repo.create(blockchain_transaction.clone().into())?;
+                                if accounts_repo.get(transaction.dr_account_id)?.is_some() && to_not_exists {
+                                    if transaction.status != TransactionStatus::Done {
+                                        transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Done)?;
+                                        //adding blockchain transaction to db
+                                        blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
+                                        //adding blockchain hash to already seen
+                                        seen_hashes_repo.create(blockchain_transaction.clone().into())?;
+                                    }
+                                }
+                            } else {
+                                // checking that `from` accounts not exist
+                                let mut from_not_exists = true;
+                                for (address, _) in from {
+                                    from_not_exists &= accounts_repo
+                                        .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Cr)?
+                                        .is_none()
+                                        && accounts_repo
+                                            .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Dr)?
+                                            .is_none()
+                                }
+
+                                if from_not_exists {
+                                    // deposit
+                                    for (blockchain_transaction_to, blockchain_transaction_value) in to {
+                                        let mut added_transactions = false;
+                                        if let Some(cr_account) = accounts_repo.get_by_address(
+                                            blockchain_transaction_to.clone(),
+                                            blockchain_transaction.currency,
+                                            AccountKind::Cr,
+                                        )? {
+                                            if let Some(dr_account) = accounts_repo.get_by_address(
+                                                blockchain_transaction_to.clone(),
+                                                blockchain_transaction.currency,
+                                                AccountKind::Dr,
+                                            )? {
+                                                let new_transaction = NewTransaction {
+                                                    id: TransactionId::generate(),
+                                                    user_id: cr_account.user_id,
+                                                    dr_account_id: dr_account.id,
+                                                    cr_account_id: cr_account.id,
+                                                    currency: blockchain_transaction.currency,
+                                                    value: blockchain_transaction_value,
+                                                    status: TransactionStatus::Done,
+                                                    blockchain_tx_id: Some(blockchain_transaction.hash.clone()),
+                                                    hold_until: None,
+                                                    fee: blockchain_transaction.fee,
+                                                };
+                                                transactions_repo.create(new_transaction)?;
+                                                added_transactions = true;
+                                            }
+                                        }
+                                        if added_transactions {
+                                            //adding blockchain transaction to db
+                                            blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
+                                            //adding blockchain hash to already seen
+                                            seen_hashes_repo.create(blockchain_transaction.clone().into())?;
+                                        }
+                                    }
                                 }
                             }
                             Ok(())

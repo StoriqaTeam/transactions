@@ -75,7 +75,8 @@ pub trait TransactionsService: Send + Sync + 'static {
     fn create_transaction_ethereum(
         &self,
         user_id: UserId,
-        dr_acc: Account,
+        dr_acc: AccountId,
+        address: AccountAddress,
         cr_acc: Account,
         value: Amount,
         fee: Amount,
@@ -84,7 +85,8 @@ pub trait TransactionsService: Send + Sync + 'static {
     fn create_transaction_bitcoin(
         &self,
         user_id: UserId,
-        dr_acc: Account,
+        dr_acc: AccountId,
+        address: AccountAddress,
         cr_acc: Account,
         value: Amount,
         fee: Amount,
@@ -239,18 +241,18 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                                 return Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => balance, needed_amount));
                             }
                         }
-                        Ok((input.dr_account, txs))
+                        Ok((input.dr_account.id, input.address, txs))
                     })
-                }).and_then(move |(dr_acc, cr_accs)| {
+                }).and_then(move |(dr_acc_id, address, cr_accs)| {
                     iter_ok::<_, Error>(cr_accs).fold(vec![], move |mut transactions, (cr_acc, value)| {
                         match currency {
                             Currency::Eth => {
-                                service.create_transaction_ethereum(user_id, dr_acc.clone(), cr_acc, value, fee, Currency::Eth)
+                                service.create_transaction_ethereum(user_id, dr_acc_id, address.clone(), cr_acc, value, fee, Currency::Eth)
                             }
                             Currency::Stq => {
-                                service.create_transaction_ethereum(user_id, dr_acc.clone(), cr_acc, value, fee, Currency::Stq)
+                                service.create_transaction_ethereum(user_id, dr_acc_id, address.clone(), cr_acc, value, fee, Currency::Stq)
                             }
-                            Currency::Btc => service.create_transaction_bitcoin(user_id, dr_acc.clone(), cr_acc, value, fee),
+                            Currency::Btc => service.create_transaction_bitcoin(user_id, dr_acc_id, address.clone(), cr_acc, value, fee),
                         }.then(|res| {
                             if let Ok(r) = res {
                                 transactions.push(r);
@@ -265,7 +267,8 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
     fn create_transaction_bitcoin(
         &self,
         user_id: UserId,
-        dr_acc: Account,
+        dr_acc_id: AccountId,
+        address: AccountAddress,
         cr_acc: Account,
         value: Amount,
         fee: Amount,
@@ -283,7 +286,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     let new_transaction: NewTransaction = NewTransaction {
                         id: TransactionId::generate(),
                         user_id,
-                        dr_account_id: dr_acc.id,
+                        dr_account_id: dr_acc_id,
                         cr_account_id: cr_acc.id,
                         currency: Currency::Btc,
                         value,
@@ -297,7 +300,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         .map_err(ectx!(try convert => new_transaction))?;
 
                     // sending transactions to blockchain
-                    let dr_address = dr_acc.address.clone();
+                    let dr_address = address.clone();
                     let utxos = blockchain_client
                         .get_bitcoin_utxos(dr_address.clone())
                         .map_err(ectx!(try convert => dr_address))
@@ -305,7 +308,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
 
                     // creating blockchain transactions array
                     let create_blockchain_input =
-                        CreateBlockchainTx::new(dr_acc.address, cr_acc.address, Currency::Btc, value, fee, None, Some(utxos));
+                        CreateBlockchainTx::new(address, cr_acc.address, Currency::Btc, value, fee, None, Some(utxos));
 
                     let raw = keys_client
                         .sign_transaction(create_blockchain_input.clone())
@@ -334,7 +337,8 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
     fn create_transaction_ethereum(
         &self,
         user_id: UserId,
-        dr_acc: Account,
+        dr_acc_id: AccountId,
+        address: AccountAddress,
         cr_acc: Account,
         value: Amount,
         fee: Amount,
@@ -353,7 +357,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     let new_transaction: NewTransaction = NewTransaction {
                         id: TransactionId::generate(),
                         user_id,
-                        dr_account_id: dr_acc.id,
+                        dr_account_id: dr_acc_id,
                         cr_account_id: cr_acc.id,
                         currency,
                         value,
@@ -367,15 +371,14 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         .map_err(ectx!(try convert => new_transaction))?;
 
                     // sending transactions to blockchain
-                    let dr_address = dr_acc.address.clone();
+                    let dr_address = address.clone();
                     let nonce = blockchain_client
                         .get_ethereum_nonce(dr_address.clone())
                         .map_err(ectx!(try convert => dr_address))
                         .wait()?;
 
                     // creating blockchain transactions array
-                    let create_blockchain_input =
-                        CreateBlockchainTx::new(dr_acc.address, cr_acc.address, currency, value, fee, Some(nonce), None);
+                    let create_blockchain_input = CreateBlockchainTx::new(address, cr_acc.address, currency, value, fee, Some(nonce), None);
 
                     let raw = keys_client
                         .sign_transaction(create_blockchain_input.clone())

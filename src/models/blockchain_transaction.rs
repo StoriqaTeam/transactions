@@ -1,14 +1,23 @@
 use std::time::SystemTime;
 
+use serde_json;
+
 use models::*;
 use schema::blockchain_transactions;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockchainTransactionEntry {
+    pub address: AccountAddress,
+    pub value: Amount,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockchainTransaction {
     pub hash: BlockchainTransactionId,
-    pub from: AccountAddress,
-    pub to: AccountAddress,
+    pub from: Vec<BlockchainTransactionEntry>,
+    pub to: Vec<BlockchainTransactionEntry>,
     pub block_number: u64,
     pub currency: Currency,
     pub value: Amount,
@@ -19,8 +28,6 @@ pub struct BlockchainTransaction {
 #[derive(Debug, Queryable, Clone)]
 pub struct BlockchainTransactionDB {
     pub hash: BlockchainTransactionId,
-    pub from_: AccountAddress,
-    pub to_: AccountAddress,
     pub block_number: i64,
     pub currency: Currency,
     pub value: Amount,
@@ -28,14 +35,16 @@ pub struct BlockchainTransactionDB {
     pub confirmations: i32,
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
+    pub from_: serde_json::Value,
+    pub to_: serde_json::Value,
 }
 
 impl From<BlockchainTransaction> for NewBlockchainTransactionDB {
     fn from(transaction: BlockchainTransaction) -> Self {
         Self {
             hash: transaction.hash,
-            from_: transaction.from,
-            to_: transaction.to,
+            from_: serde_json::to_value(transaction.from).unwrap_or_default(),
+            to_: serde_json::to_value(transaction.to).unwrap_or_default(),
             block_number: transaction.block_number as i64,
             currency: transaction.currency,
             value: transaction.value,
@@ -49,8 +58,8 @@ impl From<BlockchainTransaction> for NewBlockchainTransactionDB {
 #[table_name = "blockchain_transactions"]
 pub struct NewBlockchainTransactionDB {
     pub hash: BlockchainTransactionId,
-    pub from_: AccountAddress,
-    pub to_: AccountAddress,
+    pub from_: serde_json::Value,
+    pub to_: serde_json::Value,
     pub block_number: i64,
     pub currency: Currency,
     pub value: Amount,
@@ -62,8 +71,8 @@ impl Default for NewBlockchainTransactionDB {
     fn default() -> Self {
         Self {
             hash: BlockchainTransactionId::default(),
-            from_: AccountAddress::default(),
-            to_: AccountAddress::default(),
+            from_: serde_json::Value::Array(vec![]),
+            to_: serde_json::Value::Array(vec![]),
             block_number: 0,
             currency: Currency::Eth,
             value: Amount::default(),

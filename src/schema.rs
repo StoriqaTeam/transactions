@@ -15,8 +15,6 @@ table! {
 table! {
     blockchain_transactions (hash) {
         hash -> Varchar,
-        from_ -> Varchar,
-        to_ -> Varchar,
         block_number -> Int8,
         currency -> Varchar,
         value -> Numeric,
@@ -24,6 +22,8 @@ table! {
         confirmations -> Int4,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        from_ -> Jsonb,
+        to_ -> Jsonb,
     }
 }
 
