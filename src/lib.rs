@@ -58,6 +58,7 @@ use diesel::r2d2::ConnectionManager;
 use futures::future::{self, Either};
 use futures_cpupool::CpuPool;
 use lapin_futures::channel::Channel;
+use lapin_futures::consumer::ConsumerSub;
 use tokio::net::tcp::TcpStream;
 use tokio::prelude::*;
 use tokio::timer::{Delay, Timeout};
@@ -93,7 +94,7 @@ pub fn start_server() {
     thread::spawn(move || {
         let mut core = tokio_core::reactor::Core::new().unwrap();
         let db_pool = create_db_pool(&config_clone);
-        let cpu_pool = CpuPool::new(1);
+        let cpu_pool = CpuPool::new(config_clone.rabbit.thread_pool_size);
         let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
         let transactions_repo = Arc::new(TransactionsRepoImpl);
         let accounts_repo = Arc::new(AccountsRepoImpl);
@@ -125,7 +126,7 @@ pub fn start_server() {
             info!("Subscribing to rabbit");
             let counters = Arc::new(Mutex::new((0usize, 0usize, 0usize, 0usize, 0usize, 0usize, 0usize)));
             let counters_clone = counters.clone();
-            let consumers_to_close: Arc<Mutex<Vec<(Channel<TcpStream>, String)>>> = Arc::new(Mutex::new(Vec::new()));
+            let consumers_to_close: Arc<Mutex<Vec<(Channel<TcpStream>, String, ConsumerSub)>>> = Arc::new(Mutex::new(Vec::new()));
             let consumers_to_close_clone = consumers_to_close.clone();
             let fetcher_clone = fetcher.clone();
             let resubscribe_duration = Duration::from_secs(config_clone.rabbit.restart_subscription_secs as u64);
@@ -139,7 +140,7 @@ pub fn start_server() {
                         let fetcher_clone = fetcher_clone.clone();
                         let consumers_to_close = consumers_to_close.clone();
                         let mut consumers_to_close_lock = consumers_to_close.lock().unwrap();
-                        consumers_to_close_lock.push((channel.clone(), stream.consumer_tag.clone()));
+                        consumers_to_close_lock.push((channel.clone(), stream.consumer_tag.clone(), stream.subscriber()));
                         drop(consumers_to_close_lock);
                         stream
                             .for_each(move |message| {
@@ -231,7 +232,7 @@ pub fn start_server() {
                         .unwrap()
                         .iter_mut()
                         .map(|tuple| {
-                            trace!("Canceling {} with channel {}", tuple.1, tuple.0.id);
+                            info!("Canceling {} with channel `{}` and sub: {:?}", tuple.1, tuple.0.id, tuple.2);
                             tuple.0.cancel_consumer(tuple.1.to_string())
                         }).collect();
                     future::join_all(fs)
