@@ -62,7 +62,7 @@ use tokio::net::tcp::TcpStream;
 use tokio::prelude::*;
 use tokio::timer::{Delay, Timeout};
 
-use self::models::NewUser;
+use self::models::{MessageDelivery, NewUser};
 use self::prelude::*;
 use self::repos::{
     AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError, SeenHashesRepoImpl,
@@ -141,6 +141,7 @@ pub fn start_server() {
                                 trace!("got message: {:?}", message);
                                 let delivery_tag = message.delivery_tag;
                                 let channel = channel.clone();
+                                let channel2 = channel.clone();
                                 let message_clone = message.clone();
                                 let f = fetcher_clone.process(message.data).then(move |res| match res {
                                     Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
@@ -151,10 +152,14 @@ pub fn start_server() {
                                     }
                                 });
                                 let f_with_timeout = Timeout::new(f, ack_timeout_duration).map_err(move |e| {
+                                    let f = channel2.basic_nack(delivery_tag, false, true);
+                                    tokio::spawn(f.map_err(|e| {
+                                        error!("Error sending nack {}", e);
+                                    }));
                                     let e: failure::Error = e
                                         .into_inner()
                                         .map(|err| err.into())
-                                        .unwrap_or(format_err!("Ack timeout error for message {:?}", message_clone));
+                                        .unwrap_or(format_err!("Ack timeout error for message {}", MessageDelivery::new(message_clone)));
                                     log_error(&e.compat());
                                     ()
                                 });
