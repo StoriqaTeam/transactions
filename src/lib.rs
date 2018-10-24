@@ -234,20 +234,25 @@ pub fn start_server() {
                         .iter_mut()
                         .map(|(channel, consumer_tag, subscriber)| {
                             trace!("Canceling {} with channel `{}`", consumer_tag, channel.id);
+                            let sub_clone = subscriber.clone();
                             let channel_clone = channel.clone();
                             let tag_clone = consumer_tag.clone();
                             let inner = subscriber.inner.lock().unwrap();
                             let deliveries: Vec<_> = inner.deliveries.iter().collect();
                             let init: Box<Future<Item = (), Error = io::Error>> = Box::new(future::ok(()));
                             let f = deliveries.chunks(CONSUMER_CANCEL_NACK_BATCH_SIZE).fold(init, |acc, elem| {
-                                let fs: Vec<_> = elem.iter().map(|delivery| channel.basic_nack(delivery.delivery_tag, false, true)).collect();
+                                let fs: Vec<_> = elem.iter().map(|delivery| {
+                                    channel.basic_nack(delivery.delivery_tag, false, true)
+                                }).collect();
                                 let f = future::join_all(fs).map(|_| ());
                                 Box::new(acc.and_then(|_| f))
                             });
-                            f.and_then(move |_| {
-                                let mut channel = channel_clone.clone();
-                                channel.cancel_consumer(tag_clone.to_string())
-                            })
+                            channel.cancel_consumer(tag_clone.to_string()).and_then(move |_| channel_clone.close(0, "Cancelled on consumer resubscribe"))
+                            // f.and_then(move |_| {
+                            //     info!("Nacked all messages, closing consumer: {:?}", sub_clone);
+                            //     let mut channel = channel_clone.clone();
+                            //     channel.cancel_consumer(tag_clone.to_string())
+                            // }).inspect(|_| info!("Nacked all messages, closed consumer"))
                         }).collect();
                     future::join_all(fs)
                 })).map(|_| ())

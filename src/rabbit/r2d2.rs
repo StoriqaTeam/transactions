@@ -70,11 +70,9 @@ impl CustomizeConnection<Channel<TcpStream>, Compat<Error>> for ConnectionHooks 
     fn on_release(&self, conn: Channel<TcpStream>) {
         trace!("Released rabbitmq channel");
         thread::spawn(move || {
-            let res = conn.close(0, "Released from pool").wait();
-            if let Err(e) = res {
-                let e: Error = ectx!(err format_err!("{}", e), ErrorContext::ChannelClose, ErrorKind::Internal);
-                log_error(&e);
-            };
+            // We ignore the error here, because the channel might be evicted from the pool
+            // because it was already closed
+            let _ = conn.close(0, "Released from pool").wait();
         });
     }
 }
