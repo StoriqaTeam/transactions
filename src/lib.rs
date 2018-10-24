@@ -161,7 +161,7 @@ pub fn start_server() {
                         .unwrap()
                         .iter_mut()
                         .map(|tuple| {
-                            info!("Canceling {} with channel {}", tuple.1, tuple.0.id);
+                            trace!("Canceling {} with channel {}", tuple.1, tuple.0.id);
                             tuple.0.cancel_consumer(tuple.1.to_string())
                         }).collect();
                     future::join_all(fs)
