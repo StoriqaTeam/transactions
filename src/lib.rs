@@ -122,11 +122,12 @@ pub fn start_server() {
         debug!("Finished creating rabbit connection pool");
         let publisher = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
         loop {
-            debug!("Subscribing to rabbit");
+            info!("Subscribing to rabbit");
             let consumers_to_close: Arc<Mutex<Vec<(Channel<TcpStream>, String)>>> = Arc::new(Mutex::new(Vec::new()));
             let consumers_to_close_clone = consumers_to_close.clone();
             let fetcher_clone = fetcher.clone();
-            let duration = Duration::from_secs(config_clone.rabbit.restart_subscription_secs as u64);
+            let resubscribe_duration = Duration::from_secs(config_clone.rabbit.restart_subscription_secs as u64);
+            let ack_timeout_duration = Duration::from_secs(config_clone.rabbit.ack_timeout_secs as u64);
             let subscription = publisher
                 .subscribe()
                 .and_then(move |consumer_and_chans| {
@@ -140,20 +141,24 @@ pub fn start_server() {
                                 trace!("got message: {:?}", message);
                                 let delivery_tag = message.delivery_tag;
                                 let channel = channel.clone();
-                                tokio::spawn(
-                                    fetcher_clone
-                                        .process(message.data)
-                                        .then(move |res| match res {
-                                            Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
-                                            Err(e) => {
-                                                log_error(&e);
-                                                let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
-                                                Either::B(Delay::new(when).then(move |_| channel.basic_nack(delivery_tag, false, true)))
-                                            }
-                                        }).map_err(|e| {
-                                            error!("Error sending nack: {}", e);
-                                        }),
-                                );
+                                let message_clone = message.clone();
+                                let f = fetcher_clone.process(message.data).then(move |res| match res {
+                                    Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
+                                    Err(e) => {
+                                        log_error(&e);
+                                        let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
+                                        Either::B(Delay::new(when).then(move |_| channel.basic_nack(delivery_tag, false, true)))
+                                    }
+                                });
+                                let f_with_timeout = Timeout::new(f, ack_timeout_duration).map_err(move |e| {
+                                    let e: failure::Error = e
+                                        .into_inner()
+                                        .map(|err| err.into())
+                                        .unwrap_or(format_err!("Ack timeout error for message {:?}", message_clone));
+                                    log_error(&e.compat());
+                                    ()
+                                });
+                                tokio::spawn(f_with_timeout);
                                 future::ok(())
                             }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     });
@@ -162,7 +167,7 @@ pub fn start_server() {
                     log_error(&e);
                 });
             let _ = core
-                .run(Timeout::new(subscription, duration).then(move |_| {
+                .run(Timeout::new(subscription, resubscribe_duration).then(move |_| {
                     let fs: Vec<_> = consumers_to_close_clone
                         .lock()
                         .unwrap()
