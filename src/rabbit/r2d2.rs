@@ -8,7 +8,7 @@ use failure;
 use failure::Compat;
 use futures::future::Either;
 use lapin_async::connection::{ConnectingState, ConnectionState};
-use lapin_futures::channel::Channel;
+use lapin_futures::channel::{BasicQosOptions, Channel};
 use lapin_futures::client::{Client, ConnectionOptions, HeartbeatHandle};
 use prelude::*;
 use r2d2::{CustomizeConnection, ManageConnection, Pool};
@@ -21,6 +21,7 @@ use super::error::*;
 use config::Config;
 use utils::log_error;
 
+const CONSUMER_PREFETCH_COUNT: u16 = 4000;
 pub type RabbitPool = Pool<RabbitConnectionManager>;
 
 #[derive(Clone)]
@@ -247,9 +248,16 @@ impl ManageConnection for RabbitConnectionManager {
             .create_channel()
             .wait()
             .map_err(ectx!(ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))
-            .map_err(|e: Error| e.compat());
+            .map_err(|e: Error| e.compat())?;
+        let _ = ch
+            .basic_qos(BasicQosOptions {
+                prefetch_count: CONSUMER_PREFETCH_COUNT,
+                ..Default::default()
+            }).wait()
+            .map_err(ectx!(ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))
+            .map_err(|e: Error| e.compat())?;
         trace!("Rabbit channel is created");
-        ch
+        Ok(ch)
     }
     fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         self.repair_if_tcp_is_broken();
