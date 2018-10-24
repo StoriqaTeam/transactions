@@ -21,7 +21,7 @@ use super::error::*;
 use config::Config;
 use utils::log_error;
 
-const CONSUMER_PREFETCH_COUNT: u16 = 4000;
+const CONSUMER_PREFETCH_COUNT: u16 = 1000;
 pub type RabbitPool = Pool<RabbitConnectionManager>;
 
 #[derive(Clone)]
