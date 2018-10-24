@@ -39,6 +39,8 @@ pub enum ErrorContext {
     Connection,
     #[fail(display = "database context - balance overflow")]
     BalanceOverflow,
+    #[fail(display = "repo context - pair of accounts not found")]
+    AccountsPair,
 }
 
 derive_error_impls!();

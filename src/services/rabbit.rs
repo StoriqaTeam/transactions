@@ -181,12 +181,16 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 if accounts_repo.get(transaction.dr_account_id)?.is_some() && to_not_exists {
                                     if transaction.status != TransactionStatus::Done {
                                         transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Done)?;
-                                        //adding blockchain transaction to db
-                                        blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
-                                        //adding blockchain hash to already seen
-                                        seen_hashes_repo.create(blockchain_transaction.clone().into())?;
+                                    } else {
+                                        //transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Unknown)?;
                                     }
+                                } else {
+                                    //transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Unknown)?;
                                 }
+                                //adding blockchain transaction to db
+                                blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
+                                //adding blockchain hash to already seen
+                                seen_hashes_repo.create(blockchain_transaction.clone().into())?;
                             } else {
                                 // checking that `from` accounts not exist
                                 let mut from_not_exists = true;
@@ -227,6 +231,10 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                                 };
                                                 transactions_repo.create(new_transaction)?;
                                                 added_transactions = true;
+                                            } else {
+                                                return Err(
+                                                    ectx!(err RepoErrorContex::AccountsPair, RepoErrorKind::Internal => blockchain_transaction_to.clone()),
+                                                );
                                             }
                                         }
                                         if added_transactions {

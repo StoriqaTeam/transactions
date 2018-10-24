@@ -38,6 +38,22 @@ table! {
 }
 
 table! {
+    strange_blockchain_transactions (hash) {
+        hash -> Varchar,
+        from_ -> Jsonb,
+        to_ -> Jsonb,
+        block_number -> Int8,
+        currency -> Varchar,
+        value -> Numeric,
+        fee -> Numeric,
+        confirmations -> Int4,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+        commentary -> Varchar,
+    }
+}
+
+table! {
     transactions (id) {
         id -> Uuid,
         user_id -> Uuid,
@@ -67,4 +83,11 @@ table! {
 joinable!(accounts -> users (user_id));
 joinable!(transactions -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(accounts, blockchain_transactions, seen_hashes, transactions, users,);
+allow_tables_to_appear_in_same_query!(
+    accounts,
+    blockchain_transactions,
+    seen_hashes,
+    strange_blockchain_transactions,
+    transactions,
+    users,
+);

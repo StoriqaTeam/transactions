@@ -2,6 +2,7 @@
 
 pub mod accounts;
 pub mod blockchain_transactions;
+pub mod strange_blockchain_transactions;
 pub mod error;
 pub mod executor;
 #[cfg(test)]
@@ -14,6 +15,7 @@ pub mod users;
 
 pub use self::accounts::*;
 pub use self::blockchain_transactions::*;
+pub use self::strange_blockchain_transactions::*;
 pub use self::error::*;
 pub use self::executor::*;
 #[cfg(test)]
