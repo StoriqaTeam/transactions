@@ -183,7 +183,6 @@ impl RabbitConnectionManager {
         address: SocketAddr,
         options: ConnectionOptions,
     ) -> impl Future<Item = (Client<TcpStream>, RabbitHeartbeatHandle), Error = Error> {
-        let address_clone = address.clone();
         let address_clone2 = address.clone();
         let address_clone3 = address.clone();
         info!("Connecting to rabbit at `{}`", address);
