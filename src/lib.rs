@@ -123,7 +123,7 @@ pub fn start_server() {
         let publisher = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
         loop {
             info!("Subscribing to rabbit");
-            let counters = Arc::new(Mutex::new((0usize, 0usize, 0usize, 0usize, 0usize)));
+            let counters = Arc::new(Mutex::new((0usize, 0usize, 0usize, 0usize, 0usize, 0usize, 0usize)));
             let counters_clone = counters.clone();
             let consumers_to_close: Arc<Mutex<Vec<(Channel<TcpStream>, String)>>> = Arc::new(Mutex::new(Vec::new()));
             let consumers_to_close_clone = consumers_to_close.clone();
@@ -148,6 +148,7 @@ pub fn start_server() {
                                 counters.0 += 1;
                                 drop(counters);
                                 let counters_clone2 = counters_clone.clone();
+                                let counters_clone3 = counters_clone.clone();
                                 let delivery_tag = message.delivery_tag;
                                 let channel = channel.clone();
                                 let channel2 = channel.clone();
@@ -184,15 +185,25 @@ pub fn start_server() {
                                     let inner = e.into_inner();
                                     if inner.is_none() {
                                         // timeout case
+                                        let counters_clone = counters_clone3.clone();
+                                        let mut counters = counters_clone3.lock().unwrap();
+                                        counters.5 += 1;
+                                        drop(counters);
                                         let f = channel2.basic_nack(delivery_tag, false, true);
-                                        tokio::spawn(f.map_err(|e| {
-                                            error!("Error sending nack {}", e);
-                                        }));
+                                        tokio::spawn(
+                                            f.inspect(move |_| {
+                                                let mut counters = counters_clone.lock().unwrap();
+                                                counters.6 += 1;
+                                                drop(counters);
+                                            }).map_err(|e| {
+                                                error!("Error sending nack {}", e);
+                                            }),
+                                        );
                                     }
-                                    let e: failure::Error = inner
-                                        .map(|err| err.into())
-                                        .unwrap_or(format_err!("Ack timeout error for message {}", MessageDelivery::new(message_clone)));
-                                    log_error(&e.compat());
+                                    // let e: failure::Error = inner
+                                    //     .map(|err| err.into())
+                                    //     .unwrap_or(format_err!("Ack timeout error for message {}", MessageDelivery::new(message_clone)));
+                                    // log_error(&e.compat());
                                     ()
                                 });
                                 tokio::spawn(f_with_timeout);
@@ -207,8 +218,8 @@ pub fn start_server() {
                 .run(Timeout::new(subscription, resubscribe_duration).then(move |_| {
                     let counters = counters_clone.lock().unwrap();
                     info!(
-                        "Total messages: {}, tried to ack: {}, acked: {}, tried to nack: {}, nacked: {}",
-                        counters.0, counters.1, counters.2, counters.3, counters.4
+                        "Total messages: {}, tried to ack: {}, acked: {}, tried to nack: {}, nacked: {}, tried to (ack timeout): {}, nacked (ack timeout): {}",
+                        counters.0, counters.1, counters.2, counters.3, counters.4, counters.5, counters.6
                     );
                     drop(counters);
                     let fs: Vec<_> = consumers_to_close_clone
