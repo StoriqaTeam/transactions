@@ -44,7 +44,7 @@ impl BlockchainTransaction {
         //getting all to transactions to without repeats
         let mut to = HashMap::new();
         for x in self.to.clone() {
-            let balance = from.entry(x.address).or_insert_with(Amount::default);
+            let balance = to.entry(x.address).or_insert_with(Amount::default);
             if let Some(new_balance) = balance.checked_add(x.value) {
                 *balance = new_balance;
             } else {
