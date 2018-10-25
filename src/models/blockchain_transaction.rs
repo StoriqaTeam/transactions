@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::time::SystemTime;
 
 use serde_json;
@@ -87,10 +88,16 @@ pub struct BlockchainTransactionDB {
 
 impl From<BlockchainTransaction> for NewBlockchainTransactionDB {
     fn from(transaction: BlockchainTransaction) -> Self {
+        // Direct conversion of transaction.from to Value gives and `u128 not supported` error
+        // This hack works, but you need to set arbitrary_precision feature for serde_json
+        let from_str = serde_json::to_string(&transaction.from).unwrap();
+        let from_ = serde_json::value::Value::from_str(&from_str).unwrap();
+        let to_str = serde_json::to_string(&transaction.from).unwrap();
+        let to_ = serde_json::value::Value::from_str(&to_str).unwrap();
         Self {
             hash: transaction.hash,
-            from_: serde_json::to_value(transaction.from).unwrap_or_default(),
-            to_: serde_json::to_value(transaction.to).unwrap_or_default(),
+            from_,
+            to_,
             block_number: transaction.block_number as i64,
             currency: transaction.currency,
             value: transaction.value,
