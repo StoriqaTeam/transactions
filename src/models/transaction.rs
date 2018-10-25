@@ -305,8 +305,8 @@ pub struct TransactionOut {
 }
 
 impl TransactionOut {
-    pub fn new (transaction: Transaction, from: Vec<TransactionAddressInfo>, to: Vec<TransactionAddressInfo>) -> Self {
-       Self {
+    pub fn new(transaction: &Transaction, from: Vec<TransactionAddressInfo>, to: Vec<TransactionAddressInfo>) -> Self {
+        Self {
             id: transaction.id,
             from,
             to,
@@ -314,27 +314,24 @@ impl TransactionOut {
             value: transaction.value,
             fee: transaction.fee,
             status: transaction.status,
-            blockchain_tx_id: transaction.blockchain_tx_id,
-            created_at: transaction.created_at,
-            updated_at: transaction.updated_at,
-       } 
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TransactionAddressInfo {
-    pub account_id: Option<AccountId>,
-    pub owner_name: Option<String>,
-    pub blockchain_address: AccountAddress,
-}
-
-impl TransactionAddressInfo {
-    pub fn new (account_id: Option<AccountId>, blockchain_address: AccountAddress) -> Self {
-        Self {
-            account_id,
-            owner_name: None,
-            blockchain_address,
+            blockchain_tx_id: transaction.blockchain_tx_id.clone(),
+            created_at: transaction.created_at.clone(),
+            updated_at: transaction.updated_at.clone(),
         }
     }
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct TransactionAddressInfo {
+    pub account_id: Option<AccountId>,
+    pub blockchain_address: AccountAddress,
+}
+
+impl TransactionAddressInfo {
+    pub fn new(account_id: Option<AccountId>, blockchain_address: AccountAddress) -> Self {
+        Self {
+            account_id,
+            blockchain_address,
+        }
+    }
+}

@@ -60,6 +60,8 @@ pub enum ErrorContext {
     Json,
     #[fail(display = "service error context - balance overflow")]
     BalanceOverflow,
+    #[fail(display = "service error context - transaction between two dr accounts")]
+    InvalidTransaction,
 }
 
 derive_error_impls!();

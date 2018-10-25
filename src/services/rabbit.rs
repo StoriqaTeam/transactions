@@ -10,9 +10,9 @@ use serde_json;
 
 pub const ETHERIUM_PRICE: u128 = 200; // 200$, price of 1 eth in gwei
 pub const STQ_PRICE: f64 = 0.0025; // 0,0025$, price of 1 stq in gwei
-pub const GWEI: u128 = 1_000_000_000_000_000_000;
+pub const WEI: u128 = 1_000_000_000_000_000_000;
 pub const BITCOIN_PRICE: u128 = 6400; // 6400$ price in satoshi
-pub const SATOSHI: u128 = 1_000_000_000;
+pub const SATOSHI: u128 = 100_000_000;
 
 #[derive(Clone)]
 pub struct BlockchainFetcher<E: DbExecutor> {
@@ -73,14 +73,14 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $5000 / $200 - 8 conf
                                 // > $5000 / $200 - 12 conf
                                 Currency::Stq => match blockchain_transaction.value.raw() {
-                                    x if x < (((20f64 / STQ_PRICE) as u128) * GWEI) => 0,
-                                    x if x < (((50f64 / STQ_PRICE) as u128) * GWEI) => 1,
-                                    x if x < (((200f64 / STQ_PRICE) as u128) * GWEI) => 2,
-                                    x if x < (((500f64 / STQ_PRICE) as u128) * GWEI) => 3,
-                                    x if x < (((1000f64 / STQ_PRICE) as u128) * GWEI) => 4,
-                                    x if x < (((2000f64 / STQ_PRICE) as u128) * GWEI) => 5,
-                                    x if x < (((3000f64 / STQ_PRICE) as u128) * GWEI) => 6,
-                                    x if x < (((5000f64 / STQ_PRICE) as u128) * GWEI) => 8,
+                                    x if x < (((20f64 / STQ_PRICE) as u128) * WEI) => 0,
+                                    x if x < (((50f64 / STQ_PRICE) as u128) * WEI) => 1,
+                                    x if x < (((200f64 / STQ_PRICE) as u128) * WEI) => 2,
+                                    x if x < (((500f64 / STQ_PRICE) as u128) * WEI) => 3,
+                                    x if x < (((1000f64 / STQ_PRICE) as u128) * WEI) => 4,
+                                    x if x < (((2000f64 / STQ_PRICE) as u128) * WEI) => 5,
+                                    x if x < (((3000f64 / STQ_PRICE) as u128) * WEI) => 6,
+                                    x if x < (((5000f64 / STQ_PRICE) as u128) * WEI) => 8,
                                     _ => 12,
                                 },
                                 // # Ethereum
@@ -94,14 +94,14 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $5000 / $200 - 8 conf
                                 // > $5000 / $200 - 12 conf
                                 Currency::Eth => match blockchain_transaction.value.raw() {
-                                    x if x < (20 * GWEI / ETHERIUM_PRICE) => 0,
-                                    x if x < (50 * GWEI / ETHERIUM_PRICE) => 1,
-                                    x if x < (200 * GWEI / ETHERIUM_PRICE) => 2,
-                                    x if x < (500 * GWEI / ETHERIUM_PRICE) => 3,
-                                    x if x < (1000 * GWEI / ETHERIUM_PRICE) => 4,
-                                    x if x < (2000 * GWEI / ETHERIUM_PRICE) => 5,
-                                    x if x < (3000 * GWEI / ETHERIUM_PRICE) => 6,
-                                    x if x < (5000 * GWEI / ETHERIUM_PRICE) => 8,
+                                    x if x < (20 * WEI / ETHERIUM_PRICE) => 0,
+                                    x if x < (50 * WEI / ETHERIUM_PRICE) => 1,
+                                    x if x < (200 * WEI / ETHERIUM_PRICE) => 2,
+                                    x if x < (500 * WEI / ETHERIUM_PRICE) => 3,
+                                    x if x < (1000 * WEI / ETHERIUM_PRICE) => 4,
+                                    x if x < (2000 * WEI / ETHERIUM_PRICE) => 5,
+                                    x if x < (3000 * WEI / ETHERIUM_PRICE) => 6,
+                                    x if x < (5000 * WEI / ETHERIUM_PRICE) => 8,
                                     _ => 12,
                                 },
                                 // # Bitcoin
