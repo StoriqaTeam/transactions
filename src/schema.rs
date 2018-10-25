@@ -41,7 +41,7 @@ table! {
 }
 
 table! {
-    seen_hashes (hash) {
+    seen_hashes (hash, currency) {
         hash -> Varchar,
         block_number -> Int8,
         currency -> Varchar,
