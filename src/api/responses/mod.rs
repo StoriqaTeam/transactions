@@ -87,32 +87,28 @@ impl From<Vec<Balance>> for BalancesResponse {
 #[serde(rename_all = "camelCase")]
 pub struct TransactionsResponse {
     pub id: TransactionId,
-    pub user_id: UserId,
-    pub dr_account_id: AccountId,
-    pub cr_account_id: AccountId,
+    pub from: Vec<TransactionAddressInfo>,
+    pub to: Vec<TransactionAddressInfo>,
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-    pub hold_until: Option<SystemTime>,
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
 }
 
-impl From<Transaction> for TransactionsResponse {
-    fn from(transaction: Transaction) -> Self {
+impl From<TransactionOut> for TransactionsResponse {
+    fn from(transaction: TransactionOut) -> Self {
         Self {
             id: transaction.id,
-            user_id: transaction.user_id,
-            dr_account_id: transaction.dr_account_id,
-            cr_account_id: transaction.cr_account_id,
+            from: transaction.from,
+            to: transaction.to,
             currency: transaction.currency,
             value: transaction.value,
             fee: transaction.fee,
             status: transaction.status,
             blockchain_tx_id: transaction.blockchain_tx_id,
-            hold_until: transaction.hold_until,
             created_at: transaction.created_at,
             updated_at: transaction.updated_at,
         }

@@ -58,6 +58,10 @@ pub enum ErrorContext {
     UTF8,
     #[fail(display = "service error context - failed to parse string to json")]
     Json,
+    #[fail(display = "service error context - balance overflow")]
+    BalanceOverflow,
+    #[fail(display = "service error context - transaction between two dr accounts")]
+    InvalidTransaction,
 }
 
 derive_error_impls!();

@@ -27,7 +27,10 @@ use self::error::*;
 use client::{BlockchainClient, BlockchainClientImpl, HttpClientImpl, KeysClient, KeysClientImpl};
 use models::*;
 use prelude::*;
-use repos::{AccountsRepoImpl, DbExecutorImpl, TransactionsRepoImpl, UsersRepoImpl};
+use repos::{
+    AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutorImpl, PendingBlockchainTransactionsRepoImpl, TransactionsRepoImpl,
+    UsersRepoImpl,
+};
 use services::{AccountsServiceImpl, AuthServiceImpl, TransactionsServiceImpl, UsersServiceImpl};
 
 #[derive(Clone)]
@@ -119,6 +122,8 @@ impl Service for ApiService {
                     let transactions_service = Arc::new(TransactionsServiceImpl::new(
                         auth_service.clone(),
                         Arc::new(TransactionsRepoImpl),
+                        Arc::new(PendingBlockchainTransactionsRepoImpl),
+                        Arc::new(BlockchainTransactionsRepoImpl),
                         Arc::new(AccountsRepoImpl),
                         db_executor.clone(),
                         keys_client,

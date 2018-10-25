@@ -3,8 +3,10 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use super::accounts::*;
+use super::blockchain_transactions::*;
 use super::error::*;
 use super::executor::DbExecutor;
+use super::pending_blockchain_transactions::*;
 use super::transactions::*;
 use super::types::RepoResult;
 use super::users::*;
@@ -317,6 +319,62 @@ impl TransactionsRepo for TransactionsRepoMock {
                 acc.id = t.cr_account_id;
                 (acc, value_)
             }).collect())
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct PendingBlockchainTransactionsRepoMock {
+    data: Arc<Mutex<Vec<PendingBlockchainTransactionDB>>>,
+}
+
+impl PendingBlockchainTransactionsRepo for PendingBlockchainTransactionsRepoMock {
+    fn create(&self, payload: NewPendingBlockchainTransactionDB) -> RepoResult<PendingBlockchainTransactionDB> {
+        let mut data = self.data.lock().unwrap();
+        let res = PendingBlockchainTransactionDB {
+            hash: payload.hash,
+            from_: payload.from_,
+            to_: payload.to_,
+            currency: payload.currency,
+            value: payload.value,
+            fee: payload.fee,
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+        };
+        data.push(res.clone());
+        Ok(res)
+    }
+    fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<PendingBlockchainTransactionDB>> {
+        let data = self.data.lock().unwrap();
+        Ok(data.iter().filter(|x| x.hash == hash_).nth(0).cloned())
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct BlockchainTransactionsRepoMock {
+    data: Arc<Mutex<Vec<BlockchainTransactionDB>>>,
+}
+
+impl BlockchainTransactionsRepo for BlockchainTransactionsRepoMock {
+    fn create(&self, payload: NewBlockchainTransactionDB) -> RepoResult<BlockchainTransactionDB> {
+        let mut data = self.data.lock().unwrap();
+        let res = BlockchainTransactionDB {
+            hash: payload.hash,
+            from_: payload.from_,
+            to_: payload.to_,
+            currency: payload.currency,
+            value: payload.value,
+            fee: payload.fee,
+            block_number: payload.block_number,
+            confirmations: payload.confirmations,
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+        };
+        data.push(res.clone());
+        Ok(res)
+    }
+    fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<BlockchainTransactionDB>> {
+        let data = self.data.lock().unwrap();
+        Ok(data.iter().filter(|x| x.hash == hash_).nth(0).cloned())
     }
 }
 

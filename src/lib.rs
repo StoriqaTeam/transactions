@@ -66,7 +66,7 @@ use self::models::{MessageDelivery, NewUser};
 use self::prelude::*;
 use self::repos::{
     AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError, SeenHashesRepoImpl,
-    TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
+    StrangeBlockchainTransactionsRepoImpl, TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
 };
 use config::Config;
 use rabbit::{ConnectionHooks, RabbitConnectionManager, TransactionConsumerImpl};
@@ -99,11 +99,13 @@ pub fn start_server() {
         let accounts_repo = Arc::new(AccountsRepoImpl);
         let seen_hashes_repo = Arc::new(SeenHashesRepoImpl);
         let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoImpl);
+        let strange_blockchain_transactions_repo = Arc::new(StrangeBlockchainTransactionsRepoImpl);
         let fetcher = BlockchainFetcher::new(
             transactions_repo,
             accounts_repo,
             seen_hashes_repo,
             blockchain_transactions_repo,
+            strange_blockchain_transactions_repo,
             db_executor,
         );
         debug!("Started creating rabbit connection pool");

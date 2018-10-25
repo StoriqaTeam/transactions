@@ -33,14 +33,6 @@ services:
       - POSTGRES_PASSWORD=transactions
     ports:
       - 5432:5432
-  
-  rabbit:
-    image: rabbitmq:3-management
-    environment:
-      - RABBITMQ_LOGS=debug
-    ports:
-      - 5672:5672
-      - 15672:15672
 
 volumes:
   stq-transactions-postgres-data:

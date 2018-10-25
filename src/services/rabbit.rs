@@ -3,15 +3,15 @@ use std::sync::Arc;
 use super::error::*;
 use models::*;
 use prelude::*;
-use repos::error::Error as RepoError;
-use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, SeenHashesRepo, TransactionsRepo};
+use repos::error::{Error as RepoError, ErrorContext as RepoErrorContex, ErrorKind as RepoErrorKind};
+use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, SeenHashesRepo, StrangeBlockchainTransactionsRepo, TransactionsRepo};
 use serde_json;
 
 pub const ETHERIUM_PRICE: u128 = 200; // 200$, price of 1 eth in gwei
 pub const STQ_PRICE: f64 = 0.0025; // 0,0025$, price of 1 stq in gwei
-pub const GWEI: u128 = 1_000_000_000_000_000_000;
+pub const WEI: u128 = 1_000_000_000_000_000_000;
 pub const BITCOIN_PRICE: u128 = 6400; // 6400$ price in satoshi
-pub const SATOSHI: u128 = 1_000_000_000;
+pub const SATOSHI: u128 = 100_000_000;
 
 #[derive(Clone)]
 pub struct BlockchainFetcher<E: DbExecutor> {
@@ -19,6 +19,7 @@ pub struct BlockchainFetcher<E: DbExecutor> {
     accounts_repo: Arc<AccountsRepo>,
     seen_hashes_repo: Arc<SeenHashesRepo>,
     blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
+    strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
     db_executor: E,
 }
 
@@ -28,6 +29,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         accounts_repo: Arc<AccountsRepo>,
         seen_hashes_repo: Arc<SeenHashesRepo>,
         blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
+        strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
         db_executor: E,
     ) -> Self {
         BlockchainFetcher {
@@ -35,6 +37,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             accounts_repo,
             seen_hashes_repo,
             blockchain_transactions_repo,
+            strange_blockchain_transactions_repo,
             db_executor,
         }
     }
@@ -47,6 +50,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let seen_hashes_repo = self.seen_hashes_repo.clone();
         let accounts_repo = self.accounts_repo.clone();
         let blockchain_transactions_repo = self.blockchain_transactions_repo.clone();
+        let strange_blockchain_transactions_repo = self.strange_blockchain_transactions_repo.clone();
         let db_executor = self.db_executor.clone();
         Box::new(
             String::from_utf8(data.clone())
@@ -68,14 +72,14 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $5000 / $200 - 8 conf
                                 // > $5000 / $200 - 12 conf
                                 Currency::Stq => match blockchain_transaction.value.raw() {
-                                    x if x < (((20f64 / STQ_PRICE) as u128) * GWEI) => 0,
-                                    x if x < (((50f64 / STQ_PRICE) as u128) * GWEI) => 1,
-                                    x if x < (((200f64 / STQ_PRICE) as u128) * GWEI) => 2,
-                                    x if x < (((500f64 / STQ_PRICE) as u128) * GWEI) => 3,
-                                    x if x < (((1000f64 / STQ_PRICE) as u128) * GWEI) => 4,
-                                    x if x < (((2000f64 / STQ_PRICE) as u128) * GWEI) => 5,
-                                    x if x < (((3000f64 / STQ_PRICE) as u128) * GWEI) => 6,
-                                    x if x < (((5000f64 / STQ_PRICE) as u128) * GWEI) => 8,
+                                    x if x < (((20f64 / STQ_PRICE) as u128) * WEI) => 0,
+                                    x if x < (((50f64 / STQ_PRICE) as u128) * WEI) => 1,
+                                    x if x < (((200f64 / STQ_PRICE) as u128) * WEI) => 2,
+                                    x if x < (((500f64 / STQ_PRICE) as u128) * WEI) => 3,
+                                    x if x < (((1000f64 / STQ_PRICE) as u128) * WEI) => 4,
+                                    x if x < (((2000f64 / STQ_PRICE) as u128) * WEI) => 5,
+                                    x if x < (((3000f64 / STQ_PRICE) as u128) * WEI) => 6,
+                                    x if x < (((5000f64 / STQ_PRICE) as u128) * WEI) => 8,
                                     _ => 12,
                                 },
                                 // # Ethereum
@@ -89,14 +93,14 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $5000 / $200 - 8 conf
                                 // > $5000 / $200 - 12 conf
                                 Currency::Eth => match blockchain_transaction.value.raw() {
-                                    x if x < (20 * GWEI / ETHERIUM_PRICE) => 0,
-                                    x if x < (50 * GWEI / ETHERIUM_PRICE) => 1,
-                                    x if x < (200 * GWEI / ETHERIUM_PRICE) => 2,
-                                    x if x < (500 * GWEI / ETHERIUM_PRICE) => 3,
-                                    x if x < (1000 * GWEI / ETHERIUM_PRICE) => 4,
-                                    x if x < (2000 * GWEI / ETHERIUM_PRICE) => 5,
-                                    x if x < (3000 * GWEI / ETHERIUM_PRICE) => 6,
-                                    x if x < (5000 * GWEI / ETHERIUM_PRICE) => 8,
+                                    x if x < (20 * WEI / ETHERIUM_PRICE) => 0,
+                                    x if x < (50 * WEI / ETHERIUM_PRICE) => 1,
+                                    x if x < (200 * WEI / ETHERIUM_PRICE) => 2,
+                                    x if x < (500 * WEI / ETHERIUM_PRICE) => 3,
+                                    x if x < (1000 * WEI / ETHERIUM_PRICE) => 4,
+                                    x if x < (2000 * WEI / ETHERIUM_PRICE) => 5,
+                                    x if x < (3000 * WEI / ETHERIUM_PRICE) => 6,
+                                    x if x < (5000 * WEI / ETHERIUM_PRICE) => 8,
                                     _ => 12,
                                 },
                                 // # Bitcoin
@@ -125,45 +129,103 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 return Ok(());
                             }
 
+                            // unifying from and to
+                            let (from, to) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert))?;
                             // withdraw
                             if let Some(transaction) = transactions_repo.get_by_blockchain_tx(blockchain_transaction.hash.clone())? {
-                                if transaction.status != TransactionStatus::Done {
+                                // checking that `from` account exists in accounts but no `to` in accounts
+                                let mut to_not_exists = true;
+                                for (address, _) in to {
+                                    to_not_exists &= accounts_repo
+                                        .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Cr)?
+                                        .is_none()
+                                }
+
+                                // checking that `from` value is equal to our transaction value
+                                let mut values_are_equal = true;
+                                for (address, value) in from {
+                                    if accounts_repo
+                                        .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Dr)?
+                                        .is_some() {
+                                            values_are_equal = value == transaction.value;
+                                        }
+                                }
+                                if accounts_repo.get(transaction.dr_account_id)?.is_none() {
+                                    let comment = format!("Withdraw transaction dr account {} does not exists.", transaction.dr_account_id);
+                                    let new_strange = (blockchain_transaction.clone(), comment).into();
+                                    strange_blockchain_transactions_repo.create(new_strange)?;
+                                } else if !to_not_exists {
+                                    let comment = "Withdraw transaction contains our account in `to` field.".to_string();
+                                    let new_strange = (blockchain_transaction.clone(), comment).into();
+                                    strange_blockchain_transactions_repo.create(new_strange)?;
+                                } else if !values_are_equal {
+                                    let comment = "Withdraw transaction value and value in our transaction are not equal.".to_string();
+                                    let new_strange = (blockchain_transaction.clone(), comment).into();
+                                    strange_blockchain_transactions_repo.create(new_strange)?;
+                                } else if transaction.status == TransactionStatus::Done {
+                                    let comment = "Withdraw transaction is already in done state.".to_string();
+                                    let new_strange = (blockchain_transaction.clone(), comment).into();
+                                    strange_blockchain_transactions_repo.create(new_strange)?;
+                                } else {
                                     transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Done)?;
-                                    //adding blockchain transaction to db
                                     blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
-                                    //adding blockchain hash to already seen
-                                    seen_hashes_repo.create(blockchain_transaction.clone().into())?;
                                 }
-                            } else if let Some(cr_account) = accounts_repo.get_by_address(
-                                blockchain_transaction.to.clone(),
-                                blockchain_transaction.currency,
-                                AccountKind::Cr,
-                            )? {
-                                // deposit
-                                if let Some(dr_account) = accounts_repo.get_by_address(
-                                    blockchain_transaction.to.clone(),
-                                    blockchain_transaction.currency,
-                                    AccountKind::Dr,
-                                )? {
-                                    let new_transaction = NewTransaction {
-                                        id: TransactionId::generate(),
-                                        user_id: cr_account.user_id,
-                                        dr_account_id: dr_account.id,
-                                        cr_account_id: cr_account.id,
-                                        currency: blockchain_transaction.currency,
-                                        value: blockchain_transaction.value,
-                                        status: TransactionStatus::Done,
-                                        blockchain_tx_id: Some(blockchain_transaction.hash.clone()),
-                                        hold_until: None,
-                                        fee: blockchain_transaction.fee,
-                                    };
-                                    transactions_repo.create(new_transaction)?;
-                                    //adding blockchain transaction to db
-                                    blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
-                                    //adding blockchain hash to already seen
-                                    seen_hashes_repo.create(blockchain_transaction.clone().into())?;
+                            } else {
+                                // checking that `from` accounts not exist
+                                let mut from_not_exists = true;
+                                for (address, _) in from {
+                                    from_not_exists &= accounts_repo
+                                        .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Cr)?
+                                        .is_none()
                                 }
+                                if from_not_exists {
+                                    // deposit
+                                    for (blockchain_transaction_to, blockchain_transaction_value) in to {
+                                        let mut added_transactions = false;
+                                        if let Some(cr_account) = accounts_repo.get_by_address(
+                                            blockchain_transaction_to.clone(),
+                                            blockchain_transaction.currency,
+                                            AccountKind::Cr,
+                                        )? {
+                                            if let Some(dr_account) = accounts_repo.get_by_address(
+                                                blockchain_transaction_to.clone(),
+                                                blockchain_transaction.currency,
+                                                AccountKind::Dr,
+                                            )? {
+                                                let new_transaction = NewTransaction {
+                                                    id: TransactionId::generate(),
+                                                    user_id: cr_account.user_id,
+                                                    dr_account_id: dr_account.id,
+                                                    cr_account_id: cr_account.id,
+                                                    currency: blockchain_transaction.currency,
+                                                    value: blockchain_transaction_value,
+                                                    status: TransactionStatus::Done,
+                                                    blockchain_tx_id: Some(blockchain_transaction.hash.clone()),
+                                                    hold_until: None,
+                                                    fee: blockchain_transaction.fee,
+                                                };
+                                                transactions_repo.create(new_transaction)?;
+                                                added_transactions = true;
+                                            } else {
+                                                return Err(
+                                                    ectx!(err RepoErrorContex::AccountsPair, RepoErrorKind::Internal => blockchain_transaction_to.clone()),
+                                                );
+                                            }
+                                        }
+                                        if added_transactions {
+                                            //adding blockchain transaction to db
+                                            blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
+                                        }
+                                    }
+                                } else {
+                                    let comment = "Withdraw transaction hash does not exists, but `from` field contains our account.".to_string();
+                                    let new_strange = (blockchain_transaction.clone(), comment).into();
+                                    strange_blockchain_transactions_repo.create(new_strange)?;
+                                }
+
                             }
+                            //adding blockchain hash to already seen 
+                            seen_hashes_repo.create(blockchain_transaction.clone().into())?;
                             Ok(())
                         }).map_err(ectx!(ErrorSource::Repo, ErrorKind::Internal))
                 }),

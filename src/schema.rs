@@ -15,13 +15,26 @@ table! {
 table! {
     blockchain_transactions (hash) {
         hash -> Varchar,
-        from_ -> Varchar,
-        to_ -> Varchar,
         block_number -> Int8,
         currency -> Varchar,
         value -> Numeric,
         fee -> Numeric,
         confirmations -> Int4,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+        from_ -> Jsonb,
+        to_ -> Jsonb,
+    }
+}
+
+table! {
+    pending_blockchain_transactions (hash) {
+        hash -> Varchar,
+        from_ -> Varchar,
+        to_ -> Varchar,
+        currency -> Varchar,
+        value -> Numeric,
+        fee -> Numeric,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }
@@ -34,6 +47,22 @@ table! {
         currency -> Varchar,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+    }
+}
+
+table! {
+    strange_blockchain_transactions (hash) {
+        hash -> Varchar,
+        from_ -> Jsonb,
+        to_ -> Jsonb,
+        block_number -> Int8,
+        currency -> Varchar,
+        value -> Numeric,
+        fee -> Numeric,
+        confirmations -> Int4,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+        commentary -> Varchar,
     }
 }
 
@@ -67,4 +96,12 @@ table! {
 joinable!(accounts -> users (user_id));
 joinable!(transactions -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(accounts, blockchain_transactions, seen_hashes, transactions, users,);
+allow_tables_to_appear_in_same_query!(
+    accounts,
+    blockchain_transactions,
+    pending_blockchain_transactions,
+    seen_hashes,
+    strange_blockchain_transactions,
+    transactions,
+    users,
+);
