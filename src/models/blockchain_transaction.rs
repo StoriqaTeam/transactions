@@ -1,8 +1,11 @@
+use std::collections::HashMap;
 use std::time::SystemTime;
 
 use serde_json;
 
 use models::*;
+use prelude::*;
+use repos::error::{Error as RepoError, ErrorContext as RepoErrorContex, ErrorKind as RepoErrorKind};
 use schema::blockchain_transactions;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -23,6 +26,49 @@ pub struct BlockchainTransaction {
     pub value: Amount,
     pub fee: Amount,
     pub confirmations: usize,
+}
+
+impl BlockchainTransaction {
+    pub fn unify_from_to(&self) -> Result<(HashMap<AccountAddress, Amount>, HashMap<AccountAddress, Amount>), RepoError> {
+        //getting all from transactions to without repeats
+        let mut from = HashMap::new();
+        for x in self.from.clone() {
+            let balance = from.entry(x.address).or_insert_with(Amount::default);
+            if let Some(new_balance) = balance.checked_add(x.value) {
+                *balance = new_balance;
+            } else {
+                return Err(ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => balance, x.value));
+            }
+        }
+
+        //getting all to transactions to without repeats
+        let mut to = HashMap::new();
+        for x in self.to.clone() {
+            let balance = from.entry(x.address).or_insert_with(Amount::default);
+            if let Some(new_balance) = balance.checked_add(x.value) {
+                *balance = new_balance;
+            } else {
+                return Err(ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => balance, x.value));
+            }
+        }
+
+        //sub balance `to` from `from`
+        for (address, value) in &to {
+            if let Some(from_balance) = from.get_mut(&address) {
+                if let Some(new_balance) = from_balance.checked_sub(*value) {
+                    *from_balance = new_balance;
+                } else {
+                    return Err(ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => from_balance, value));
+                }
+            }
+        }
+
+        //deleting `from` from `to`
+        for (address, _) in &from {
+            to.remove(&address);
+        }
+        Ok((from, to))
+    }
 }
 
 #[derive(Debug, Queryable, Clone)]
@@ -50,6 +96,21 @@ impl From<BlockchainTransaction> for NewBlockchainTransactionDB {
             value: transaction.value,
             fee: transaction.fee,
             confirmations: transaction.confirmations as i32,
+        }
+    }
+}
+
+impl From<BlockchainTransactionDB> for BlockchainTransaction {
+    fn from(transaction: BlockchainTransactionDB) -> Self {
+        Self {
+            hash: transaction.hash,
+            from: serde_json::from_value(transaction.from_).unwrap_or_default(),
+            to: serde_json::from_value(transaction.to_).unwrap_or_default(),
+            block_number: transaction.block_number as u64,
+            currency: transaction.currency,
+            value: transaction.value,
+            fee: transaction.fee,
+            confirmations: transaction.confirmations as usize,
         }
     }
 }

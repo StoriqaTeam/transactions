@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::error::*;
@@ -130,46 +129,8 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 return Ok(());
                             }
 
-                            //getting all from transactions to without repeats
-                            let mut from = HashMap::new();
-                            for x in blockchain_transaction.from.clone() {
-                                let balance = from.entry(x.address).or_insert_with(Amount::default);
-                                if let Some(new_balance) = balance.checked_add(x.value) {
-                                    *balance = new_balance;
-                                } else {
-                                    return Err(ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => balance, x.value));
-                                }
-                            }
-
-                            //getting all to transactions to without repeats
-                            let mut to = HashMap::new();
-                            for x in blockchain_transaction.to.clone() {
-                                let balance = from.entry(x.address).or_insert_with(Amount::default);
-                                if let Some(new_balance) = balance.checked_add(x.value) {
-                                    *balance = new_balance;
-                                } else {
-                                    return Err(ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => balance, x.value));
-                                }
-                            }
-
-                            //sub balance `to` from `from`
-                            for (address, value) in &to {
-                                if let Some(from_balance) = from.get_mut(&address) {
-                                    if let Some(new_balance) = from_balance.checked_sub(*value) {
-                                        *from_balance = new_balance;
-                                    } else {
-                                        return Err(
-                                            ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => from_balance, value),
-                                        );
-                                    }
-                                }
-                            }
-
-                            //deleting `from` from `to`
-                            for (address, _) in &from {
-                                to.remove(&address);
-                            }
-
+                            // unifying from and to
+                            let (from, to) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert))?;
                             // withdraw
                             if let Some(transaction) = transactions_repo.get_by_blockchain_tx(blockchain_transaction.hash.clone())? {
                                 // checking that `from` account exists in accounts but no `to` in accounts

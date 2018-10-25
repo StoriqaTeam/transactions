@@ -4,7 +4,6 @@ use futures::future::{self, Either};
 use futures::prelude::*;
 use futures::stream::iter_ok;
 use futures::IntoFuture;
-use serde_json;
 use validator::Validate;
 
 use super::auth::AuthService;
@@ -630,14 +629,16 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 {
                     let from = TransactionAddressInfo::new(None, pending_transaction.from_);
                     Ok(TransactionOut::new(&transaction, vec![from], vec![to]))
-                } else if let Some(blockchain_transaction) = blockchain_transactions_repo
+                } else if let Some(blockchain_transaction_db) = blockchain_transactions_repo
                     .get(hash.clone())
                     .map_err(ectx!(try convert => hash_clone2))?
                 {
-                    let hash_clone = hash.clone();
-                    let froms: Vec<AccountAddress> =
-                        serde_json::from_value(blockchain_transaction.from_).map_err(ectx!(try ErrorKind::Internal => hash_clone))?;
-                    let from = froms.into_iter().map(|from| TransactionAddressInfo::new(None, from)).collect();
+                    let blockchain_transaction: BlockchainTransaction = blockchain_transaction_db.into();
+                    let (froms, _) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash))?;
+                    let from = froms
+                        .into_iter()
+                        .map(|(address, _)| TransactionAddressInfo::new(None, address))
+                        .collect();
                     Ok(TransactionOut::new(&transaction, from, vec![to]))
                 } else {
                     return Err(ectx!(err ErrorContext::NoTransaction, ErrorKind::NotFound => hash_clone3));
@@ -658,14 +659,16 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 {
                     let to = TransactionAddressInfo::new(None, pending_transaction.to_);
                     Ok(TransactionOut::new(&transaction, vec![from], vec![to]))
-                } else if let Some(blockchain_transaction) = blockchain_transactions_repo
+                } else if let Some(blockchain_transaction_db) = blockchain_transactions_repo
                     .get(hash.clone())
                     .map_err(ectx!(try convert => hash_clone2))?
                 {
-                    let hash_clone = hash.clone();
-                    let to_s: Vec<AccountAddress> =
-                        serde_json::from_value(blockchain_transaction.to_).map_err(ectx!(try ErrorKind::Internal => hash_clone))?;
-                    let to = to_s.into_iter().map(|to| TransactionAddressInfo::new(None, to)).collect();
+                    let blockchain_transaction: BlockchainTransaction = blockchain_transaction_db.into();
+                    let (_, to_s) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash))?;
+                    let to = to_s
+                        .into_iter()
+                        .map(|(address, _)| TransactionAddressInfo::new(None, address))
+                        .collect();
                     Ok(TransactionOut::new(&transaction, vec![from], to))
                 } else {
                     return Err(ectx!(err ErrorContext::NoTransaction, ErrorKind::NotFound => hash_clone3));
