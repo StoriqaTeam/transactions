@@ -84,14 +84,27 @@ pub fn get_transactions(ctx: &Context, transaction_id: TransactionId) -> Control
 pub fn get_accounts_transactions(ctx: &Context, account_id: AccountId) -> ControllerFuture {
     let transactions_service = ctx.transactions_service.clone();
     let maybe_token = ctx.get_auth_token();
+    let path_and_query = ctx.uri.path_and_query();
+    let path_and_query_clone = ctx.uri.path_and_query();
     Box::new(
-        maybe_token
-            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
-            .into_future()
-            .and_then(move |token| {
-                transactions_service
-                    .get_account_transactions(token, account_id)
-                    .map_err(ectx!(convert))
+        ctx.uri
+            .query()
+            .ok_or(ectx!(err ErrorContext::RequestMissingQuery, ErrorKind::BadRequest => path_and_query))
+            .and_then(|query| {
+                serde_qs::from_str::<GetUsersTransactionsParams>(query).map_err(|e| {
+                    let e = format_err!("{}", e);
+                    ectx!(err e, ErrorContext::RequestQueryParams, ErrorKind::BadRequest => path_and_query_clone)
+                })
+            }).into_future()
+            .and_then(move |input| {
+                maybe_token
+                    .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
+                    .into_future()
+                    .and_then(move |token| {
+                        transactions_service
+                            .get_account_transactions(token, account_id, input.offset, input.limit)
+                            .map_err(ectx!(convert))
+                    })
             }).and_then(|transactions| {
                 let transactions: Vec<TransactionsResponse> = transactions.into_iter().map(From::from).collect();
                 response_with_model(&transactions)
