@@ -283,7 +283,7 @@ impl TransactionsRepo for TransactionsRepoMock {
                 }
             }).ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))
     }
-    fn list_for_account(&self, account_id: AccountId) -> RepoResult<Vec<Transaction>> {
+    fn list_for_account(&self, account_id: AccountId, _offset: i64, _limit: i64) -> RepoResult<Vec<Transaction>> {
         let data = self.data.lock().unwrap();
         Ok(data
             .clone()

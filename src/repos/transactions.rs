@@ -22,7 +22,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Transaction>;
     fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
-    fn list_for_account(&self, account_id: AccountId) -> RepoResult<Vec<Transaction>>;
+    fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<(Account, Amount)>>;
 }
 
@@ -117,10 +117,13 @@ impl TransactionsRepo for TransactionsRepoImpl {
             })
         })
     }
-    fn list_for_account(&self, account_id: AccountId) -> RepoResult<Vec<Transaction>> {
+    fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>> {
         with_tls_connection(|conn| {
             transactions
                 .filter(dr_account_id.eq(account_id).or(cr_account_id.eq(account_id)))
+                .order(created_at.desc())
+                .offset(offset)
+                .limit(limit)
                 .get_results(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
@@ -431,7 +434,7 @@ pub mod tests {
             trans.value = Amount::new(123);
 
             transactions_repo.create(trans)?;
-            let res = transactions_repo.list_for_account(acc1.id);
+            let res = transactions_repo.list_for_account(acc1.id, 0, 10);
             assert!(res.is_ok());
             res
         }));

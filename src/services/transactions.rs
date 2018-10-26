@@ -77,6 +77,8 @@ pub trait TransactionsService: Send + Sync + 'static {
         &self,
         token: AuthenticationToken,
         account_id: AccountId,
+        offset: i64,
+        limit: i64,
     ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
     fn create_transaction_ethereum(
         &self,
@@ -519,6 +521,8 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         &self,
         token: AuthenticationToken,
         account_id: AccountId,
+        offset: i64,
+        limit: i64,
     ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send> {
         let transactions_repo = self.transactions_repo.clone();
         let accounts_repo = self.accounts_repo.clone();
@@ -537,7 +541,9 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     } else {
                         return Err(ectx!(err ErrorContext::NoAccount, ErrorKind::NotFound => account_id));
                     }
-                    transactions_repo.list_for_account(account_id).map_err(ectx!(convert => account_id))
+                    transactions_repo
+                        .list_for_account(account_id, offset, limit)
+                        .map_err(ectx!(convert => account_id))
                 }).and_then(|transactions| {
                     iter_ok::<_, Error>(transactions).fold(vec![], move |mut transactions, transaction| {
                         service.convert_transaction(transaction).and_then(|res| {
@@ -825,7 +831,7 @@ mod tests {
         new_transaction.dr_account = dr_account;
 
         let transaction = core.run(trans_service.create_transaction_local(new_transaction)).unwrap();
-        let transaction = core.run(trans_service.get_account_transactions(token, transaction.cr_account_id));
+        let transaction = core.run(trans_service.get_account_transactions(token, transaction.cr_account_id, 0, 10));
         assert!(transaction.is_ok());
     }
     #[test]
