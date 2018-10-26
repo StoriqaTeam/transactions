@@ -151,7 +151,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
         with_tls_connection(|conn| {
             // get all cr accounts
             let cr_sum_accounts = sql_query(
-                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = '?' AND user_id = ? GROUP BY cr_account_id")
+                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 AND user_id = $2 GROUP BY cr_account_id")
                 .bind::<VarChar, _>(currency_)
                 .bind::<SqlUuid, _>(user_id_)
                 .get_results(conn)
@@ -168,7 +168,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
             // get all dr accounts
             let dr_sum_accounts: Vec<TransactionSum> =
                 sql_query(
-                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE currency = '?' AND user_id = ? GROUP BY dr_account_id")
+                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE currency = $1 AND user_id = $2 GROUP BY dr_account_id")
                     .bind::<VarChar, _>(currency_)
                     .bind::<SqlUuid, _>(user_id_)
                     .get_results(conn)
