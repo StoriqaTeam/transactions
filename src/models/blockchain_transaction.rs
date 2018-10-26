@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::time::SystemTime;
 
@@ -11,17 +11,23 @@ use schema::blockchain_transactions;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct BlockchainTransactionEntry {
+pub struct BlockchainTransactionEntryTo {
     pub address: AccountAddress,
     pub value: Amount,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct BlockchainTransactionEntryFrom {
+    pub address: AccountAddress,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct BlockchainTransaction {
     pub hash: BlockchainTransactionId,
-    pub from: Vec<BlockchainTransactionEntry>,
-    pub to: Vec<BlockchainTransactionEntry>,
+    pub from: Vec<BlockchainTransactionEntryFrom>,
+    pub to: Vec<BlockchainTransactionEntryTo>,
     pub block_number: u64,
     pub currency: Currency,
     pub value: Amount,
@@ -30,17 +36,9 @@ pub struct BlockchainTransaction {
 }
 
 impl BlockchainTransaction {
-    pub fn unify_from_to(&self) -> Result<(HashMap<AccountAddress, Amount>, HashMap<AccountAddress, Amount>), RepoError> {
+    pub fn unify_from_to(&self) -> Result<(HashSet<AccountAddress>, HashMap<AccountAddress, Amount>), RepoError> {
         //getting all from transactions to without repeats
-        let mut from = HashMap::new();
-        for x in self.from.clone() {
-            let balance = from.entry(x.address).or_insert_with(Amount::default);
-            if let Some(new_balance) = balance.checked_add(x.value) {
-                *balance = new_balance;
-            } else {
-                return Err(ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => balance, x.value));
-            }
-        }
+        let from: HashSet<AccountAddress> = self.from.clone().into_iter().map(|x| x.address).collect();
 
         //getting all to transactions to without repeats
         let mut to = HashMap::new();
@@ -53,19 +51,8 @@ impl BlockchainTransaction {
             }
         }
 
-        //sub balance `to` from `from`
-        for (address, value) in &to {
-            if let Some(from_balance) = from.get_mut(&address) {
-                if let Some(new_balance) = from_balance.checked_sub(*value) {
-                    *from_balance = new_balance;
-                } else {
-                    return Err(ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => from_balance, value));
-                }
-            }
-        }
-
         //deleting `from` from `to`
-        for (address, _) in &from {
+        for address in &from {
             to.remove(&address);
         }
         Ok((from, to))

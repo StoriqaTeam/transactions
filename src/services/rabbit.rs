@@ -141,25 +141,12 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                         .is_none()
                                 }
 
-                                // checking that `from` value is equal to our transaction value
-                                let mut values_are_equal = true;
-                                for (address, value) in from {
-                                    if accounts_repo
-                                        .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Dr)?
-                                        .is_some() {
-                                            values_are_equal = value == transaction.value;
-                                        }
-                                }
                                 if accounts_repo.get(transaction.dr_account_id)?.is_none() {
                                     let comment = format!("Withdraw transaction dr account {} does not exists.", transaction.dr_account_id);
                                     let new_strange = (blockchain_transaction.clone(), comment).into();
                                     strange_blockchain_transactions_repo.create(new_strange)?;
                                 } else if !to_not_exists {
                                     let comment = "Withdraw transaction contains our account in `to` field.".to_string();
-                                    let new_strange = (blockchain_transaction.clone(), comment).into();
-                                    strange_blockchain_transactions_repo.create(new_strange)?;
-                                } else if !values_are_equal {
-                                    let comment = "Withdraw transaction value and value in our transaction are not equal.".to_string();
                                     let new_strange = (blockchain_transaction.clone(), comment).into();
                                     strange_blockchain_transactions_repo.create(new_strange)?;
                                 } else if transaction.status == TransactionStatus::Done {
@@ -173,7 +160,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                             } else {
                                 // checking that `from` accounts not exist
                                 let mut from_not_exists = true;
-                                for (address, _) in from {
+                                for address in from {
                                     from_not_exists &= accounts_repo
                                         .get_by_address(address.clone(), blockchain_transaction.currency, AccountKind::Cr)?
                                         .is_none()

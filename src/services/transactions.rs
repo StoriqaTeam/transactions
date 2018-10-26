@@ -618,7 +618,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
             if cr_account.kind == AccountKind::Cr && dr_account.kind == AccountKind::Cr {
                 let from = TransactionAddressInfo::new(Some(dr_account.id), dr_account.address);
                 let to = TransactionAddressInfo::new(Some(cr_account.id), cr_account.address);
-                Ok(TransactionOut::new(&transaction, vec![from], vec![to]))
+                Ok(TransactionOut::new(&transaction, vec![from], to))
             } else if cr_account.kind == AccountKind::Cr && dr_account.kind == AccountKind::Dr {
                 let hash = transaction
                     .blockchain_tx_id
@@ -634,7 +634,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     .map_err(ectx!(try convert => hash_clone))?
                 {
                     let from = TransactionAddressInfo::new(None, pending_transaction.from_);
-                    Ok(TransactionOut::new(&transaction, vec![from], vec![to]))
+                    Ok(TransactionOut::new(&transaction, vec![from], to))
                 } else if let Some(blockchain_transaction_db) = blockchain_transactions_repo
                     .get(hash.clone())
                     .map_err(ectx!(try convert => hash_clone2))?
@@ -643,9 +643,9 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     let (froms, _) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash))?;
                     let from = froms
                         .into_iter()
-                        .map(|(address, _)| TransactionAddressInfo::new(None, address))
+                        .map(|address| TransactionAddressInfo::new(None, address))
                         .collect();
-                    Ok(TransactionOut::new(&transaction, from, vec![to]))
+                    Ok(TransactionOut::new(&transaction, from, to))
                 } else {
                     return Err(ectx!(err ErrorContext::NoTransaction, ErrorKind::NotFound => hash_clone3));
                 }
@@ -664,17 +664,19 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     .map_err(ectx!(try convert => hash_clone))?
                 {
                     let to = TransactionAddressInfo::new(None, pending_transaction.to_);
-                    Ok(TransactionOut::new(&transaction, vec![from], vec![to]))
+                    Ok(TransactionOut::new(&transaction, vec![from], to))
                 } else if let Some(blockchain_transaction_db) = blockchain_transactions_repo
                     .get(hash.clone())
                     .map_err(ectx!(try convert => hash_clone2))?
                 {
+                    let hash_clone4 = hash.clone();
                     let blockchain_transaction: BlockchainTransaction = blockchain_transaction_db.into();
-                    let (_, to_s) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash))?;
+                    let (_, to_s) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash_clone4))?;
                     let to = to_s
                         .into_iter()
                         .map(|(address, _)| TransactionAddressInfo::new(None, address))
-                        .collect();
+                        .nth(0);
+                    let to = to.ok_or_else(|| ectx!(try err ErrorContext::NoTransaction, ErrorKind::NotFound => hash))?;
                     Ok(TransactionOut::new(&transaction, vec![from], to))
                 } else {
                     return Err(ectx!(err ErrorContext::NoTransaction, ErrorKind::NotFound => hash_clone3));
