@@ -60,6 +60,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 .and_then(move |blockchain_transaction: BlockchainTransaction| {
                     db_executor
                         .execute_transaction(move || -> Result<(), RepoError> {
+                            let total_value = blockchain_transaction.to.iter().try_fold(Amount::default(),|acc, x| {
+                                acc.checked_add(x.value).ok_or_else(|| ectx!(err RepoErrorContex::BalanceOverflow, RepoErrorKind::Internal => x.value)) as Result<Amount, RepoError>
+                            })?;
                             let enough_confirms = match blockchain_transaction.currency {
                                 // # Ethereum
                                 // < $20 / $200 - 0 conf
@@ -71,7 +74,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $3000 / $200 - 6 conf
                                 // < $5000 / $200 - 8 conf
                                 // > $5000 / $200 - 12 conf
-                                Currency::Stq => match blockchain_transaction.value.raw() {
+                                Currency::Stq => match total_value.raw() {
                                     x if x < (((20f64 / STQ_PRICE) as u128) * WEI) => 0,
                                     x if x < (((50f64 / STQ_PRICE) as u128) * WEI) => 1,
                                     x if x < (((200f64 / STQ_PRICE) as u128) * WEI) => 2,
@@ -92,7 +95,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $3000 / $200 - 6 conf
                                 // < $5000 / $200 - 8 conf
                                 // > $5000 / $200 - 12 conf
-                                Currency::Eth => match blockchain_transaction.value.raw() {
+                                Currency::Eth => match total_value.raw() {
                                     x if x < (20 * WEI / ETHERIUM_PRICE) => 0,
                                     x if x < (50 * WEI / ETHERIUM_PRICE) => 1,
                                     x if x < (200 * WEI / ETHERIUM_PRICE) => 2,
@@ -108,7 +111,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 // < $500 / $6400 - 1 conf
                                 // < $1000 / $6400 - 2 conf
                                 // > $1000 / $6400 - 3 conf
-                                Currency::Btc => match blockchain_transaction.value.raw() {
+                                Currency::Btc => match total_value.raw() {
                                     x if x < (100 * SATOSHI / BITCOIN_PRICE) => 0,
                                     x if x < (500 * SATOSHI / BITCOIN_PRICE) => 1,
                                     x if x < (1000 * SATOSHI / BITCOIN_PRICE) => 2,

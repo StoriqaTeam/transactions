@@ -362,7 +362,6 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoMock {
             from_: payload.from_,
             to_: payload.to_,
             currency: payload.currency,
-            value: payload.value,
             fee: payload.fee,
             block_number: payload.block_number,
             confirmations: payload.confirmations,

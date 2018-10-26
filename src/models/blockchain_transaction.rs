@@ -24,7 +24,6 @@ pub struct BlockchainTransaction {
     pub to: Vec<BlockchainTransactionEntryTo>,
     pub block_number: u64,
     pub currency: Currency,
-    pub value: Amount,
     pub fee: Amount,
     pub confirmations: usize,
 }
@@ -58,7 +57,6 @@ pub struct BlockchainTransactionDB {
     pub hash: BlockchainTransactionId,
     pub block_number: i64,
     pub currency: Currency,
-    pub value: Amount,
     pub fee: Amount,
     pub confirmations: i32,
     pub created_at: SystemTime,
@@ -81,7 +79,6 @@ impl From<BlockchainTransaction> for NewBlockchainTransactionDB {
             to_,
             block_number: transaction.block_number as i64,
             currency: transaction.currency,
-            value: transaction.value,
             fee: transaction.fee,
             confirmations: transaction.confirmations as i32,
         }
@@ -96,7 +93,6 @@ impl From<BlockchainTransactionDB> for BlockchainTransaction {
             to: serde_json::from_value(transaction.to_).unwrap_or_default(),
             block_number: transaction.block_number as u64,
             currency: transaction.currency,
-            value: transaction.value,
             fee: transaction.fee,
             confirmations: transaction.confirmations as usize,
         }
@@ -111,7 +107,6 @@ pub struct NewBlockchainTransactionDB {
     pub to_: serde_json::Value,
     pub block_number: i64,
     pub currency: Currency,
-    pub value: Amount,
     pub fee: Amount,
     pub confirmations: i32,
 }
@@ -124,7 +119,6 @@ impl Default for NewBlockchainTransactionDB {
             to_: serde_json::Value::Array(vec![]),
             block_number: 0,
             currency: Currency::Eth,
-            value: Amount::default(),
             fee: Amount::default(),
             confirmations: 0,
         }
