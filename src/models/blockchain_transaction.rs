@@ -71,7 +71,7 @@ impl From<BlockchainTransaction> for NewBlockchainTransactionDB {
         // This hack works, but you need to set arbitrary_precision feature for serde_json
         let from_str = serde_json::to_string(&transaction.from).unwrap();
         let from_ = serde_json::value::Value::from_str(&from_str).unwrap();
-        let to_str = serde_json::to_string(&transaction.from).unwrap();
+        let to_str = serde_json::to_string(&transaction.to).unwrap();
         let to_ = serde_json::value::Value::from_str(&to_str).unwrap();
         Self {
             hash: transaction.hash,
