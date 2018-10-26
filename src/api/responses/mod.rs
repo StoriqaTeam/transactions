@@ -88,7 +88,7 @@ impl From<Vec<Balance>> for BalancesResponse {
 pub struct TransactionsResponse {
     pub id: TransactionId,
     pub from: Vec<TransactionAddressInfo>,
-    pub to: Vec<TransactionAddressInfo>,
+    pub to: TransactionAddressInfo,
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,

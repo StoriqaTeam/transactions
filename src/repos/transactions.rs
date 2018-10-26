@@ -121,6 +121,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
         with_tls_connection(|conn| {
             transactions
                 .filter(dr_account_id.eq(account_id).or(cr_account_id.eq(account_id)))
+                .order(created_at.desc())
                 .get_results(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
