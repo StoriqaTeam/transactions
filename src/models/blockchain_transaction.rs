@@ -18,15 +18,9 @@ pub struct BlockchainTransactionEntryTo {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct BlockchainTransactionEntryFrom {
-    pub address: AccountAddress,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct BlockchainTransaction {
     pub hash: BlockchainTransactionId,
-    pub from: Vec<BlockchainTransactionEntryFrom>,
+    pub from: Vec<AccountAddress>,
     pub to: Vec<BlockchainTransactionEntryTo>,
     pub block_number: u64,
     pub currency: Currency,
@@ -38,7 +32,7 @@ pub struct BlockchainTransaction {
 impl BlockchainTransaction {
     pub fn unify_from_to(&self) -> Result<(HashSet<AccountAddress>, HashMap<AccountAddress, Amount>), RepoError> {
         //getting all from transactions to without repeats
-        let from: HashSet<AccountAddress> = self.from.clone().into_iter().map(|x| x.address).collect();
+        let from: HashSet<AccountAddress> = self.from.clone().into_iter().collect();
 
         //getting all to transactions to without repeats
         let mut to = HashMap::new();
