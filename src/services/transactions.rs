@@ -299,17 +299,17 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let db_executor = self.db_executor.clone();
         let keys_client = self.keys_client.clone();
         let blockchain_client = self.blockchain_client.clone();
-        let addres_clone = address.clone();
         let cr_account_id = cr_acc.id;
+        let cr_account_address = cr_acc.address.clone();
 
         Box::new(
             blockchain_client
-                .get_bitcoin_utxos(address.clone())
-                .map_err(ectx!(convert => addres_clone))
+                .get_bitcoin_utxos(cr_account_address.clone())
+                .map_err(ectx!(convert => cr_account_address))
                 .and_then(move |utxos| {
                     // creating blockchain transactions array
                     let create_blockchain_input =
-                        CreateBlockchainTx::new(address, cr_acc.address, Currency::Btc, value, fee, None, Some(utxos));
+                        CreateBlockchainTx::new(cr_acc.address, address, Currency::Btc, value, fee, None, Some(utxos));
 
                     let create_blockchain = create_blockchain_input.clone();
                     keys_client
@@ -366,16 +366,16 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let db_executor = self.db_executor.clone();
         let keys_client = self.keys_client.clone();
         let blockchain_client = self.blockchain_client.clone();
-        let addres_clone = address.clone();
         let cr_account_id = cr_acc.id;
+        let cr_account_address = cr_acc.address.clone();
 
         Box::new(
             blockchain_client
-                .get_ethereum_nonce(address.clone())
-                .map_err(ectx!(convert => addres_clone))
+                .get_ethereum_nonce(cr_account_address.clone())
+                .map_err(ectx!(convert => cr_account_address))
                 .and_then(move |nonce| {
                     // creating blockchain transactions array
-                    let create_blockchain_input = CreateBlockchainTx::new(address, cr_acc.address, currency, value, fee, Some(nonce), None);
+                    let create_blockchain_input = CreateBlockchainTx::new(cr_acc.address, address, currency, value, fee, Some(nonce), None);
 
                     let create_blockchain = create_blockchain_input.clone();
                     keys_client

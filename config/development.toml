@@ -4,8 +4,8 @@ port = 8010
 
 [client]
 dns_threads = 4
-keys_url = "https://keys.stq.cloud"
-blockchain_url = "https://blockchain.stq.cloud"
+keys_url = "http://keystore:8000/v1"
+blockchain_url = "http://blockchain-gateway:8000/v1"
 
 [database]
 url = "postgresql://transactions:transactions@postgres:5432/transactions"
@@ -14,8 +14,8 @@ url = "postgresql://transactions:transactions@postgres:5432/transactions"
 size = 1
 
 [auth]
-keys_token = "MIIBCgKCAQEAt3TQPCbcWM/Fba2s6V/WRuQv8SlEQp4F56fSY4LQ+yW2xY3f2fLOw/SurObHMQF7QpnQ7x/2zhGqe11Ad0MHbWG+OARR/B/76X8QhA3xEneZpgc8aykagl0Tr616tazEKr0JxGuUo3qHy+e/dqSQ9T04EjGqccfr3+gfmVZlzml2/kN2EmaFa28Q8NseY5a2TVL9XcEDHHpGHVpoRQI8ibfa92i2Lwo7E33Iz8hpbp+GgeyReua2z341nxSNqk0VSYa6KtNUk03G5YYmsrsoE+ECC69GAD07R4YcGqF4NRKSA0T3L8jY8rVbl5HUCIFuZynZEHWWpFvyMYW+9ffMfwIDAQAB"
-keys_user_id = "d214c8e0-5e70-4723-b9a6-bc9196adbbb4"
+keys_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
+keys_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
 
 [rabbit]
 url = "amqp://guest:guest@localhost:5672//?heartbeat=3&frame_max=131072"

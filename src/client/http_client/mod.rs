@@ -14,6 +14,7 @@ use utils::read_body;
 
 pub trait HttpClient: Send + Sync + 'static {
     fn request(&self, req: Request<Body>) -> Box<Future<Item = Response<Body>, Error = Error> + Send>;
+    fn get(&self, uri: String) -> Box<Future<Item = Response<Body>, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -83,5 +84,29 @@ impl HttpClient for HttpClientImpl {
                 Ok(resp)
             }
         }))
+    }
+    fn get(&self, uri: String) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
+        let cli = self.cli.clone();
+        Box::new(
+            uri.clone().parse()
+                .map_err(|_| ectx!(err ErrorSource::Hyper, ErrorKind::Internal => uri))
+                .into_future()
+                .and_then(move |uri| cli.get(uri).map_err(|_| ectx!(err ErrorSource::Hyper, ErrorKind::Internal)))
+                .and_then(|resp| {
+                    if resp.status().is_client_error() || resp.status().is_server_error() {
+                        match resp.status().as_u16() {
+                            400 => Err(ectx!(err ErrorSource::Server, ErrorKind::BadRequest)),
+                            401 => Err(ectx!(err ErrorSource::Server, ErrorKind::Unauthorized)),
+                            404 => Err(ectx!(err ErrorSource::Server, ErrorKind::NotFound)),
+                            500 => Err(ectx!(err ErrorSource::Server, ErrorKind::Internal)),
+                            502 => Err(ectx!(err ErrorSource::Server, ErrorKind::BadGateway)),
+                            504 => Err(ectx!(err ErrorSource::Server, ErrorKind::GatewayTimeout)),
+                            _ => Err(ectx!(err ErrorSource::Server, ErrorKind::UnknownServerError)),
+                        }
+                    } else {
+                        Ok(resp)
+                    }
+                }),
+        )
     }
 }
