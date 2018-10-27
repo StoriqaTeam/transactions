@@ -252,9 +252,9 @@ impl TransactionsRepo for TransactionsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id).collect())
     }
-    fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount> {
+    fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount> {
         let data = self.data.lock().unwrap();
-        let sum_cr = data
+        let cr_sum = data
             .clone()
             .iter()
             .fold(Some(Amount::default()), |acc: Option<Amount>, x: &Transaction| {
@@ -269,19 +269,28 @@ impl TransactionsRepo for TransactionsRepoMock {
                 }
             }).ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
 
-        data.clone()
+        let dr_sum = data
+            .clone()
             .iter()
-            .fold(Some(sum_cr), |acc: Option<Amount>, x: &Transaction| {
+            .fold(Some(Amount::default()), |acc: Option<Amount>, x: &Transaction| {
                 if let Some(acc) = acc {
                     if x.dr_account_id == account_id {
-                        acc.checked_sub(x.value)
+                        acc.checked_add(x.value)
                     } else {
                         Some(acc)
                     }
                 } else {
                     None
                 }
-            }).ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))
+            }).ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
+        match kind {
+            AccountKind::Cr => cr_sum
+                .checked_sub(dr_sum)
+                .ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id)),
+            AccountKind::Dr => dr_sum
+                .checked_sub(cr_sum)
+                .ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id)),
+        }
     }
     fn list_for_account(&self, account_id: AccountId, _offset: i64, _limit: i64) -> RepoResult<Vec<Transaction>> {
         let data = self.data.lock().unwrap();

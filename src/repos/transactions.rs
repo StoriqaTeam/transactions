@@ -20,7 +20,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn update_status(&self, blockchain_tx_id: BlockchainTransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction>;
     fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>>;
     fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Transaction>;
-    fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount>;
+    fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<(Account, Amount)>>;
@@ -79,7 +79,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
-    fn get_account_balance(&self, account_id: AccountId) -> RepoResult<Amount> {
+    fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount> {
         with_tls_connection(|conn| {
             let cr_sum: Option<Amount> = transactions
                 .filter(cr_account_id.eq(account_id))
@@ -103,9 +103,14 @@ impl TransactionsRepo for TransactionsRepoImpl {
             //sum will return null if there are no rows in select statement returned
             let dr_sum = dr_sum.unwrap_or_default();
 
-            cr_sum
-                .checked_sub(dr_sum)
-                .ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))
+            match kind {
+                AccountKind::Cr => cr_sum
+                    .checked_sub(dr_sum)
+                    .ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id)),
+                AccountKind::Dr => dr_sum
+                    .checked_sub(cr_sum)
+                    .ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id)),
+            }
         })
     }
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>> {
@@ -149,22 +154,6 @@ impl TransactionsRepo for TransactionsRepoImpl {
     }
     fn get_with_enough_value(&self, mut value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<(Account, Amount)>> {
         with_tls_connection(|conn| {
-            // get all cr accounts
-            let cr_sum_accounts = sql_query(
-                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 AND user_id = $2 GROUP BY cr_account_id")
-                .bind::<VarChar, _>(currency_)
-                .bind::<SqlUuid, _>(user_id_)
-                .get_results(conn)
-                .map_err(move |e| {
-                    let error_kind = ErrorKind::from(&e);
-                    ectx!(try err e, error_kind)
-                })?;
-
-            let mut cr_sum_accounts = cr_sum_accounts
-                .into_iter()
-                .map(|r: TransactionSum| (r.account_id, r.sum))
-                .collect::<HashMap<AccountId, Amount>>();
-
             // get all dr accounts
             let dr_sum_accounts: Vec<TransactionSum> =
                 sql_query(
@@ -176,16 +165,38 @@ impl TransactionsRepo for TransactionsRepoImpl {
                         let error_kind = ErrorKind::from(&e);
                         ectx!(try err e, error_kind)
                     })?;
+            let mut dr_sum_accounts = dr_sum_accounts
+                .into_iter()
+                .map(|r: TransactionSum| (r.account_id, r.sum))
+                .collect::<HashMap<AccountId, Amount>>();
 
-            // get accounts balance
-            for tr in dr_sum_accounts {
-                if let Some(cr_sum) = cr_sum_accounts.get_mut(&tr.account_id) {
-                    *cr_sum = cr_sum.checked_sub(tr.sum).unwrap_or_default();
-                }
+            for (acc_id, _) in &dr_sum_accounts {
+                info!("cr_sum_acc id = {}", acc_id);
             }
 
+            // get all cr accounts
+            let cr_sum_accounts: Vec<TransactionSum> = sql_query(
+                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 AND user_id = $2 GROUP BY cr_account_id")
+                .bind::<VarChar, _>(currency_)
+                .bind::<SqlUuid, _>(user_id_)
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(try err e, error_kind)
+                })?;
+
+            // get accounts balance
+            for tr in cr_sum_accounts {
+                if let Some(dr_sum) = dr_sum_accounts.get_mut(&tr.account_id) {
+                    *dr_sum = dr_sum.checked_sub(tr.sum).unwrap_or_default();
+                }
+            }
+            info!("cr_sum_accounts after sub = {:#?}", dr_sum_accounts);
+
             // filtering accounts with empty balance
-            let mut remaining_accounts: HashMap<AccountId, Amount> = cr_sum_accounts.into_iter().filter(|(_, sum)| sum.raw() > 0).collect();
+            let mut remaining_accounts: HashMap<AccountId, Amount> = dr_sum_accounts.into_iter().filter(|(_, sum)| sum.raw() > 0).collect();
+
+            info!("remaining_accounts = {:#?}", remaining_accounts);
 
             // filtering accounts with pending transactions
             let pending_accounts: Vec<Transaction> = transactions
@@ -198,12 +209,18 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     ectx!(try err e, error_kind => value_, currency_, user_id_)
                 })?;
 
+            info!("pending_accounts = {:#?}", pending_accounts);
+
             for acc in pending_accounts {
                 remaining_accounts.remove(&acc.cr_account_id);
                 remaining_accounts.remove(&acc.dr_account_id);
             }
 
+            info!("remaining_accounts after remove pending= {:#?}", remaining_accounts);
+
             let res_account_ids: Vec<AccountId> = remaining_accounts.keys().cloned().collect();
+
+            info!("res_account_ids = {:#?}", res_account_ids);
 
             // filtering accounts only DR
             let res_accounts: Vec<Account> = Accounts::accounts
@@ -215,12 +232,16 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     ectx!(try err e, error_kind)
                 })?;
 
+            info!("res_accounts = {:#?}", res_accounts);
+
             let res_accounts: Vec<(Account, Amount)> = res_accounts
                 .into_iter()
                 .map(|acc| {
                     let balance = remaining_accounts.get(&acc.id).cloned().unwrap_or_default();
                     (acc, balance)
                 }).collect();
+
+            info!("res_accounts + balance = {:#?}", res_accounts);
 
             // calculating accounts to take
             let mut r = vec![];
@@ -234,6 +255,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     }
                 }
             }
+            info!("result = {:#?}", r);
 
             Ok(r)
         })
@@ -405,7 +427,7 @@ pub mod tests {
             trans.value = Amount::new(123);
 
             transactions_repo.create(trans)?;
-            let res = transactions_repo.get_account_balance(acc1.id);
+            let res = transactions_repo.get_account_balance(acc1.id, AccountKind::Cr);
             assert!(res.is_ok());
             res
         }));
