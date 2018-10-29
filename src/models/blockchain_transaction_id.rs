@@ -1,3 +1,5 @@
+use std::fmt::{self, Display};
+
 use diesel::sql_types::Varchar;
 use uuid::Uuid;
 
@@ -19,5 +21,11 @@ impl BlockchainTransactionId {
 impl Default for BlockchainTransactionId {
     fn default() -> Self {
         BlockchainTransactionId(Uuid::new_v4().to_string())
+    }
+}
+
+impl Display for BlockchainTransactionId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&self.0)
     }
 }

@@ -122,6 +122,23 @@ pipeline:
       branch: master
       event: push
 
+  deploy2prod:
+    image: appleboy/drone-ssh
+    host: jumpbox.pay.stq.cloud
+    command_timeout: 180
+    script: |
+      ansible-playbook \
+      -i ~/payments-infra/ansible/hosts-production.yml \
+      --tags gateway \
+      --extra-vars "pay_trx_tag=${DRONE_TAG}" \
+      ~/payments-infra/ansible/docker.yml
+    secrets:
+    - ssh_username
+    - ssh_key
+    when:
+      event: deployment
+      environment: production
+
 ###
 # Notifications and post deploy ops
 ###

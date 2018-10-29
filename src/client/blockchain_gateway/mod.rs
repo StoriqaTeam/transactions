@@ -92,7 +92,7 @@ impl BlockchainClient for BlockchainClientImpl {
         raw: BlockchainTransactionRaw,
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         let client = self.clone();
-        let transaction = CreateBlockchainTxRequest {raw};
+        let transaction = CreateBlockchainTxRequest { raw };
         Box::new(
             serde_json::to_string(&transaction)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => transaction))
@@ -101,12 +101,9 @@ impl BlockchainClient for BlockchainClientImpl {
                 .map(|resp| resp.tx_hash),
         )
     }
-    fn post_bitcoin_transaction(
-        &self,
-        raw: BlockchainTransactionRaw,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
+    fn post_bitcoin_transaction(&self, raw: BlockchainTransactionRaw) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         let client = self.clone();
-        let transaction = CreateBlockchainTxRequest {raw};
+        let transaction = CreateBlockchainTxRequest { raw };
         Box::new(
             serde_json::to_string(&transaction)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => transaction))
@@ -117,7 +114,7 @@ impl BlockchainClient for BlockchainClientImpl {
     }
     fn get_bitcoin_utxos(&self, address: AccountAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send> {
         let url = format!("/bitcoin/{}/utxos", address);
-        Box::new(self.exec_query_get::<GetBitcoinUtxosResponse>(&url).map(|resp| resp.utxos))
+        Box::new(self.exec_query_get::<Vec<BitcoinUtxos>>(&url))
     }
     fn get_ethereum_nonce(&self, address: AccountAddress) -> Box<Future<Item = u64, Error = Error> + Send> {
         let url = format!("/ethereum/{}/nonce", address);

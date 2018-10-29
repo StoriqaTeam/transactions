@@ -170,10 +170,6 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 .map(|r: TransactionSum| (r.account_id, r.sum))
                 .collect::<HashMap<AccountId, Amount>>();
 
-            for (acc_id, _) in &dr_sum_accounts {
-                info!("cr_sum_acc id = {}", acc_id);
-            }
-
             // get all cr accounts
             let cr_sum_accounts: Vec<TransactionSum> = sql_query(
                 "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 AND user_id = $2 GROUP BY cr_account_id")
@@ -191,12 +187,9 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     *dr_sum = dr_sum.checked_sub(tr.sum).unwrap_or_default();
                 }
             }
-            info!("cr_sum_accounts after sub = {:#?}", dr_sum_accounts);
 
             // filtering accounts with empty balance
             let mut remaining_accounts: HashMap<AccountId, Amount> = dr_sum_accounts.into_iter().filter(|(_, sum)| sum.raw() > 0).collect();
-
-            info!("remaining_accounts = {:#?}", remaining_accounts);
 
             // filtering accounts with pending transactions
             let pending_accounts: Vec<Transaction> = transactions
@@ -209,18 +202,12 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     ectx!(try err e, error_kind => value_, currency_, user_id_)
                 })?;
 
-            info!("pending_accounts = {:#?}", pending_accounts);
-
             for acc in pending_accounts {
                 remaining_accounts.remove(&acc.cr_account_id);
                 remaining_accounts.remove(&acc.dr_account_id);
             }
 
-            info!("remaining_accounts after remove pending= {:#?}", remaining_accounts);
-
             let res_account_ids: Vec<AccountId> = remaining_accounts.keys().cloned().collect();
-
-            info!("res_account_ids = {:#?}", res_account_ids);
 
             // filtering accounts only DR
             let res_accounts: Vec<Account> = Accounts::accounts
@@ -232,16 +219,12 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     ectx!(try err e, error_kind)
                 })?;
 
-            info!("res_accounts = {:#?}", res_accounts);
-
             let res_accounts: Vec<(Account, Amount)> = res_accounts
                 .into_iter()
                 .map(|acc| {
                     let balance = remaining_accounts.get(&acc.id).cloned().unwrap_or_default();
                     (acc, balance)
                 }).collect();
-
-            info!("res_accounts + balance = {:#?}", res_accounts);
 
             // calculating accounts to take
             let mut r = vec![];
@@ -255,7 +238,6 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     }
                 }
             }
-            info!("result = {:#?}", r);
 
             Ok(r)
         })

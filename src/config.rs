@@ -13,6 +13,7 @@ pub struct Config {
     pub cpu_pool: CpuPool,
     pub rabbit: Rabbit,
     pub auth: Auth,
+    pub fee_price: FeePrice,
     pub sentry: Option<SentryConfig>,
 }
 
@@ -27,6 +28,12 @@ pub struct Client {
 pub struct Server {
     pub host: String,
     pub port: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct FeePrice {
+    pub bitcoin: u64,
+    pub ethereum: u64,
 }
 
 #[derive(Debug, Deserialize, Clone)]

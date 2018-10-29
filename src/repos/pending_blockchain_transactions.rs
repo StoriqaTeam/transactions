@@ -10,6 +10,7 @@ use schema::pending_blockchain_transactions::dsl::*;
 pub trait PendingBlockchainTransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewPendingBlockchainTransactionDB) -> RepoResult<PendingBlockchainTransactionDB>;
     fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<PendingBlockchainTransactionDB>>;
+    fn delete(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<PendingBlockchainTransactionDB>>;
 }
 
 #[derive(Clone, Default)]
@@ -38,6 +39,15 @@ impl PendingBlockchainTransactionsRepo for PendingBlockchainTransactionsRepoImpl
                     let error_kind = ErrorKind::from(&e);
                     ectx!(err e, error_kind => hash_)
                 })
+        })
+    }
+    fn delete(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<PendingBlockchainTransactionDB>> {
+        with_tls_connection(|conn| {
+            let filtered = pending_blockchain_transactions.filter(hash.eq(hash_.clone()));
+            diesel::delete(filtered).get_result(conn).optional().map_err(move |e| {
+                let error_kind = ErrorKind::from(&e);
+                ectx!(err e, error_kind => hash_)
+            })
         })
     }
 }
@@ -84,6 +94,20 @@ pub mod tests {
             let trans = NewPendingBlockchainTransactionDB::default();
             let transaction = pending_blockchain_transactions_repo.create(trans)?;
             let res = pending_blockchain_transactions_repo.get(transaction.hash);
+            assert!(res.is_ok());
+            res
+        }));
+    }
+
+    #[test]
+    fn pending_blockchain_transactions_delete() {
+        let mut core = Core::new().unwrap();
+        let db_executor = create_executor();
+        let pending_blockchain_transactions_repo = PendingBlockchainTransactionsRepoImpl::default();
+        let _ = core.run(db_executor.execute_test_transaction(move || {
+            let trans = NewPendingBlockchainTransactionDB::default();
+            let transaction = pending_blockchain_transactions_repo.create(trans)?;
+            let res = pending_blockchain_transactions_repo.delete(transaction.hash);
             assert!(res.is_ok());
             res
         }));
