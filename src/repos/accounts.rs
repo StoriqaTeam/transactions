@@ -16,8 +16,6 @@ pub trait AccountsRepo: Send + Sync + 'static {
     fn delete(&self, account_id: AccountId) -> RepoResult<Account>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Account>>;
     fn get_balance_for_user(&self, user_id: UserId) -> RepoResult<Vec<Balance>>;
-    fn inc_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
-    fn dec_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
     fn get_by_address(&self, address_: AccountAddress, currency: Currency, kind_: AccountKind) -> RepoResult<Option<Account>>;
     fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<(Account, Amount)>>;
 }
@@ -99,40 +97,6 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
                 .map(|(currency_, balance_)| Balance::new(currency_, balance_))
                 .collect();
             Ok(balances)
-        })
-    }
-    fn inc_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account> {
-        with_tls_connection(|conn| {
-            let query = accounts.filter(id.eq(account_id));
-            let account: Account = query.get_result(conn).map_err(move |e| {
-                let error_kind = ErrorKind::from(&e);
-                ectx!(try err e, error_kind => account_id)
-            })?;
-            let new_balance_ = amount.checked_add(account.balance);
-            let new_balance_ =
-                new_balance_.ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => amount, account.balance))?;
-            let f = accounts.filter(id.eq(account_id));
-            diesel::update(f).set(balance.eq(new_balance_)).get_result(conn).map_err(move |e| {
-                let error_kind = ErrorKind::from(&e);
-                ectx!(err e, error_kind => account_id, amount)
-            })
-        })
-    }
-    fn dec_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account> {
-        with_tls_connection(|conn| {
-            let query = accounts.filter(id.eq(account_id));
-            let account: Account = query.get_result(conn).map_err(move |e| {
-                let error_kind = ErrorKind::from(&e);
-                ectx!(try err e, error_kind => account_id)
-            })?;
-            let new_balance_ = amount.checked_sub(account.balance);
-            let new_balance_ =
-                new_balance_.ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => amount, account.balance))?;
-            let f = accounts.filter(id.eq(account_id));
-            diesel::update(f).set(balance.eq(new_balance_)).get_result(conn).map_err(move |e| {
-                let error_kind = ErrorKind::from(&e);
-                ectx!(err e, error_kind => account_id, amount)
-            })
         })
     }
     fn get_by_address(&self, address_: AccountAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
