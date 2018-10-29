@@ -105,7 +105,7 @@ impl RabbitConnectionManager {
     fn extract_options_and_address(config: &Config) -> Result<(ConnectionOptions, SocketAddr), Error> {
         let url = config.rabbit.url.clone();
         let url_clone = config.rabbit.url.clone();
-        let regex = Regex::new("@([a-zA-Z0-9-_]*:[0-9]*)").unwrap();
+        let regex = Regex::new(r#"@([a-zA-Z0-9-_\.]*:[0-9]*)"#).unwrap();
         let address = regex
             .captures(&config.rabbit.url)
             .and_then(|captures| captures.get(1))
