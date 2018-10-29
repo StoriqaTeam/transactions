@@ -114,7 +114,7 @@ impl BlockchainClient for BlockchainClientImpl {
     }
     fn get_bitcoin_utxos(&self, address: AccountAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send> {
         let url = format!("/bitcoin/{}/utxos", address);
-        Box::new(self.exec_query_get::<GetBitcoinUtxosResponse>(&url).map(|resp| resp.utxos))
+        Box::new(self.exec_query_get::<Vec<BitcoinUtxos>>(&url))
     }
     fn get_ethereum_nonce(&self, address: AccountAddress) -> Box<Future<Item = u64, Error = Error> + Send> {
         let url = format!("/ethereum/{}/nonce", address);
