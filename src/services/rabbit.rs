@@ -214,11 +214,73 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 }
 
                             }
-                            //adding blockchain hash to already seen 
+                            //adding blockchain hash to already seen
                             seen_hashes_repo.create(blockchain_transaction.clone().into())?;
                             Ok(())
                         }).map_err(ectx!(ErrorSource::Repo, ErrorKind::Internal))
                 }),
         )
+    }
+}
+
+const USD_PER_ETH: f64 = 200.0;
+const USD_PER_BTC: f64 = 6500.0;
+const USD_PER_STQ: f64 = 0.0025;
+const BTC_DECIMALS: u128 = 100_000_000u128;
+const ETH_DECIMALS: u128 = 1_000_000_000_000_000_000u128;
+const STQ_DECIMALS: u128 = 1_000_000_000_000_000_000u128;
+const BTC_CONFIRM_THRESHOLDS: &[u64] = &[100, 500, 1000];
+const ETH_CONFIRM_THRESHOLDS: &[u64] = &[20, 50, 200, 500, 1000, 2000, 3000, 4000, 5000];
+
+fn to_usd_approx(currency: Currency, value: Amount) -> u64 {
+    let (rate, decimals) = match currency {
+        Currency::Btc => (USD_PER_BTC, BTC_DECIMALS),
+        Currency::Eth => (USD_PER_ETH, ETH_DECIMALS),
+        Currency::Stq => (USD_PER_STQ, STQ_DECIMALS),
+    };
+    // since we care about usd values starting from 20 - it's ok to make
+    let crypto_value_10k: u128 = value.raw() * 10000 / decimals;
+    let usd_value_10k: f64 = (crypto_value_10k as f64) / rate / 10000.0;
+    usd_value_10k as u64
+}
+
+fn required_confirmations(currency: Currency, value: Amount) -> u64 {
+    let usd_value = to_usd_approx(currency, value);
+    let thresholds = match currency {
+        Currency::Btc => BTC_CONFIRM_THRESHOLDS,
+        _ => ETH_CONFIRM_THRESHOLDS,
+    };
+    let mut res = None;
+    for (threshold, i) in thresholds.iter().enumerate() {
+        if threshold >= usd_value {
+            res = Some(i as u64);
+            break;
+        }
+    }
+    res.unwrap_or(thresholds.len() as u64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_required_confirmations() {
+        let cases = [
+            (Currency::Btc, Amount::new(100_000_000), 3),                       // 6500
+            (Currency::Btc, Amount::new(10_000_000), 2),                        // 650
+            (Currency::Btc, Amount::new(5_000_000), 1),                         // 325
+            (Currency::Btc, Amount::new(1_000_000), 0),                         // 65
+            (Currency::Eth, Amount::new(21_000_000_000_000_000_000), 8),        // 4400
+            (Currency::Eth, Amount::new(2_000_000_000_000_000_000), 3),         // 400
+            (Currency::Eth, Amount::new(500_000_000_000_000_000), 2),           // 100
+            (Currency::Eth, Amount::new(50_000_000_000_000_000), 0),            // 10
+            (Currency::Stq, Amount::new(2_100_000_000_000_000_000_000_000), 9), // 5250
+            (Currency::Stq, Amount::new(210_000_000_000_000_000_000_000), 4),   // 525
+            (Currency::Stq, Amount::new(100_000_000_000_000_000_000_000), 3),   // 250
+            (Currency::Stq, Amount::new(10_000_000_000_000_000_000_000), 0),    // 25
+        ];
+        for (currency, value, confirms) in cases.iter() {
+            assert_eq!(required_confirmations(currency, value), *confirms);
+        }
     }
 }
