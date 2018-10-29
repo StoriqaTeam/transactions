@@ -8,7 +8,7 @@ keys_url = "http://keystore:8000/v1"
 blockchain_url = "http://blockchain-gateway:8000/v1"
 
 [database]
-url = "postgresql://transactions:transactions@postgres:5432/transactions"
+url = "postgresql://transactions:transactions@localhost:5432/transactions"
 
 [cpu_pool]
 size = 1

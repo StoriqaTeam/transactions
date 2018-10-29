@@ -291,7 +291,6 @@ pub mod tests {
             new_account.user_id = user.id;
             new_account.kind = AccountKind::Dr;
             let account = accounts_repo.create(new_account).unwrap();
-            accounts_repo.inc_balance(account.id, Amount::new(123))?;
             let res = accounts_repo.get_with_enough_value(Amount::new(123), Currency::Eth, user.id);
             assert!(res.is_ok());
             res

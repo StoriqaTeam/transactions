@@ -250,19 +250,20 @@ fn to_usd_approx(currency: Currency, value: Amount) -> u64 {
     };
     // since we care about usd values starting from 20 - it's ok to make
     let crypto_value_10k: u128 = value.raw() * 10000 / decimals;
-    let usd_value_10k: f64 = (crypto_value_10k as f64) / rate / 10000.0;
+    let usd_value_10k: f64 = (crypto_value_10k as f64) * rate / 10000.0;
     usd_value_10k as u64
 }
 
 fn required_confirmations(currency: Currency, value: Amount) -> u64 {
     let usd_value = to_usd_approx(currency, value);
+    println!("USD: {}", usd_value);
     let thresholds = match currency {
         Currency::Btc => BTC_CONFIRM_THRESHOLDS,
         _ => ETH_CONFIRM_THRESHOLDS,
     };
     let mut res = None;
-    for (threshold, i) in thresholds.iter().enumerate() {
-        if threshold >= usd_value {
+    for (i, threshold) in thresholds.iter().enumerate() {
+        if *threshold >= usd_value {
             res = Some(i as u64);
             break;
         }
@@ -290,7 +291,14 @@ mod tests {
             (Currency::Stq, Amount::new(10_000_000_000_000_000_000_000), 0),    // 25
         ];
         for (currency, value, confirms) in cases.iter() {
-            assert_eq!(required_confirmations(currency, value), *confirms);
+            assert_eq!(
+                required_confirmations(*currency, *value),
+                *confirms,
+                "Cur: {:?}, value: {:?}, confirms: {:?}",
+                *currency,
+                *value,
+                *confirms
+            );
         }
     }
 }
