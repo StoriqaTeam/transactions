@@ -4,7 +4,10 @@ use super::error::*;
 use models::*;
 use prelude::*;
 use repos::error::{Error as RepoError, ErrorContext as RepoErrorContex, ErrorKind as RepoErrorKind};
-use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, SeenHashesRepo, StrangeBlockchainTransactionsRepo, TransactionsRepo};
+use repos::{
+    AccountsRepo, BlockchainTransactionsRepo, DbExecutor, PendingBlockchainTransactionsRepo, SeenHashesRepo,
+    StrangeBlockchainTransactionsRepo, TransactionsRepo,
+};
 use serde_json;
 
 pub const ETHERIUM_PRICE: u128 = 200; // 200$, price of 1 eth in gwei
@@ -20,6 +23,7 @@ pub struct BlockchainFetcher<E: DbExecutor> {
     seen_hashes_repo: Arc<SeenHashesRepo>,
     blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
     strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
+    pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
     db_executor: E,
 }
 
@@ -30,6 +34,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         seen_hashes_repo: Arc<SeenHashesRepo>,
         blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
         strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
+        pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
         db_executor: E,
     ) -> Self {
         BlockchainFetcher {
@@ -38,6 +43,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             seen_hashes_repo,
             blockchain_transactions_repo,
             strange_blockchain_transactions_repo,
+            pending_blockchain_transactions_repo,
             db_executor,
         }
     }
@@ -51,6 +57,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let accounts_repo = self.accounts_repo.clone();
         let blockchain_transactions_repo = self.blockchain_transactions_repo.clone();
         let strange_blockchain_transactions_repo = self.strange_blockchain_transactions_repo.clone();
+        let pending_blockchain_transactions_repo = self.pending_blockchain_transactions_repo.clone();
         let db_executor = self.db_executor.clone();
         Box::new(
             String::from_utf8(data.clone())
@@ -135,7 +142,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                             // unifying from and to
                             let (from, to) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert))?;
 
-                            let unified_hash = blockchain_transaction.hash.inner().clone().split(':').collect::<Vec<&str>>().pop().unwrap();
+                            let unified_hash = blockchain_transaction.hash.inner().clone().split(':').nth(0).unwrap();
                             let unified_hash = BlockchainTransactionId::new(unified_hash.to_string());
                             // withdraw
                             if let Some(transaction) = transactions_repo.get_by_blockchain_tx(unified_hash.clone())? {
@@ -160,7 +167,8 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                     let new_strange = (blockchain_transaction.clone(), comment).into();
                                     strange_blockchain_transactions_repo.create(new_strange)?;
                                 } else {
-                                    transactions_repo.update_status(unified_hash, TransactionStatus::Done)?;
+                                    transactions_repo.update_status(unified_hash.clone(), TransactionStatus::Done)?;
+                                    pending_blockchain_transactions_repo.delete(unified_hash)?;
                                     blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
                                 }
                             } else {

@@ -356,6 +356,10 @@ impl PendingBlockchainTransactionsRepo for PendingBlockchainTransactionsRepoMock
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.hash == hash_).nth(0).cloned())
     }
+    fn delete(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<PendingBlockchainTransactionDB>> {
+        let data = self.data.lock().unwrap();
+        Ok(data.iter().filter(|x| x.hash == hash_).nth(0).cloned())
+    }
 }
 
 #[derive(Clone, Default)]
