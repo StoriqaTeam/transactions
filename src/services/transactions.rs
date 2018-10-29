@@ -377,7 +377,11 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     blockchain_client
                         .post_ethereum_transaction(raw)
                         .map_err(ectx!(convert))
-                        .and_then(move |blockchain_tx_id| {
+                        .and_then(move |mut blockchain_tx_id| {
+                            if currency == Currency::Stq {
+                                // if currency is stq, we are adding `:0` to hash.
+                                blockchain_tx_id = BlockchainTransactionId::new(format!("{}:0", blockchain_tx_id));
+                            }
                             db_executor.execute_transaction(move || {
                                 let new_pending = (create_blockchain, blockchain_tx_id.clone()).into();
                                 let _ = pending_transactions_repo.create(new_pending).map_err(|e| {

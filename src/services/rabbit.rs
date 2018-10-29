@@ -142,8 +142,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                             // unifying from and to
                             let (from, to) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert))?;
 
-                            let unified_hash = blockchain_transaction.hash.inner().clone().split(':').nth(0).unwrap();
-                            let unified_hash = BlockchainTransactionId::new(unified_hash.to_string());
+                            let unified_hash = blockchain_transaction.hash.clone();
                             // withdraw
                             if let Some(transaction) = transactions_repo.get_by_blockchain_tx(unified_hash.clone())? {
                                 // checking that `from` account exists in accounts but no `to` in accounts
