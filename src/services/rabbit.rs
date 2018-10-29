@@ -134,8 +134,11 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
 
                             // unifying from and to
                             let (from, to) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert))?;
+
+                            let unified_hash = blockchain_transaction.hash.inner().clone().split(':').collect::<Vec<&str>>().pop().unwrap();
+                            let unified_hash = BlockchainTransactionId::new(unified_hash.to_string());
                             // withdraw
-                            if let Some(transaction) = transactions_repo.get_by_blockchain_tx(blockchain_transaction.hash.clone())? {
+                            if let Some(transaction) = transactions_repo.get_by_blockchain_tx(unified_hash.clone())? {
                                 // checking that `from` account exists in accounts but no `to` in accounts
                                 let mut to_not_exists = true;
                                 for (address, _) in to {
@@ -157,7 +160,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                     let new_strange = (blockchain_transaction.clone(), comment).into();
                                     strange_blockchain_transactions_repo.create(new_strange)?;
                                 } else {
-                                    transactions_repo.update_status(blockchain_transaction.hash.clone(), TransactionStatus::Done)?;
+                                    transactions_repo.update_status(unified_hash, TransactionStatus::Done)?;
                                     blockchain_transactions_repo.create(blockchain_transaction.clone().into())?;
                                 }
                             } else {
