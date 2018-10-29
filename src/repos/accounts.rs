@@ -262,41 +262,6 @@ pub mod tests {
         }));
     }
     #[test]
-    fn accounts_inc_balance() {
-        let mut core = Core::new().unwrap();
-        let db_executor = create_executor();
-        let accounts_repo = AccountsRepoImpl::default();
-        let users_repo = UsersRepoImpl::default();
-        let new_user = NewUser::default();
-        let _ = core.run(db_executor.execute_test_transaction(move || {
-            let user = users_repo.create(new_user)?;
-            let mut new_account = NewAccount::default();
-            new_account.user_id = user.id;
-            let account = accounts_repo.create(new_account).unwrap();
-            let res = accounts_repo.inc_balance(account.id, Amount::new(123));
-            assert!(res.is_ok());
-            res
-        }));
-    }
-
-    #[test]
-    fn accounts_dec_balance() {
-        let mut core = Core::new().unwrap();
-        let db_executor = create_executor();
-        let accounts_repo = AccountsRepoImpl::default();
-        let users_repo = UsersRepoImpl::default();
-        let new_user = NewUser::default();
-        let _ = core.run(db_executor.execute_test_transaction(move || {
-            let user = users_repo.create(new_user)?;
-            let mut new_account = NewAccount::default();
-            new_account.user_id = user.id;
-            let account = accounts_repo.create(new_account).unwrap();
-            let res = accounts_repo.dec_balance(account.id, Amount::new(123));
-            assert!(res.is_ok());
-            res
-        }));
-    }
-    #[test]
     fn accounts_get_by_address() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
