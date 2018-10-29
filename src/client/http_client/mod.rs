@@ -88,7 +88,8 @@ impl HttpClient for HttpClientImpl {
     fn get(&self, uri: String) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
         let cli = self.cli.clone();
         Box::new(
-            uri.clone().parse()
+            uri.clone()
+                .parse()
                 .map_err(|_| ectx!(err ErrorSource::Hyper, ErrorKind::Internal => uri))
                 .into_future()
                 .and_then(move |uri| cli.get(uri).map_err(|_| ectx!(err ErrorSource::Hyper, ErrorKind::Internal)))

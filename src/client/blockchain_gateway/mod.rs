@@ -92,7 +92,7 @@ impl BlockchainClient for BlockchainClientImpl {
         raw: BlockchainTransactionRaw,
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         let client = self.clone();
-        let transaction = CreateBlockchainTxRequest {raw};
+        let transaction = CreateBlockchainTxRequest { raw };
         Box::new(
             serde_json::to_string(&transaction)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => transaction))
@@ -101,12 +101,9 @@ impl BlockchainClient for BlockchainClientImpl {
                 .map(|resp| resp.tx_hash),
         )
     }
-    fn post_bitcoin_transaction(
-        &self,
-        raw: BlockchainTransactionRaw,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
+    fn post_bitcoin_transaction(&self, raw: BlockchainTransactionRaw) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         let client = self.clone();
-        let transaction = CreateBlockchainTxRequest {raw};
+        let transaction = CreateBlockchainTxRequest { raw };
         Box::new(
             serde_json::to_string(&transaction)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => transaction))

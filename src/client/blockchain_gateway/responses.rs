@@ -24,4 +24,3 @@ pub struct TxHashResponse {
 pub struct CreateBlockchainTxRequest {
     pub raw: BlockchainTransactionRaw,
 }
-
