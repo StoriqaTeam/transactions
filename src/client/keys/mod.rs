@@ -31,15 +31,21 @@ pub struct KeysClientImpl {
     keys_url: String,
     keys_user_id: UserId,
     keys_token: AuthenticationToken,
+    bitcoin_fee_price: Amount,
+    ethereum_fee_price: Amount,
 }
 
 impl KeysClientImpl {
     pub fn new<C: HttpClient>(config: &Config, cli: C) -> Self {
+        let bitcoin_fee_price = Amount::new(config.fee_price.bitcoin as u128);
+        let ethereum_fee_price = Amount::new(config.fee_price.ethereum as u128);
         Self {
             cli: Arc::new(cli),
             keys_url: config.client.keys_url.clone(),
             keys_user_id: config.auth.keys_user_id.clone(),
             keys_token: config.auth.keys_token.clone(),
+            bitcoin_fee_price,
+            ethereum_fee_price,
         }
     }
 
@@ -89,9 +95,13 @@ impl KeysClient for KeysClientImpl {
     }
     fn sign_transaction(
         &self,
-        create_blockchain_tx: CreateBlockchainTx,
+        mut create_blockchain_tx: CreateBlockchainTx,
     ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
         let client = self.clone();
+        create_blockchain_tx.fee_price = match create_blockchain_tx.currency {
+            Currency::Btc => self.bitcoin_fee_price,
+            Currency::Eth | Currency::Stq => self.ethereum_fee_price,
+        };
         Box::new(
             serde_json::to_string(&create_blockchain_tx)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_blockchain_tx))
