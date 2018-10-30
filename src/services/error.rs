@@ -64,9 +64,6 @@ pub enum ErrorContext {
     InvalidTransaction,
 }
 
-// #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
-// pub enum InvariantViolation {}
-
 derive_error_impls!();
 
 impl From<ReposError> for Error {

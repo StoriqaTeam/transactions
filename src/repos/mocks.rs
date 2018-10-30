@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -133,6 +133,17 @@ impl AccountsRepo for AccountsRepoMock {
             .cloned();
         Ok(u)
     }
+    fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
+        let addresses: HashSet<_> = addresses.iter().collect();
+        let data = self.data.lock().unwrap();
+        let u = data
+            .iter()
+            .filter(|x| addresses.contains(&x.address) && x.kind == kind_ && x.currency == currency_)
+            .cloned()
+            .collect();
+        Ok(u)
+    }
+
     fn get_with_enough_value(&self, value: Amount, currency: Currency, _user_id: UserId) -> RepoResult<Vec<(Account, Amount)>> {
         let data = self.data.lock().unwrap();
         let u = data

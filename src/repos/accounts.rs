@@ -17,6 +17,7 @@ pub trait AccountsRepo: Send + Sync + 'static {
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Account>>;
     fn get_balance_for_user(&self, user_id: UserId) -> RepoResult<Vec<Balance>>;
     fn get_by_address(&self, address_: AccountAddress, currency: Currency, kind_: AccountKind) -> RepoResult<Option<Account>>;
+    fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>>;
     fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<(Account, Amount)>>;
 }
 
@@ -113,6 +114,21 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
                 })
         })
     }
+
+    fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
+        with_tls_connection(|conn| {
+            accounts
+                .filter(address.eq_any(addresses))
+                .filter(kind.eq(kind_))
+                .filter(currency.eq(currency_))
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => addresses, kind_)
+                })
+        })
+    }
+
     fn get_with_enough_value(&self, value: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<(Account, Amount)>> {
         with_tls_connection(|conn| {
             accounts

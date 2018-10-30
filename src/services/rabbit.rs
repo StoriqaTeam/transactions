@@ -9,6 +9,7 @@ use repos::{
     StrangeBlockchainTransactionsRepo, TransactionsRepo,
 };
 use serde_json;
+use utils::log_error;
 
 pub const ETHERIUM_PRICE: u128 = 200; // 200$, price of 1 eth in gwei
 pub const STQ_PRICE: f64 = 0.0025; // 0,0025$, price of 1 stq in gwei
@@ -49,7 +50,183 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
+pub enum InvariantViolation {
+    #[fail(display = "blockchain transaction invariant violation - unexpected number of addresses")]
+    WithdrawalAdressesCount,
+    #[fail(display = "blockchain transaction invariant violation - address of transaction not found in our database")]
+    WithdrawalAdressesNotFound,
+    #[fail(display = "blockchain transaction invariant violation - transaction referred to non-existing account")]
+    NotExistingAccount,
+    #[fail(display = "blockchain transaction invariant violation - withdrawal happened to internal account, which shouldn't be the case")]
+    WithdrawalAdressesInternal,
+    #[fail(
+        display = "blockchain transaction invariant violation - withdrawal transaction should be in pending state when blockchain tx arrives"
+    )]
+    WithdrawalNotPendingAddress,
+    #[fail(display = "blockchain transaction invariant violation - withdrawal blockchain tx doesn't have corresponding pending part")]
+    WithdrawalNoPendingTx,
+    #[fail(display = "blockchain transaction invariant violation - withdrawal blockchain tx value is not equal to pending tx value")]
+    WithdrawalValue,
+    #[fail(display = "blockchain transaction invariant violation - withdrawal blockchain tx value is not equal to pending tx value")]
+    DepositAddressInternal,
+}
+
 impl<E: DbExecutor> BlockchainFetcher<E> {
+    pub fn handle_message(&self, data: Vec<u8>) -> impl Future<Item = (), Error = Error> {
+        let db_executor = self.db_executor.clone();
+        let self_clone = self.clone();
+        parse_transaction(data)
+            .into_future()
+            .and_then(move |tx| db_executor.execute_transaction(move || self_clone.handle_transaction(&tx)))
+    }
+
+    fn handle_transaction(&self, blockchain_tx: &BlockchainTransaction) -> Result<(), Error> {
+        let normalized_tx = blockchain_tx
+            .normalized()
+            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+        // already processed this transaction - skipping
+        if let Ok(_) = self.seen_hashes_repo.get(normalized_tx.hash.clone(), normalized_tx.currency) {
+            return Ok(());
+        }
+
+        if let Some(tx) = self.transactions_repo.get_by_blockchain_tx(normalized_tx.hash.clone())? {
+            // The tx is already in our db => it was created by us and waiting for confirmation from blockchain => it's withdrawal tx
+            let total_tx_value = normalized_tx
+                .value()
+                .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => tx.clone()))?;
+            if required_confirmations(normalized_tx.currency, total_tx_value) > normalized_tx.confirmations as u64 {
+                // skipping tx, waiting for more confirms
+                return Ok(());
+            }
+
+            if let Some(violation) = self.verify_withdrawal_tx(&tx, &normalized_tx)? {
+                // Here the tx itself is ok, but violates our internal invariants. We just log it here and put it into strange blockchain transactions table
+                // If we instead returned error - it would nack the rabbit message and return it to queue - smth we don't want here
+                self.handle_violation(violation, &blockchain_tx);
+                return Ok(());
+            }
+            self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
+            self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
+            self.transactions_repo
+                .update_status(blockchain_tx.hash.clone(), TransactionStatus::Done)?;
+            self.seen_hashes_repo.create(NewSeenHashes {
+                hash: blockchain_tx.hash.clone(),
+                block_number: blockchain_tx.block_number as i64,
+                currency: blockchain_tx.currency,
+            })?;
+            return Ok(());
+        };
+
+        let to_addresses: Vec<_> = blockchain_tx.to.iter().map(|entry| entry.address).collect();
+        let matched_accounts = self
+            .accounts_repo
+            .get_by_addresses(&to_addresses, blockchain_tx.currency, AccountKind::Dr)?;
+        if matched_accounts.len() == 0 {
+            self.seen_hashes_repo.create(NewSeenHashes {
+                hash: blockchain_tx.hash.clone(),
+                block_number: blockchain_tx.block_number as i64,
+                currency: blockchain_tx.currency,
+            })?;
+            return Ok(());
+        }
+
+        if let Some(violation) = self.verify_deposit_tx(&blockchain_tx)? {
+            self.handle_violation(violation, &blockchain_tx);
+        }
+
+        for to_account in matched_accounts {
+            let to_entry = blockchain_tx.to.iter().find(|entry| entry.address == to_account.address).unwrap();
+            // let single_blockchain_tx = BlockchainTransaction {
+            //     to: vec![to_entry],
+            //     ..blockchain_tx.clone()
+            // }
+        }
+        unimplemented!()
+    }
+
+    fn handle_violation(&self, violation: InvariantViolation, blockchain_tx: &BlockchainTransaction) -> Result<(), Error> {
+        log_error(&ectx!(try err violation => blockchain_tx));
+
+        let message = format!("{}", violation);
+        let new_strange_tx = (blockchain_tx.clone(), message).into();
+        self.strange_blockchain_transactions_repo.create(new_strange_tx)?;
+
+        self.seen_hashes_repo.create(NewSeenHashes {
+            hash: blockchain_tx.hash.clone(),
+            block_number: blockchain_tx.block_number as i64,
+            currency: blockchain_tx.currency,
+        })?;
+        Ok(())
+    }
+
+    fn verify_deposit_tx(&self, blockchain_tx: &BlockchainTransaction) -> Result<Option<InvariantViolation>, Error> {
+        let from_accounts = self
+            .accounts_repo
+            .get_by_addresses(blockchain_tx.from, blockchain_tx.currency, AccountKind::Dr)?;
+        if from_accounts.len() > 0 {
+            return Ok(Some(InvariantViolation::DepositAddressInternal));
+        }
+        Ok(None)
+    }
+
+    // Returns error if there's an error in connecting to db, etc. (in this case it makes sense to nack and retry after)
+    // Returns Ok(None) if the transaction is ok
+    // Returns Ok(Some(violation)) if some invariants are broken (in this case, transaction is permanently broken, so write it
+    // to strange transactions and ack)
+    //
+    // Withdrawal tx is in form:
+    //
+    // | dr_acc_id                | cr_acc_id                                                      |   |
+    // |--------------------------|----------------------------------------------------------------|---|
+    // | User's account (Cr type) | Our internal acc with blockchain money managed by us (Dr type) |   |
+    fn verify_withdrawal_tx(&self, tx: &Transaction, blockchain_tx: &BlockchainTransaction) -> Result<Option<InvariantViolation>, Error> {
+        // Our withdrawal transactions are 1 to 1.
+        if (blockchain_tx.from.len() != 1) || (blockchain_tx.to.len() != 1) {
+            return Ok(Some(InvariantViolation::WithdrawalAdressesCount));
+        }
+        if tx.status != TransactionStatus::Pending {
+            return Ok(Some(InvariantViolation::WithdrawalNotPendingAddress));
+        }
+        if self.pending_blockchain_transactions_repo.get(blockchain_tx.hash.clone())?.is_none() {
+            return Ok(Some(InvariantViolation::WithdrawalNoPendingTx));
+        }
+
+        let from_address = blockchain_tx.from[0].clone();
+        let BlockchainTransactionEntryTo { address: to_address, .. } = blockchain_tx.to[0].clone();
+        // Transaction should have valid account in our db
+        if let Some(managed_address) = self.accounts_repo.get(tx.cr_account_id)? {
+            // Blockchain tx from_address should be equal to that of manages account address
+            if managed_address.address != from_address {
+                return Ok(Some(InvariantViolation::WithdrawalAdressesNotFound));
+            }
+        } else {
+            return Ok(Some(InvariantViolation::NotExistingAccount));
+        };
+        // to_address should be external to our system, because in all other cases we should do
+        // everything internally
+        if let Some(_) = self
+            .accounts_repo
+            .get_by_address(to_address.clone(), blockchain_tx.currency, AccountKind::Dr)?
+        {
+            return Ok(Some(InvariantViolation::WithdrawalAdressesInternal));
+        }
+        // to_address should be external to our system, because in all other cases we should do
+        // everything internally
+        if let Some(_) = self
+            .accounts_repo
+            .get_by_address(to_address.clone(), blockchain_tx.currency, AccountKind::Cr)?
+        {
+            return Ok(Some(InvariantViolation::WithdrawalAdressesInternal));
+        }
+        // values in blockchain and our tx must match
+        // TODO - subject to fees
+        // if value != tx.value {
+        //     return Ok(Some(InvariantViolation::WithdrawalValue));
+        // }
+        Ok(None)
+    }
+
     pub fn process(&self, data: Vec<u8>) -> impl Future<Item = (), Error = Error> {
         let data_clone = data.clone();
         let transactions_repo = self.transactions_repo.clone();
@@ -273,6 +450,12 @@ fn required_confirmations(currency: Currency, value: Amount) -> u64 {
         }
     }
     res.unwrap_or(thresholds.len() as u64)
+}
+
+fn parse_transaction(data: Vec<u8>) -> Result<BlockchainTransaction, Error> {
+    let data_clone = data.clone();
+    let string = String::from_utf8(data).map_err(|e| ectx!(try err e, ErrorContext::UTF8, ErrorKind::Internal => data_clone))?;
+    serde_json::from_str(&string).map_err(ectx!(ErrorContext::Json, ErrorKind::Internal => string))
 }
 
 #[cfg(test)]

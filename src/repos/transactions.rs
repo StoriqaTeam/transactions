@@ -54,6 +54,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
+
+    //Todo - add filtering by user
     fn get_by_blockchain_tx(&self, blockchain_tx_id_: BlockchainTransactionId) -> RepoResult<Option<Transaction>> {
         with_tls_connection(|conn| {
             transactions
@@ -67,6 +69,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
+
     fn update_status(&self, blockchain_tx_id_: BlockchainTransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction> {
         with_tls_connection(|conn| {
             let f = transactions.filter(blockchain_tx_id.eq(blockchain_tx_id_.clone()));
