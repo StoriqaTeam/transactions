@@ -155,7 +155,7 @@ pub fn start_server() {
                                 let counters_clone2 = counters_clone.clone();
 
                                 let channel = channel.clone();
-                                fetcher_clone.process(message.data).then(move |res| match res {
+                                fetcher_clone.handle_message(message.data).then(move |res| match res {
                                     Ok(_) => {
                                         let counters_clone = counters_clone2.clone();
                                         let mut counters = counters_clone2.lock().unwrap();

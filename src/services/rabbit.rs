@@ -73,7 +73,7 @@ pub enum InvariantViolation {
 }
 
 impl<E: DbExecutor> BlockchainFetcher<E> {
-    pub fn handle_message(&self, data: Vec<u8>) -> impl Future<Item = (), Error = Error> {
+    pub fn handle_message(&self, data: Vec<u8>) -> impl Future<Item = (), Error = Error> + Send {
         let db_executor = self.db_executor.clone();
         let self_clone = self.clone();
         parse_transaction(data)
@@ -103,7 +103,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             if let Some(violation) = self.verify_withdrawal_tx(&tx, &normalized_tx)? {
                 // Here the tx itself is ok, but violates our internal invariants. We just log it here and put it into strange blockchain transactions table
                 // If we instead returned error - it would nack the rabbit message and return it to queue - smth we don't want here
-                self.handle_violation(violation, &blockchain_tx);
+                self.handle_violation(violation, &blockchain_tx)?;
                 return Ok(());
             }
             self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
@@ -118,11 +118,11 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             return Ok(());
         };
 
-        let to_addresses: Vec<_> = blockchain_tx.to.iter().map(|entry| entry.address).collect();
-        let matched_accounts = self
+        let to_addresses: Vec<_> = normalized_tx.to.iter().map(|entry| entry.address.clone()).collect();
+        let matched_dr_accounts = self
             .accounts_repo
             .get_by_addresses(&to_addresses, blockchain_tx.currency, AccountKind::Dr)?;
-        if matched_accounts.len() == 0 {
+        if matched_dr_accounts.len() == 0 {
             self.seen_hashes_repo.create(NewSeenHashes {
                 hash: blockchain_tx.hash.clone(),
                 block_number: blockchain_tx.block_number as i64,
@@ -131,18 +131,42 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             return Ok(());
         }
 
-        if let Some(violation) = self.verify_deposit_tx(&blockchain_tx)? {
-            self.handle_violation(violation, &blockchain_tx);
+        if let Some(violation) = self.verify_deposit_tx(&normalized_tx)? {
+            self.handle_violation(violation, &blockchain_tx)?;
+            return Ok(());
         }
 
-        for to_account in matched_accounts {
-            let to_entry = blockchain_tx.to.iter().find(|entry| entry.address == to_account.address).unwrap();
-            // let single_blockchain_tx = BlockchainTransaction {
-            //     to: vec![to_entry],
-            //     ..blockchain_tx.clone()
-            // }
+        for to_dr_account in matched_dr_accounts {
+            let to_entry = blockchain_tx
+                .to
+                .iter()
+                .find(|entry| entry.address == to_dr_account.address)
+                .unwrap();
+            let to_cr_account = self
+                .accounts_repo
+                .get_by_address(to_dr_account.address, to_dr_account.currency, AccountKind::Cr)?
+                .unwrap();
+            let new_tx = NewTransaction {
+                id: TransactionId::generate(),
+                user_id: to_dr_account.user_id,
+                dr_account_id: to_dr_account.id,
+                cr_account_id: to_cr_account.id,
+                currency: to_dr_account.currency,
+                value: to_entry.value,
+                status: TransactionStatus::Done,
+                blockchain_tx_id: Some(blockchain_tx.hash.clone()),
+                hold_until: None,
+                fee: blockchain_tx.fee,
+            };
+            self.transactions_repo.create(new_tx)?;
+            self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
+            self.seen_hashes_repo.create(NewSeenHashes {
+                hash: blockchain_tx.hash.clone(),
+                block_number: blockchain_tx.block_number as i64,
+                currency: blockchain_tx.currency,
+            })?;
         }
-        unimplemented!()
+        Ok(())
     }
 
     fn handle_violation(&self, violation: InvariantViolation, blockchain_tx: &BlockchainTransaction) -> Result<(), Error> {
@@ -163,7 +187,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
     fn verify_deposit_tx(&self, blockchain_tx: &BlockchainTransaction) -> Result<Option<InvariantViolation>, Error> {
         let from_accounts = self
             .accounts_repo
-            .get_by_addresses(blockchain_tx.from, blockchain_tx.currency, AccountKind::Dr)?;
+            .get_by_addresses(&blockchain_tx.from, blockchain_tx.currency, AccountKind::Dr)?;
         if from_accounts.len() > 0 {
             return Ok(Some(InvariantViolation::DepositAddressInternal));
         }
