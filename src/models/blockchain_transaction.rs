@@ -9,14 +9,14 @@ use prelude::*;
 use repos::error::{Error as RepoError, ErrorContext as RepoErrorContex, ErrorKind as RepoErrorKind};
 use schema::blockchain_transactions;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockchainTransactionEntryTo {
     pub address: AccountAddress,
     pub value: Amount,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockchainTransaction {
     pub hash: BlockchainTransactionId,
@@ -49,6 +49,32 @@ impl BlockchainTransaction {
             to.remove(&address);
         }
         Ok((from, to))
+    }
+
+    pub fn normalized(&self) -> Option<BlockchainTransaction> {
+        let from: HashSet<AccountAddress> = self.from.clone().into_iter().collect();
+
+        //getting all to transactions to without repeats
+        let mut to = HashMap::new();
+        for x in self.to.clone() {
+            let balance = to.entry(x.address).or_insert(Amount::new(0));
+            if let Some(new_balance) = balance.checked_add(x.value) {
+                *balance = new_balance;
+            } else {
+                return None;
+            }
+        }
+
+        //deleting `from` from `to`
+        for address in &from {
+            to.remove(&address);
+        }
+        let from: Vec<_> = from.into_iter().collect();
+        let to: Vec<_> = to
+            .into_iter()
+            .map(|(address, value)| BlockchainTransactionEntryTo { address, value })
+            .collect();
+        Some(BlockchainTransaction { from, to, ..self.clone() })
     }
 }
 
@@ -121,6 +147,65 @@ impl Default for NewBlockchainTransactionDB {
             currency: Currency::Eth,
             fee: Amount::default(),
             confirmations: 0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalized() {
+        let cases = [
+            (vec!["1"], vec![("4", Amount::new(25))], vec!["1"], vec![("4", Amount::new(25))]),
+            (
+                vec!["1", "1", "2", "3", "2"],
+                vec![
+                    ("1", Amount::new(25)),
+                    ("2", Amount::new(35)),
+                    ("3", Amount::new(45)),
+                    ("3", Amount::new(45)),
+                    ("11", Amount::new(45)),
+                    ("12", Amount::new(55)),
+                    ("11", Amount::new(55)),
+                    ("12", Amount::new(5)),
+                    ("10", Amount::new(25)),
+                ],
+                vec!["1", "2", "3"],
+                vec![("10", Amount::new(25)), ("11", Amount::new(100)), ("12", Amount::new(60))],
+            ),
+        ];
+        for (from, to, from_res, to_res) in cases.into_iter() {
+            let from: Vec<_> = from.into_iter().map(|x| AccountAddress::new(x.to_string())).collect();
+            let from_res: Vec<_> = from_res.into_iter().map(|x| AccountAddress::new(x.to_string())).collect();
+            let to: Vec<_> = to
+                .into_iter()
+                .map(|(address, value)| BlockchainTransactionEntryTo {
+                    address: AccountAddress::new(address.to_string()),
+                    value: *value,
+                }).collect();
+            let to_res: Vec<_> = to_res
+                .into_iter()
+                .map(|(address, value)| BlockchainTransactionEntryTo {
+                    address: AccountAddress::new(address.to_string()),
+                    value: *value,
+                }).collect();
+
+            let tx = BlockchainTransaction {
+                from,
+                to,
+                ..Default::default()
+            };
+            let tx_res = BlockchainTransaction {
+                from: from_res,
+                to: to_res,
+                hash: tx.hash.clone(),
+                ..Default::default()
+            };
+
+            let normalized_tx = tx.normalized().unwrap();
+            assert_eq!(normalized_tx, tx_res);
         }
     }
 }
