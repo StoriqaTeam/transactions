@@ -9,7 +9,7 @@ use prelude::*;
 use repos::error::{Error as RepoError, ErrorContext as RepoErrorContex, ErrorKind as RepoErrorKind};
 use schema::blockchain_transactions;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockchainTransactionEntryTo {
     pub address: AccountAddress,
@@ -77,6 +77,12 @@ impl BlockchainTransaction {
             .collect();
         to.sort_by_key(|entry| entry.address.clone());
         Some(BlockchainTransaction { from, to, ..self.clone() })
+    }
+
+    pub fn value(&self) -> Option<Amount> {
+        self.to
+            .iter()
+            .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|a| a.checked_add(elem.value)))
     }
 }
 
@@ -209,5 +215,50 @@ mod tests {
             let normalized_tx = tx.normalized().unwrap();
             assert_eq!(normalized_tx, tx_res);
         }
+    }
+
+    #[test]
+    fn test_value() {
+        let tx = BlockchainTransaction {
+            to: vec![
+                BlockchainTransactionEntryTo {
+                    value: Amount::new(30),
+                    ..Default::default()
+                },
+                BlockchainTransactionEntryTo {
+                    value: Amount::new(1),
+                    ..Default::default()
+                },
+                BlockchainTransactionEntryTo {
+                    value: Amount::new(2),
+                    ..Default::default()
+                },
+                BlockchainTransactionEntryTo {
+                    value: Amount::new(100),
+                    ..Default::default()
+                },
+                BlockchainTransactionEntryTo {
+                    value: Amount::new(5),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(tx.value(), Some(Amount::new(138)));
+
+        let tx = BlockchainTransaction {
+            to: vec![
+                BlockchainTransactionEntryTo {
+                    value: Amount::new(u128::max_value()),
+                    ..Default::default()
+                },
+                BlockchainTransactionEntryTo {
+                    value: Amount::new(1),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(tx.value(), None);
     }
 }
