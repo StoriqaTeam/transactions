@@ -248,15 +248,19 @@ fn to_usd_approx(currency: Currency, value: Amount) -> u64 {
         Currency::Eth => (USD_PER_ETH, ETH_DECIMALS),
         Currency::Stq => (USD_PER_STQ, STQ_DECIMALS),
     };
-    // since we care about usd values starting from 20 - it's ok to make
-    let crypto_value_10k: u128 = value.raw() * 10000 / decimals;
-    let usd_value_10k: f64 = (crypto_value_10k as f64) * rate / 10000.0;
-    usd_value_10k as u64
+    // Max of all rates
+    let max_rate = USD_PER_BTC as u128;
+    // first multiply by max_rate and then divide by it
+    // that is made so that we can use integer division of u128 (f64 is not enough)
+    // and be sure that our error is less that 1 dollar
+    let crypto_value_times_rate: u128 = value.raw() * max_rate / decimals;
+    // after dividing by decimals we have value small enough to be used as f64
+    let usd_value: f64 = (crypto_value_times_rate as f64) * rate / (max_rate as f64);
+    usd_value as u64
 }
 
 fn required_confirmations(currency: Currency, value: Amount) -> u64 {
     let usd_value = to_usd_approx(currency, value);
-    println!("USD: {}", usd_value);
     let thresholds = match currency {
         Currency::Btc => BTC_CONFIRM_THRESHOLDS,
         _ => ETH_CONFIRM_THRESHOLDS,
@@ -288,13 +292,14 @@ mod tests {
             (Currency::Stq, Amount::new(2_100_000_000_000_000_000_000_000), 9), // 5250
             (Currency::Stq, Amount::new(210_000_000_000_000_000_000_000), 4),   // 525
             (Currency::Stq, Amount::new(100_000_000_000_000_000_000_000), 3),   // 250
-            (Currency::Stq, Amount::new(10_000_000_000_000_000_000_000), 0),    // 25
+            (Currency::Stq, Amount::new(10_000_000_000_000_000_000_000), 1),    // 25
+            (Currency::Stq, Amount::new(5_000_000_000_000_000_000_000), 0),     // 12
         ];
         for (currency, value, confirms) in cases.iter() {
             assert_eq!(
                 required_confirmations(*currency, *value),
                 *confirms,
-                "Cur: {:?}, value: {:?}, confirms: {:?}",
+                "Currency: {:?}, value: {:?}, confirms: {:?}",
                 *currency,
                 *value,
                 *confirms
