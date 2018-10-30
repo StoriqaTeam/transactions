@@ -69,11 +69,13 @@ impl BlockchainTransaction {
         for address in &from {
             to.remove(&address);
         }
-        let from: Vec<_> = from.into_iter().collect();
-        let to: Vec<_> = to
+        let mut from: Vec<_> = from.into_iter().collect();
+        from.sort();
+        let mut to: Vec<_> = to
             .into_iter()
             .map(|(address, value)| BlockchainTransactionEntryTo { address, value })
             .collect();
+        to.sort_by_key(|entry| entry.address.clone());
         Some(BlockchainTransaction { from, to, ..self.clone() })
     }
 }
