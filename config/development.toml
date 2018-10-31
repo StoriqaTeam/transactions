@@ -4,8 +4,8 @@ port = 8010
 
 [client]
 dns_threads = 4
-keys_url = "http://keystore:8000/v1"
-blockchain_url = "http://blockchain-gateway:8000/v1"
+keys_url = "http://localhost:8020/v1"
+blockchain_url = "http://localhost:8000/v1"
 
 [database]
 url = "postgresql://transactions:transactions@localhost:5432/transactions"
@@ -14,8 +14,8 @@ url = "postgresql://transactions:transactions@localhost:5432/transactions"
 size = 1
 
 [auth]
-keys_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
-keys_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
+keys_token = "8lVGyQD6hUIxrg3sOt/UofnDLCa+DGaHmGsuGFapYhk="
+keys_user_id = "795a8d5d-1234-431e-bcb5-c467ec6c46ab"
 
 [rabbit]
 url = "amqp://guest:guest@localhost:5672//?heartbeat=3&frame_max=131072"

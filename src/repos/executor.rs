@@ -11,6 +11,15 @@ thread_local! {
     pub static DB_CONN: RefCell<Option<PgPooledConnection>> = RefCell::new(None)
 }
 
+/// Transaction isolation level
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Isolation {
+    ReadCommitted,
+    RepeatableRead,
+    Serializable,
+}
+
 /// One of these methods should be used anytime you use Repo methods.
 /// It effectively put a db connection to thread local storage, so that repo can use it.
 /// This trait is also responsible for removing unhealthy connections from tls.
@@ -26,6 +35,16 @@ pub trait DbExecutor: Clone + Send + Sync + 'static {
 
     /// Execute mutations and queries inside one transaction
     fn execute_transaction<F, T, E>(&self, f: F) -> Box<Future<Item = T, Error = E> + Send + 'static>
+    where
+        T: Send + 'static,
+        F: FnOnce() -> Result<T, E> + Send + 'static,
+        E: From<Error> + Fail,
+    {
+        self.execute_transaction_with_isolation(Isolation::ReadCommitted, f)
+    }
+
+    /// Execute mutations and queries inside one transaction with certain isolation level
+    fn execute_transaction_with_isolation<F, T, E>(&self, isolation: Isolation, f: F) -> Box<Future<Item = T, Error = E> + Send + 'static>
     where
         T: Send + 'static,
         F: FnOnce() -> Result<T, E> + Send + 'static,
@@ -72,7 +91,7 @@ impl DbExecutor for DbExecutorImpl {
         }))
     }
 
-    fn execute_transaction<F, T, E>(&self, f: F) -> Box<Future<Item = T, Error = E> + Send + 'static>
+    fn execute_transaction_with_isolation<F, T, E>(&self, isolation: Isolation, f: F) -> Box<Future<Item = T, Error = E> + Send + 'static>
     where
         T: Send + 'static,
         F: FnOnce() -> Result<T, E> + Send + 'static,
@@ -86,12 +105,18 @@ impl DbExecutor for DbExecutorImpl {
                 let res = {
                     let err_ref = &mut err;
                     with_tls_connection(move |conn| {
-                        conn.transaction(|| {
-                            f().map_err(|e| {
-                                *err_ref = Some(e);
-                                DieselError::RollbackTransaction
-                            })
-                        }).map_err(ectx!(ErrorSource::Diesel, ErrorKind::Internal))
+                        let builder = match isolation {
+                            Isolation::ReadCommitted => conn.build_transaction().read_committed(),
+                            Isolation::RepeatableRead => conn.build_transaction().repeatable_read(),
+                            Isolation::Serializable => conn.build_transaction().serializable(),
+                        };
+                        builder
+                            .run(|| {
+                                f().map_err(|e| {
+                                    *err_ref = Some(e);
+                                    DieselError::RollbackTransaction
+                                })
+                            }).map_err(ectx!(ErrorSource::Diesel, ErrorKind::Internal))
                     })
                 };
                 res.map_err(|e| {
