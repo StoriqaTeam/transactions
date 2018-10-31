@@ -13,7 +13,7 @@ use client::BlockchainClient;
 use client::KeysClient;
 use models::*;
 use prelude::*;
-use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, PendingBlockchainTransactionsRepo, TransactionsRepo};
+use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, PendingBlockchainTransactionsRepo, TransactionsRepo};
 use utils::log_and_capture_error;
 
 #[derive(Clone)]
@@ -195,7 +195,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
                 .into_future()
                 .and_then(move |_| {
-                    db_executor.execute_transaction(move || {
+                    db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
                         // check that balance > value of input
                         let dr_account_id = input.dr_account.id;
                         let balance = transactions_repo

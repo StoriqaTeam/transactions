@@ -27,6 +27,7 @@ services:
     container_name: transactions-pg
     volumes:
       - stq-transactions-postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf
     environment:
       - POSTGRES_USER=transactions
       - POSTGRES_DB=transactions

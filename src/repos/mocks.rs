@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use super::accounts::*;
 use super::blockchain_transactions::*;
 use super::error::*;
-use super::executor::DbExecutor;
+use super::executor::{DbExecutor, Isolation};
 use super::pending_blockchain_transactions::*;
 use super::transactions::*;
 use super::types::RepoResult;
@@ -383,7 +383,7 @@ impl DbExecutor for DbExecutorMock {
     {
         Box::new(f().into_future())
     }
-    fn execute_transaction<F, T, E>(&self, f: F) -> Box<Future<Item = T, Error = E> + Send + 'static>
+    fn execute_transaction_with_isolation<F, T, E>(&self, _isolation: Isolation, f: F) -> Box<Future<Item = T, Error = E> + Send + 'static>
     where
         T: Send + 'static,
         F: FnOnce() -> Result<T, E> + Send + 'static,
