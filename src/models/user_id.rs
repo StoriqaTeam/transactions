@@ -1,13 +1,19 @@
-use std::fmt::{self, Display};
+use std::fmt::{self, Debug, Display};
 use std::str::FromStr;
 
 use diesel::sql_types::Uuid as SqlUuid;
 use uuid::{ParseError, Uuid};
 
-#[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Default, PartialEq)]
+#[derive(Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Default, PartialEq)]
 #[sql_type = "SqlUuid"]
 pub struct UserId(Uuid);
 derive_newtype_sql!(user_id, SqlUuid, UserId, UserId);
+
+impl Debug for UserId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        Display::fmt(&self.0, f)
+    }
+}
 
 impl UserId {
     pub fn new(id: Uuid) -> Self {

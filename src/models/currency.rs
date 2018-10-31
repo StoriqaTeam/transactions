@@ -15,6 +15,12 @@ pub enum Currency {
     Btc,
 }
 
+impl Default for Currency {
+    fn default() -> Self {
+        Currency::Btc
+    }
+}
+
 impl FromSql<VarChar, Pg> for Currency {
     fn from_sql(data: Option<&[u8]>) -> deserialize::Result<Self> {
         match data {

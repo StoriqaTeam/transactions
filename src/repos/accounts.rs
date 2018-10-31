@@ -16,9 +16,8 @@ pub trait AccountsRepo: Send + Sync + 'static {
     fn delete(&self, account_id: AccountId) -> RepoResult<Account>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Account>>;
     fn get_balance_for_user(&self, user_id: UserId) -> RepoResult<Vec<Balance>>;
-    fn inc_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
-    fn dec_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account>;
     fn get_by_address(&self, address_: AccountAddress, currency: Currency, kind_: AccountKind) -> RepoResult<Option<Account>>;
+    fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>>;
     fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<(Account, Amount)>>;
 }
 
@@ -101,40 +100,6 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
             Ok(balances)
         })
     }
-    fn inc_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account> {
-        with_tls_connection(|conn| {
-            let query = accounts.filter(id.eq(account_id));
-            let account: Account = query.get_result(conn).map_err(move |e| {
-                let error_kind = ErrorKind::from(&e);
-                ectx!(try err e, error_kind => account_id)
-            })?;
-            let new_balance_ = amount.checked_add(account.balance);
-            let new_balance_ =
-                new_balance_.ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => amount, account.balance))?;
-            let f = accounts.filter(id.eq(account_id));
-            diesel::update(f).set(balance.eq(new_balance_)).get_result(conn).map_err(move |e| {
-                let error_kind = ErrorKind::from(&e);
-                ectx!(err e, error_kind => account_id, amount)
-            })
-        })
-    }
-    fn dec_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account> {
-        with_tls_connection(|conn| {
-            let query = accounts.filter(id.eq(account_id));
-            let account: Account = query.get_result(conn).map_err(move |e| {
-                let error_kind = ErrorKind::from(&e);
-                ectx!(try err e, error_kind => account_id)
-            })?;
-            let new_balance_ = amount.checked_sub(account.balance);
-            let new_balance_ =
-                new_balance_.ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => amount, account.balance))?;
-            let f = accounts.filter(id.eq(account_id));
-            diesel::update(f).set(balance.eq(new_balance_)).get_result(conn).map_err(move |e| {
-                let error_kind = ErrorKind::from(&e);
-                ectx!(err e, error_kind => account_id, amount)
-            })
-        })
-    }
     fn get_by_address(&self, address_: AccountAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
         with_tls_connection(|conn| {
             accounts
@@ -149,6 +114,21 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
                 })
         })
     }
+
+    fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
+        with_tls_connection(|conn| {
+            accounts
+                .filter(address.eq_any(addresses))
+                .filter(kind.eq(kind_))
+                .filter(currency.eq(currency_))
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => addresses, kind_)
+                })
+        })
+    }
+
     fn get_with_enough_value(&self, value: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<(Account, Amount)>> {
         with_tls_connection(|conn| {
             accounts
@@ -298,41 +278,6 @@ pub mod tests {
         }));
     }
     #[test]
-    fn accounts_inc_balance() {
-        let mut core = Core::new().unwrap();
-        let db_executor = create_executor();
-        let accounts_repo = AccountsRepoImpl::default();
-        let users_repo = UsersRepoImpl::default();
-        let new_user = NewUser::default();
-        let _ = core.run(db_executor.execute_test_transaction(move || {
-            let user = users_repo.create(new_user)?;
-            let mut new_account = NewAccount::default();
-            new_account.user_id = user.id;
-            let account = accounts_repo.create(new_account).unwrap();
-            let res = accounts_repo.inc_balance(account.id, Amount::new(123));
-            assert!(res.is_ok());
-            res
-        }));
-    }
-
-    #[test]
-    fn accounts_dec_balance() {
-        let mut core = Core::new().unwrap();
-        let db_executor = create_executor();
-        let accounts_repo = AccountsRepoImpl::default();
-        let users_repo = UsersRepoImpl::default();
-        let new_user = NewUser::default();
-        let _ = core.run(db_executor.execute_test_transaction(move || {
-            let user = users_repo.create(new_user)?;
-            let mut new_account = NewAccount::default();
-            new_account.user_id = user.id;
-            let account = accounts_repo.create(new_account).unwrap();
-            let res = accounts_repo.dec_balance(account.id, Amount::new(123));
-            assert!(res.is_ok());
-            res
-        }));
-    }
-    #[test]
     fn accounts_get_by_address() {
         let mut core = Core::new().unwrap();
         let db_executor = create_executor();
@@ -362,7 +307,6 @@ pub mod tests {
             new_account.user_id = user.id;
             new_account.kind = AccountKind::Dr;
             let account = accounts_repo.create(new_account).unwrap();
-            accounts_repo.inc_balance(account.id, Amount::new(123))?;
             let res = accounts_repo.get_with_enough_value(Amount::new(123), Currency::Eth, user.id);
             assert!(res.is_ok());
             res

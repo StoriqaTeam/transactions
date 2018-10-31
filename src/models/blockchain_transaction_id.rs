@@ -3,7 +3,7 @@ use std::fmt::{self, Display};
 use diesel::sql_types::Varchar;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, PartialEq, Eq)]
 #[sql_type = "Varchar"]
 pub struct BlockchainTransactionId(String);
 derive_newtype_sql!(blockchain_transaction_id, Varchar, BlockchainTransactionId, BlockchainTransactionId);

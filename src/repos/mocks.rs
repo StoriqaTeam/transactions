@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -124,36 +124,6 @@ impl AccountsRepo for AccountsRepoMock {
             .collect();
         Ok(balances)
     }
-    fn inc_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account> {
-        let mut data = self.data.lock().unwrap();
-        let u = data
-            .iter_mut()
-            .filter_map(|x| {
-                if x.id == account_id {
-                    x.balance = x.balance.checked_add(amount).unwrap_or_default();
-                    Some(x)
-                } else {
-                    None
-                }
-            }).nth(0)
-            .cloned();
-        Ok(u.unwrap())
-    }
-    fn dec_balance(&self, account_id: AccountId, amount: Amount) -> RepoResult<Account> {
-        let mut data = self.data.lock().unwrap();
-        let u = data
-            .iter_mut()
-            .filter_map(|x| {
-                if x.id == account_id {
-                    x.balance = x.balance.checked_sub(amount).unwrap_or_default();
-                    Some(x)
-                } else {
-                    None
-                }
-            }).nth(0)
-            .cloned();
-        Ok(u.unwrap())
-    }
     fn get_by_address(&self, address_: AccountAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
         let data = self.data.lock().unwrap();
         let u = data
@@ -163,6 +133,17 @@ impl AccountsRepo for AccountsRepoMock {
             .cloned();
         Ok(u)
     }
+    fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
+        let addresses: HashSet<_> = addresses.iter().collect();
+        let data = self.data.lock().unwrap();
+        let u = data
+            .iter()
+            .filter(|x| addresses.contains(&x.address) && x.kind == kind_ && x.currency == currency_)
+            .cloned()
+            .collect();
+        Ok(u)
+    }
+
     fn get_with_enough_value(&self, value: Amount, currency: Currency, _user_id: UserId) -> RepoResult<Vec<(Account, Amount)>> {
         let data = self.data.lock().unwrap();
         let u = data
