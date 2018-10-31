@@ -85,12 +85,16 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let normalized_tx = blockchain_tx
             .normalized()
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+        info!("Handling tx {:#?}", blockchain_tx);
         // already processed this transaction - skipping
-        if let Ok(_) = self.seen_hashes_repo.get(normalized_tx.hash.clone(), normalized_tx.currency) {
+        if let Some(_) = self.seen_hashes_repo.get(normalized_tx.hash.clone(), normalized_tx.currency)? {
+            info!("Seen");
             return Ok(());
         }
 
+        info!("Not seen");
         if let Some(tx) = self.transactions_repo.get_by_blockchain_tx(normalized_tx.hash.clone())? {
+            info!("Withdraw");
             // The tx is already in our db => it was created by us and waiting for confirmation from blockchain => it's withdrawal tx
             let total_tx_value = normalized_tx
                 .value()
@@ -99,13 +103,14 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 // skipping tx, waiting for more confirms
                 return Ok(());
             }
-
+            info!("Enough");
             if let Some(violation) = self.verify_withdrawal_tx(&tx, &normalized_tx)? {
                 // Here the tx itself is ok, but violates our internal invariants. We just log it here and put it into strange blockchain transactions table
                 // If we instead returned error - it would nack the rabbit message and return it to queue - smth we don't want here
                 self.handle_violation(violation, &blockchain_tx)?;
                 return Ok(());
             }
+            info!("Verified");
             self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
             self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
             self.transactions_repo
@@ -118,11 +123,13 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             return Ok(());
         };
 
+        info!("Deposit");
         let to_addresses: Vec<_> = normalized_tx.to.iter().map(|entry| entry.address.clone()).collect();
         let matched_dr_accounts = self
             .accounts_repo
             .get_by_addresses(&to_addresses, blockchain_tx.currency, AccountKind::Dr)?;
         if matched_dr_accounts.len() == 0 {
+            info!("Not related to our accs");
             self.seen_hashes_repo.create(NewSeenHashes {
                 hash: blockchain_tx.hash.clone(),
                 block_number: blockchain_tx.block_number as i64,
@@ -136,7 +143,10 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             return Ok(());
         }
 
+        info!("Passed verification");
+
         for to_dr_account in matched_dr_accounts {
+            info!("Processing for acc {:#?}", to_dr_account);
             let to_entry = blockchain_tx
                 .to
                 .iter()
