@@ -30,7 +30,7 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
 
 enum TransactionType {
     Internal(Account, Account),
-    Withdrawal(Account, AccountAddress),
+    Withdrawal(Account, AccountAddress, Currency),
     InternalExchange(Account, Account),
     WithdrawalExchange(Account, AccountAddress, Currency),
 }
@@ -103,7 +103,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                         if from_account.currency != input.to_currency {
                             Ok(TransactionType::WithdrawalExchange(from_account, to_address, input.to_currency))
                         } else {
-                            Ok(TransactionType::Withdrawal(from_account, to_address))
+                            Ok(TransactionType::Withdrawal(from_account, to_address, input.to_currency))
                         }
                     }
                     Some(to_account) => {
@@ -120,12 +120,66 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
     fn create_external_mono_currency_tx(
         &self,
+        user_id: UserId,
         input: CreateTransactionInput,
         from_account: Account,
-        to_account: Account,
-    ) -> Result<Transaction, Error> {
-        assert_eq!(from_account.currency, to_account.currency);
-        unimplemented!()
+        to_account_address: AccountAddress,
+        currency: Currency,
+    ) -> Result<Vec<Transaction>, Error> {
+        if from_account.currency != currency {
+            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account_address, currency));
+        };
+
+        let value = input.value;
+        let withdrawal_accs_and_vals = self
+            .transactions_repo
+            .get_with_enough_value(value, currency, user_id)
+            .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, currency, user_id))?;
+
+        //double check
+        for (acc, needed_amount) in &withdrawal_accs_and_vals {
+            let acc_id = acc.id;
+            let balance = self
+                .transactions_repo
+                .get_account_balance(acc_id, AccountKind::Dr)
+                .map_err(ectx!(try convert => acc_id))?;
+            if balance < *needed_amount {
+                return Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, needed_amount));
+            }
+        }
+
+        let mut res: Vec<Transaction> = Vec::new();
+
+        for (acc, value) in &withdrawal_accs_and_vals {
+            let to = to_account_address.clone();
+            // Todo this fee is ineffective, since keys client take system's fee
+            let fee = Amount::new(0);
+            // Note - we don't do early exit here, since we need to complete our transaction with previously
+            // written transactions
+            let blockchain_tx_id_res = match currency {
+                Currency::Eth => self.create_ethereum_tx(acc.address.clone(), to, *value, fee, Currency::Eth),
+                Currency::Stq => self.create_ethereum_tx(acc.address.clone(), to, *value, fee, Currency::Stq),
+                Currency::Btc => self.create_bitcoin_tx(acc.address.clone(), to, *value, fee),
+            };
+
+            match blockchain_tx_id_res {
+                Ok(tx_id) => {
+                    let tx = self.create_internal_mono_currency_tx(input.clone(), from_account.clone(), acc.clone(), Some(tx_id))?;
+                    res.push(tx);
+                }
+                Err(e) => {
+                    if res.len() == 0 {
+                        // didn't write any transaction to blockchain, so safe to abort
+                        return Err(ectx!(err e, ErrorKind::Internal));
+                    } else {
+                        // partial write of some transactions, cannot abort, just logging error and break cycle
+                        log_and_capture_error(e.compat());
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(res)
     }
 
     fn create_internal_mono_currency_tx(
@@ -133,8 +187,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         input: CreateTransactionInput,
         from_account: Account,
         to_account: Account,
+        blockchain_tx_id: Option<BlockchainTransactionId>,
     ) -> Result<Transaction, Error> {
-        assert_eq!(from_account.currency, to_account.currency);
+        if from_account.currency != to_account.currency {
+            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account));
+        }
         let from_account_id = from_account.id;
         let balance = self
             .transactions_repo
@@ -144,13 +201,13 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             let new_transaction = NewTransaction {
                 id: input.id,
                 user_id: input.user_id,
-                dr_account_id: input.from,
+                dr_account_id: from_account.id,
                 cr_account_id: to_account.id,
                 currency: input.to_currency,
                 value: input.value,
                 hold_until: input.hold_until,
                 status: TransactionStatus::Done,
-                blockchain_tx_id: None,
+                blockchain_tx_id,
                 // Todo - fees
                 fee: Amount::default(),
             };
@@ -158,7 +215,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 .create(new_transaction.clone())
                 .map_err(ectx!(convert => new_transaction))
         } else {
-            Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => balance, input.value))
+            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, input.value))
         }
     }
 
@@ -211,6 +268,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         fee: Amount,
         currency: Currency,
     ) -> Result<BlockchainTransactionId, Error> {
+        match currency {
+            Currency::Eth => (),
+            Currency::Stq => (),
+            _ => return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal)),
+        }
         let from_clone = from.clone();
         let nonce = self
             .blockchain_client
@@ -406,7 +468,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                                 .create(new_transaction.clone())
                                 .map_err(ectx!(convert => new_transaction))
                         } else {
-                            Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => balance, input.value))
+                            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, input.value))
                         }
                     })
                 }),
@@ -439,12 +501,12 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             .get_account_balance(dr_account_id, AccountKind::Cr)
                             .map_err(ectx!(try convert => dr_account_id))?;
                         if balance < value {
-                            return Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => value));
+                            return Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => value));
                         }
 
                         let txs = transactions_repo
                             .get_with_enough_value(value, currency, user_id)
-                            .map_err(ectx!(try convert ErrorContext::NotEnoughFounds => value, currency, user_id))?;
+                            .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, currency, user_id))?;
 
                         //double check
                         for tx in &txs {
@@ -454,7 +516,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                                 .get_account_balance(tx_id, AccountKind::Dr)
                                 .map_err(ectx!(try convert => tx_id))?;
                             if balance < needed_amount {
-                                return Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => balance, needed_amount));
+                                return Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, needed_amount));
                             }
                         }
                         Ok((input.dr_account.id, input.address, txs))

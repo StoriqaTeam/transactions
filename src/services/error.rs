@@ -51,7 +51,7 @@ pub enum ErrorContext {
     #[fail(display = "service error context - no transaction found")]
     NoTransaction,
     #[fail(display = "service error context - not enough founds")]
-    NotEnoughFounds,
+    NotEnoughFunds,
     #[fail(display = "service error context - invalid currency")]
     InvalidCurrency,
     #[fail(display = "service error context - invalid utf8 bytes")]
