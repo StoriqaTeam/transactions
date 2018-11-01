@@ -136,7 +136,7 @@ impl AccountsRepo for AccountsRepoMock {
 
     fn filter_by_address(&self, address_: AccountAddress) -> RepoResult<Vec<Account>> {
         let data = self.data.lock().unwrap();
-        let u = data.iter().filter(|x| x.address == address_).cloned();
+        let u = data.iter().filter(|x| x.address == address_).cloned().collect();
         Ok(u)
     }
 

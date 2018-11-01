@@ -29,8 +29,10 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
 }
 
 enum TransactionType {
-    Internal(Account),
-    External(AccountAddress),
+    Internal(Account, Account),
+    Withdrawal(Account, AccountAddress),
+    InternalExchange(Account, Account),
+    WithdrawalExchange(Account, AccountAddress, Currency),
 }
 
 impl<E: DbExecutor> TransactionsServiceImpl<E> {
@@ -56,13 +58,13 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         }
     }
 
-    fn validate_and_classify_transaction(&self, input: &CreateTransaction) -> Result<TransactionType, Error> {
+    fn validate_and_classify_transaction(&self, input: &CreateTransactionInput) -> Result<TransactionType, Error> {
         input
             .validate()
             .map_err(|e| ectx!(try err e.clone(), ErrorKind::InvalidInput(e) => input))?;
-        let _ = self
+        let from_account = self
             .accounts_repo
-            .get(input.dr_account_id)?
+            .get(input.from)?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => input))?;
 
         match input.to_type {
@@ -79,7 +81,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 if to_account.currency != input.to_currency {
                     return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input));
                 }
-                Ok(TransactionType::Internal(to_account))
+                if from_account.currency != to_account.currency {
+                    Ok(TransactionType::InternalExchange(from_account, to_account))
+                } else {
+                    Ok(TransactionType::Internal(from_account, to_account))
+                }
             }
             ReceiptType::Address => {
                 let to_address = input.to.clone().to_account_address();
@@ -94,12 +100,153 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                         if accounts.len() != 0 {
                             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input.clone()));
                         }
-                        Ok(TransactionType::External(to_address))
+                        if from_account.currency != input.to_currency {
+                            Ok(TransactionType::WithdrawalExchange(from_account, to_address, input.to_currency))
+                        } else {
+                            Ok(TransactionType::Withdrawal(from_account, to_address))
+                        }
                     }
-                    Some(account) => Ok(TransactionType::Internal(account)),
+                    Some(to_account) => {
+                        if from_account.currency != to_account.currency {
+                            Ok(TransactionType::InternalExchange(from_account, to_account))
+                        } else {
+                            Ok(TransactionType::Internal(from_account, to_account))
+                        }
+                    }
                 }
             }
         }
+    }
+
+    fn create_external_mono_currency_tx(
+        &self,
+        input: CreateTransactionInput,
+        from_account: Account,
+        to_account: Account,
+    ) -> Result<Transaction, Error> {
+        assert_eq!(from_account.currency, to_account.currency);
+        unimplemented!()
+    }
+
+    fn create_internal_mono_currency_tx(
+        &self,
+        input: CreateTransactionInput,
+        from_account: Account,
+        to_account: Account,
+    ) -> Result<Transaction, Error> {
+        assert_eq!(from_account.currency, to_account.currency);
+        let from_account_id = from_account.id;
+        let balance = self
+            .transactions_repo
+            .get_account_balance(from_account_id, AccountKind::Cr)
+            .map_err(ectx!(try convert => from_account_id))?;
+        if balance >= input.value {
+            let new_transaction = NewTransaction {
+                id: input.id,
+                user_id: input.user_id,
+                dr_account_id: input.from,
+                cr_account_id: to_account.id,
+                currency: input.to_currency,
+                value: input.value,
+                hold_until: input.hold_until,
+                status: TransactionStatus::Done,
+                blockchain_tx_id: None,
+                // Todo - fees
+                fee: Amount::default(),
+            };
+            self.transactions_repo
+                .create(new_transaction.clone())
+                .map_err(ectx!(convert => new_transaction))
+        } else {
+            Err(ectx!(err ErrorContext::NotEnoughFounds, ErrorKind::Balance => balance, input.value))
+        }
+    }
+
+    fn create_bitcoin_tx(
+        &self,
+        from: AccountAddress,
+        to: AccountAddress,
+        value: Amount,
+        fee: Amount,
+    ) -> Result<BlockchainTransactionId, Error> {
+        let from_clone = from.clone();
+        let utxos = self
+            .blockchain_client
+            .get_bitcoin_utxos(from.clone())
+            .map_err(ectx!(try convert => from_clone))
+            .wait()?;
+
+        let create_blockchain_input = CreateBlockchainTx::new(from, to, Currency::Btc, value, fee, None, Some(utxos));
+        let create_blockchain_input_clone = create_blockchain_input.clone();
+
+        let raw_tx = self
+            .keys_client
+            .sign_transaction(create_blockchain_input.clone())
+            .map_err(ectx!(try convert => create_blockchain_input_clone))
+            .wait()?;
+
+        let blockchain_tx_id = self
+            .blockchain_client
+            .post_bitcoin_transaction(raw_tx)
+            .map_err(ectx!(try convert))
+            .wait()?;
+
+        let new_pending = (create_blockchain_input, blockchain_tx_id.clone()).into();
+        // Note - we don't rollback here, because the tx is already in blockchain. so after that just silently
+        // fail if we couldn't write a pending tx. Not having pending tx in db doesn't do a lot of harm, we could cure
+        // it later.
+        match self.pending_transactions_repo.create(new_pending) {
+            Err(e) => log_and_capture_error(e),
+            _ => (),
+        };
+
+        Ok(blockchain_tx_id)
+    }
+
+    fn create_ethereum_tx(
+        &self,
+        from: AccountAddress,
+        to: AccountAddress,
+        value: Amount,
+        fee: Amount,
+        currency: Currency,
+    ) -> Result<BlockchainTransactionId, Error> {
+        let from_clone = from.clone();
+        let nonce = self
+            .blockchain_client
+            .get_ethereum_nonce(from_clone.clone())
+            .map_err(ectx!(try convert => from_clone))
+            .wait()?;
+
+        // creating blockchain transactions array
+        let create_blockchain_input = CreateBlockchainTx::new(from, to, currency, value, fee, Some(nonce), None);
+
+        let create_blockchain = create_blockchain_input.clone();
+        let raw_tx = self
+            .keys_client
+            .sign_transaction(create_blockchain_input.clone())
+            .map_err(ectx!(try convert => create_blockchain_input))
+            .wait()?;
+        let tx_id = self
+            .blockchain_client
+            .post_ethereum_transaction(raw_tx)
+            .map_err(ectx!(try convert))
+            .wait()?;
+
+        let tx_id = match currency {
+            Currency::Eth => tx_id,
+            // Erc-20 token, we need event log number here, to make a tx_id unique
+            _ => BlockchainTransactionId::new(format!("{}:0", tx_id)),
+        };
+        let new_pending = (create_blockchain, tx_id.clone()).into();
+        // Note - we don't rollback here, because the tx is already in blockchain. so after that just silently
+        // fail if we couldn't write a pending tx. Not having pending tx in db doesn't do a lot of harm, we could cure
+        // it later.
+        match self.pending_transactions_repo.create(new_pending) {
+            Err(e) => log_and_capture_error(e),
+            _ => (),
+        };
+        Ok(tx_id)
     }
 }
 
