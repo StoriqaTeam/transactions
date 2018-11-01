@@ -62,6 +62,8 @@ pub enum ErrorContext {
     BalanceOverflow,
     #[fail(display = "service error context - transaction between two dr accounts")]
     InvalidTransaction,
+    #[fail(display = "service error context - invalid uuid")]
+    InvalidUuid,
 }
 
 derive_error_impls!();

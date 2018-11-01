@@ -28,6 +28,11 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     blockchain_client: Arc<dyn BlockchainClient>,
 }
 
+enum TransactionType {
+    Internal(Account),
+    External(AccountAddress),
+}
+
 impl<E: DbExecutor> TransactionsServiceImpl<E> {
     pub fn new(
         auth_service: Arc<AuthService>,
@@ -48,6 +53,52 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             db_executor,
             keys_client,
             blockchain_client,
+        }
+    }
+
+    fn validate_and_classify_transaction(&self, input: &CreateTransaction) -> Result<TransactionType, Error> {
+        input
+            .validate()
+            .map_err(|e| ectx!(try err e.clone(), ErrorKind::InvalidInput(e) => input))?;
+        let _ = self
+            .accounts_repo
+            .get(input.dr_account_id)?
+            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => input))?;
+
+        match input.to_type {
+            ReceiptType::Account => {
+                let to_account_id = input
+                    .to
+                    .clone()
+                    .to_account_id()
+                    .map_err(|_| ectx!(try err ErrorContext::InvalidUuid, ErrorKind::MalformedInput => input.clone()))?;
+                let to_account = self
+                    .accounts_repo
+                    .get(to_account_id)?
+                    .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => input))?;
+                if to_account.currency != input.to_currency {
+                    return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input));
+                }
+                Ok(TransactionType::Internal(to_account))
+            }
+            ReceiptType::Address => {
+                let to_address = input.to.clone().to_account_address();
+                match self
+                    .accounts_repo
+                    .get_by_address(to_address.clone(), input.to_currency, AccountKind::Cr)?
+                {
+                    None => {
+                        // check that we don't own any other accounts with this address
+                        // eg a user accidentally put ehter address to recieve stq tokens
+                        let accounts = self.accounts_repo.filter_by_address(to_address.clone())?;
+                        if accounts.len() != 0 {
+                            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input.clone()));
+                        }
+                        Ok(TransactionType::External(to_address))
+                    }
+                    Some(account) => Ok(TransactionType::Internal(account)),
+                }
+            }
         }
     }
 }

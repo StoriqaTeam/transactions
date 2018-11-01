@@ -133,6 +133,13 @@ impl AccountsRepo for AccountsRepoMock {
             .cloned();
         Ok(u)
     }
+
+    fn filter_by_address(&self, address_: AccountAddress) -> RepoResult<Vec<Account>> {
+        let data = self.data.lock().unwrap();
+        let u = data.iter().filter(|x| x.address == address_).cloned();
+        Ok(u)
+    }
+
     fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
         let addresses: HashSet<_> = addresses.iter().collect();
         let data = self.data.lock().unwrap();
