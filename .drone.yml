@@ -129,7 +129,7 @@ pipeline:
     script: |
       ansible-playbook \
       -i ~/payments-infra/ansible/hosts-production.yml \
-      --tags gateway \
+      --tags transactions \
       --extra-vars "pay_trx_tag=${DRONE_TAG}" \
       ~/payments-infra/ansible/docker.yml
     secrets:
