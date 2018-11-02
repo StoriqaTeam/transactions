@@ -23,6 +23,7 @@ pub struct Client {
     pub dns_threads: usize,
     pub keys_url: String,
     pub blockchain_url: String,
+    pub exchange_gateway_url: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -51,6 +52,8 @@ pub struct CpuPool {
 pub struct Auth {
     pub keys_token: AuthenticationToken,
     pub keys_user_id: UserId,
+    pub exchange_gateway_token: AuthenticationToken,
+    pub exchange_gateway_user_id: UserId,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -73,6 +76,8 @@ pub struct System {
     pub stq_fees_account_id: AccountId,
     pub keys_system_user_id: UserId,
     pub keys_system_user_token: AuthenticationToken,
+    pub exhange_gateway_system_user_id: UserId,
+    pub exhange_gateway_system_user_token: AuthenticationToken,
 }
 
 impl Config {

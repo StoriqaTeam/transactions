@@ -1,5 +1,4 @@
 mod error;
-mod responses;
 
 use std::sync::Arc;
 
@@ -12,17 +11,13 @@ use serde::Deserialize;
 use serde_json;
 
 pub use self::error::*;
-use self::responses::*;
 use super::HttpClient;
 use config::Config;
 use utils::read_body;
 
 pub trait ExchangeGatewayClient: Send + Sync + 'static {
-    fn exchange(&self, exchange: ExchangeInput) -> Box<Future<Item = Exchange, Error = Error> + Send>;
-    fn sign_transaction(
-        &self,
-        create_blockchain_tx: CreateBlockchainTx,
-    ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send>;
+    fn exchange(&self, exchange: ExchangeInput, role: Role) -> Box<Future<Item = Exchange, Error = Error> + Send>;
+    fn rate(&self, exchange: RateInput, role: Role) -> Box<Future<Item = Rate, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -31,8 +26,8 @@ pub struct ExchangeGatewayClientImpl {
     exchange_gateway_url: String,
     exchange_gateway_user_id: UserId,
     exchange_gateway_token: AuthenticationToken,
-    bitcoin_fee_price: Amount,
-    ethereum_fee_price: Amount,
+    exchange_gateway_system_user_id: UserId,
+    exchange_gateway_system_token: AuthenticationToken,
 }
 
 impl ExchangeGatewayClientImpl {
@@ -44,8 +39,8 @@ impl ExchangeGatewayClientImpl {
             exchange_gateway_url: config.client.exchange_gateway_url.clone(),
             exchange_gateway_user_id: config.auth.exchange_gateway_user_id.clone(),
             exchange_gateway_token: config.auth.exchange_gateway_token.clone(),
-            bitcoin_fee_price,
-            ethereum_fee_price,
+            exchange_gateway_system_user_id: config.system.exhange_gateway_system_user_id,
+            exchange_gateway_system_token: config.system.exhange_gateway_system_user_token,
         }
     }
 
@@ -54,6 +49,7 @@ impl ExchangeGatewayClientImpl {
         query: &str,
         body: String,
         method: Method,
+        role: Role,
     ) -> impl Future<Item = T, Error = Error> + Send {
         let query = query.to_string();
         let query1 = query.clone();
@@ -62,8 +58,12 @@ impl ExchangeGatewayClientImpl {
         let cli = self.cli.clone();
         let mut builder = Request::builder();
         let url = format!("{}{}", self.exchange_gateway_url, query);
+        let token = match role {
+            Role::System => self.exchange_gateway_system_token.clone(),
+            Role::User => self.exchange_gateway_token.clone(),
+        };
         builder.uri(url).method(method);
-        builder.header("Authorization", format!("Bearer {}", self.exchange_gateway_token.raw()));
+        builder.header("Authorization", format!("Bearer {}", token.raw()));
         builder
             .body(Body::from(body))
             .map_err(ectx!(ErrorSource::Hyper, ErrorKind::MalformedInput => query3))
@@ -78,54 +78,31 @@ impl ExchangeGatewayClientImpl {
 }
 
 impl ExchangeGatewayClient for ExchangeGatewayClientImpl {
-    fn exchange(&self, create_exchange: ExchangeInput) -> Box<Future<Item = Exchange, Error = Error> + Send> {
+    fn exchange(&self, create_exchange: ExchangeInput, role: Role) -> Box<Future<Item = Exchange, Error = Error> + Send> {
         let client = self.clone();
         let user_id = self.exchange_gateway_user_id;
         Box::new(
-            serde_json::to_string(&create_account)
-                .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_account))
+            serde_json::to_string(&create_exchange)
+                .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_exchange))
                 .into_future()
                 .and_then(move |body| {
-                    let url = format!("/users/{}/exchange_gateway", user_id);
-                    client
-                        .exec_query::<CreateAccountAddressResponse>(&url, body, Method::POST)
-                        .map(|resp_data| resp_data.blockchain_address)
+                    let url = "/exchange";
+                    client.exec_query::<Exchange>(&url, body, Method::POST, role)
                 }),
         )
     }
-    fn sign_transaction(
-        &self,
-        mut create_blockchain_tx: CreateBlockchainTx,
-    ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
+
+    fn rate(&self, create_rate: RateInput, role: Role) -> Box<Future<Item = Rate, Error = Error> + Send> {
         let client = self.clone();
-        create_blockchain_tx.fee_price = match create_blockchain_tx.currency {
-            Currency::Btc => self.bitcoin_fee_price,
-            Currency::Eth | Currency::Stq => self.ethereum_fee_price,
-        };
+        let user_id = self.exchange_gateway_user_id;
         Box::new(
-            serde_json::to_string(&create_blockchain_tx)
-                .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_blockchain_tx))
+            serde_json::to_string(&create_rate)
+                .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_rate))
                 .into_future()
                 .and_then(move |body| {
-                    client
-                        .exec_query::<CreateBlockchainTxResponse>("/transactions", body, Method::POST)
-                        .map(|resp_data| resp_data.raw)
+                    let url = "/rate";
+                    client.exec_query::<Rate>(&url, body, Method::POST, role)
                 }),
         )
-    }
-}
-
-#[derive(Default)]
-pub struct ExchangeGatewayClientMock;
-
-impl ExchangeGatewayClient for ExchangeGatewayClientMock {
-    fn create_account_address(&self, _create_account: CreateAccountAddress) -> Box<Future<Item = AccountAddress, Error = Error> + Send> {
-        Box::new(Ok(AccountAddress::default()).into_future())
-    }
-    fn sign_transaction(
-        &self,
-        _create_blockchain_tx: CreateBlockchainTx,
-    ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
-        Box::new(Ok(BlockchainTransactionRaw::default()).into_future())
     }
 }

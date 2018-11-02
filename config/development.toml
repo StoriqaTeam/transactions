@@ -16,6 +16,9 @@ size = 1
 [auth]
 keys_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
 keys_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
+exhange_gateway_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
+exhange_gateway_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
+
 
 [rabbit]
 url = "amqp://guest:guest@localhost:5672//?heartbeat=3&frame_max=131072"
@@ -32,6 +35,10 @@ stq_liquidity_account_id = "00000000-0000-4000-8000-0c0000000000"
 btc_fees_account_id = "00000000-0000-4000-8000-a00000000000"
 eth_fees_account_id = "00000000-0000-4000-8000-b00000000000"
 stq_fees_account_id = "00000000-0000-4000-8000-c00000000000"
+keys_system_user_id = "0746caa0-7a41-45e2-8c7c-fa76ca5336b7"
+keys_system_user_token = "bURPpnBOGnBvj8fuAOR+q+cSPAw1Lf6zND06E+r0OYo="
+exchange_gateway_system_user_id = "0746caa0-7a41-45e2-8c7c-fa76ca5336b7"
+exchange_gateway_system_user_token = "bURPpnBOGnBvj8fuAOR+q+cSPAw1Lf6zND06E+r0OYo="
 
 [fee_price]
 ethereum = 18000000000
