@@ -24,6 +24,15 @@ connection_timeout_secs = 10
 connection_pool_size = 10
 restart_subscription_secs = 30
 
+[system]
+system_user_id = "00000000-0000-4000-0000-010000000000"
+btc_liquidity_account_id = "00000000-0000-4000-0000-0a0000000000"
+eth_liquidity_account_id = "00000000-0000-4000-0000-0b0000000000"
+stq_liquidity_account_id = "00000000-0000-4000-0000-0c0000000000"
+btc_fees_account_id = "00000000-0000-4000-0000-a00000000000"
+eth_fees_account_id = "00000000-0000-4000-0000-b00000000000"
+stq_fees_account_id = "00000000-0000-4000-0000-c00000000000"
+
 [fee_price]
 ethereum = 18000000000
 bitcoin = 4

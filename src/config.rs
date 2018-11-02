@@ -14,6 +14,7 @@ pub struct Config {
     pub rabbit: Rabbit,
     pub auth: Auth,
     pub fee_price: FeePrice,
+    pub system: System,
     pub sentry: Option<SentryConfig>,
 }
 
@@ -59,6 +60,17 @@ pub struct Rabbit {
     pub connection_timeout_secs: usize,
     pub connection_pool_size: usize,
     pub restart_subscription_secs: usize,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct System {
+    pub system_user_id: UserId,
+    pub btc_liquidity_account_id: AccountId,
+    pub eth_liquidity_account_id: AccountId,
+    pub stq_liquidity_account_id: AccountId,
+    pub btc_fees_account_id: AccountId,
+    pub eth_fees_account_id: AccountId,
+    pub stq_fees_account_id: AccountId,
 }
 
 impl Config {

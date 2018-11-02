@@ -61,15 +61,18 @@ use lapin_futures::channel::Channel;
 use tokio::net::tcp::TcpStream;
 use tokio::prelude::*;
 use tokio::timer::{Delay, Timeout};
+use uuid::Uuid;
 
-use self::models::{MessageDelivery, NewUser};
+use self::client::HttpClientImpl;
+use self::models::*;
 use self::prelude::*;
 use self::repos::{
-    AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError,
-    PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl, StrangeBlockchainTransactionsRepoImpl, TransactionsRepoImpl, UsersRepo,
-    UsersRepoImpl,
+    AccountsRepo, AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError,
+    ErrorKind as ReposErrorKind, PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl, StrangeBlockchainTransactionsRepoImpl,
+    TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
 };
-use config::Config;
+use client::{HttpClient, KeysClient, KeysClientImpl};
+use config::{Config, System};
 use rabbit::{ConnectionHooks, RabbitConnectionManager, TransactionConsumerImpl};
 use rabbit::{ErrorKind, ErrorSource};
 use services::BlockchainFetcher;
@@ -242,6 +245,116 @@ pub fn create_user(name: &str) {
         Ok(())
     });
     hyper::rt::run(fut.map(|_| ()).map_err(|_| ()));
+}
+
+pub fn upsert_system_accounts() {
+    let config = get_config();
+    let client = HttpClientImpl::new(&config);
+    let keys_client = KeysClientImpl::new(&config, client.clone());
+    let db_pool = create_db_pool(&config);
+    let cpu_pool = CpuPool::new(config.rabbit.thread_pool_size);
+    let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
+
+    let config_clone = config.clone();
+    let config_clone2 = config.clone();
+    let f = db_executor
+        .execute(move || {
+            let users_repo = UsersRepoImpl::default();
+            match users_repo.get(config_clone.system.system_user_id)? {
+                Some(system_user) => Ok(system_user),
+                None => {
+                    let new_user = NewUser {
+                        id: config.system.system_user_id,
+                        name: "system".to_string(),
+                        authentication_token: AuthenticationToken::default(),
+                    };
+                    users_repo.create(new_user)
+                }
+            }
+        }).map_err(|e| {
+            log_error(&e.compat());
+        }).and_then(move |user| {
+            let System {
+                btc_liquidity_account_id,
+                eth_liquidity_account_id,
+                stq_liquidity_account_id,
+                btc_fees_account_id,
+                eth_fees_account_id,
+                stq_fees_account_id,
+                ..
+            } = config_clone2.system;
+            let inputs = [
+                (btc_liquidity_account_id, user.id, Currency::Btc, "btc_liquidity_account"),
+                (eth_liquidity_account_id, user.id, Currency::Eth, "eth_liquidity_account"),
+                (stq_liquidity_account_id, user.id, Currency::Stq, "stq_liquidity_account"),
+                (btc_fees_account_id, user.id, Currency::Btc, "btc_fees_account"),
+                (eth_fees_account_id, user.id, Currency::Eth, "eth_fees_account"),
+                (stq_fees_account_id, user.id, Currency::Stq, "stq_fees_account"),
+            ];
+            let fs: Vec<_> = inputs
+                .into_iter()
+                .map(move |(account_id, user_id, currency, name)| {
+                    let keys_client = keys_client.clone();
+                    let db_executor = db_executor.clone();
+
+                    upsert_system_account(*account_id, *user_id, *currency, name, keys_client, db_executor)
+                }).collect();
+            futures::future::join_all(fs)
+        });
+
+    let mut core = ::tokio_core::reactor::Core::new().unwrap();
+    let _ = core.run(f);
+}
+
+fn upsert_system_account(
+    account_id: AccountId,
+    user_id: UserId,
+    currency: Currency,
+    name: &str,
+    keys_client: KeysClientImpl,
+    db_executor: DbExecutorImpl,
+) -> impl Future<Item = (), Error = ()> {
+    let name = name.to_string();
+    db_executor
+        .execute(move || -> Result<(), ReposError> {
+            let accounts_repo = AccountsRepoImpl::default();
+            match accounts_repo.get(account_id)? {
+                Some(_) => Ok(()),
+                None => {
+                    let input = CreateAccountAddress {
+                        id: account_id.inner().clone(),
+                        currency,
+                    };
+                    let accocunt_address = keys_client
+                        .create_account_address(input)
+                        .map_err(ectx!(try ReposErrorKind::Internal))
+                        .wait()?;
+                    let new_cr_account = NewAccount {
+                        id: account_id,
+                        user_id,
+                        currency,
+                        address: accocunt_address.clone(),
+                        name: Some(name.clone()),
+                        kind: AccountKind::Cr,
+                    };
+                    let mut dr_account_id_bytes = account_id.inner().as_bytes().clone();
+                    dr_account_id_bytes[15] = 1;
+                    let dr_account_id = AccountId::new(Uuid::from_bytes(&dr_account_id_bytes).unwrap());
+                    let new_dr_account = NewAccount {
+                        id: dr_account_id,
+                        user_id,
+                        currency,
+                        address: accocunt_address.clone(),
+                        name: Some(format!("{}_deposit", name.clone())),
+                        kind: AccountKind::Dr,
+                    };
+                    accounts_repo.create(new_cr_account)?;
+                    accounts_repo.create(new_dr_account)?;
+                    Ok(())
+                }
+            }
+        }).map(|_| ())
+        .map_err(|e| log_error(&e))
 }
 
 fn create_db_pool(config: &Config) -> PgPool {
