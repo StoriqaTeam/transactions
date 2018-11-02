@@ -290,8 +290,6 @@ pub fn upsert_system_accounts() {
             log_error(&e.compat());
         }).and_then(move |user| {
             let mut keys_client = keys_client.clone();
-            keys_client.keys_user_id = keys_system_user_id;
-            keys_client.keys_token = keys_system_user_token;
             let inputs = [
                 (btc_liquidity_account_id, user.id, Currency::Btc, "btc_liquidity_account"),
                 (eth_liquidity_account_id, user.id, Currency::Eth, "eth_liquidity_account"),
@@ -337,7 +335,7 @@ fn upsert_system_account(
                     let mut core = Core::new().unwrap();
                     let account_address_res = core.run(
                         keys_client
-                            .create_account_address(input)
+                            .create_account_address(input, Role::System)
                             .map_err(ectx!(try ReposErrorKind::Internal)),
                     );
                     if let Err(_) = account_address_res {

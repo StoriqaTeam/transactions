@@ -71,7 +71,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
                             let input = input.clone();
                             move |_| {
                                 keys_client
-                                    .create_account_address(input.clone().into())
+                                    .create_account_address(input.clone().into(), Role::User)
                                     .map_err(ectx!(convert => input))
                             }
                         }).and_then(move |address| {

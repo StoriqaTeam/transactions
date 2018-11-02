@@ -29,7 +29,6 @@ pub trait ExchangeGatewayClient: Send + Sync + 'static {
 pub struct ExchangeGatewayClientImpl {
     cli: Arc<HttpClient>,
     exchange_gateway_url: String,
-    // Todo - hack to make things quicker in upsert_system_accounts
     exchange_gateway_user_id: UserId,
     exchange_gateway_token: AuthenticationToken,
     bitcoin_fee_price: Amount,

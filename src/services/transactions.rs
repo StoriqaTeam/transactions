@@ -288,7 +288,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         let raw_tx = self
             .keys_client
-            .sign_transaction(create_blockchain_input.clone())
+            .sign_transaction(create_blockchain_input.clone(), Role::User)
             .map_err(ectx!(try convert => create_blockchain_input_clone))
             .wait()?;
 
@@ -336,7 +336,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         let create_blockchain = create_blockchain_input.clone();
         let raw_tx = self
             .keys_client
-            .sign_transaction(create_blockchain_input.clone())
+            .sign_transaction(create_blockchain_input.clone(), Role::User)
             .map_err(ectx!(try convert => create_blockchain_input))
             .wait()?;
         let tx_id = self
