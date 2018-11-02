@@ -37,6 +37,53 @@ enum TransactionType {
     WithdrawalExchange(Account, AccountAddress, Currency),
 }
 
+pub trait TransactionsService: Send + Sync + 'static {
+    fn create_transaction(
+        &self,
+        token: AuthenticationToken,
+        input: CreateTransactionInput,
+    ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
+    // fn create_transaction_local(&self, input: CreateTransactionLocal) -> Box<Future<Item = Transaction, Error = Error> + Send>;
+    // fn deposit_funds(&self, token: AuthenticationToken, input: DepositFounds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
+    // fn withdraw(&self, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
+    fn get_transaction(
+        &self,
+        token: AuthenticationToken,
+        transaction_id: TransactionId,
+    ) -> Box<Future<Item = Option<TransactionOut>, Error = Error> + Send>;
+    fn get_account_balance(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Account, Error = Error> + Send>;
+    fn get_transactions_for_user(
+        &self,
+        token: AuthenticationToken,
+        user_id: UserId,
+        offset: i64,
+        limit: i64,
+    ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
+    fn get_account_transactions(
+        &self,
+        token: AuthenticationToken,
+        account_id: AccountId,
+        offset: i64,
+        limit: i64,
+    ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
+    // fn create_transaction_ethereum(
+    //     &self,
+    //     from: AccountAddress,
+    //     to: AccountAddress,
+    //     value: Amount,
+    //     fee: Amount,
+    //     currency: Currency,
+    // ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
+    // fn create_transaction_bitcoin(
+    //     &self,
+    //     from: AccountAddress,
+    //     to: AccountAddress,
+    //     value: Amount,
+    //     fee: Amount,
+    // ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
+    // fn convert_transaction(&self, transaction: Transaction) -> Box<Future<Item = TransactionOut, Error = Error> + Send>;
+}
+
 impl<E: DbExecutor> TransactionsServiceImpl<E> {
     pub fn new(
         auth_service: Arc<AuthService>,
@@ -313,53 +360,96 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         };
         Ok(tx_id)
     }
-}
+    fn convert_transaction(&self, transaction: Transaction) -> Box<Future<Item = TransactionOut, Error = Error> + Send> {
+        let accounts_repo = self.accounts_repo.clone();
+        let db_executor = self.db_executor.clone();
+        let pending_transactions_repo = self.pending_transactions_repo.clone();
+        let blockchain_transactions_repo = self.blockchain_transactions_repo.clone();
+        let transaction_id = transaction.id;
+        Box::new(db_executor.execute(move || {
+            let cr_account = accounts_repo
+                .get(transaction.cr_account_id)
+                .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
+            let cr_account_id = transaction.cr_account_id;
+            let cr_account = cr_account.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => cr_account_id))?;
 
-pub trait TransactionsService: Send + Sync + 'static {
-    fn create_transaction(
-        &self,
-        token: AuthenticationToken,
-        input: CreateTransactionInput,
-    ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
-    fn create_transaction_local(&self, input: CreateTransactionLocal) -> Box<Future<Item = Transaction, Error = Error> + Send>;
-    fn deposit_funds(&self, token: AuthenticationToken, input: DepositFounds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
-    fn withdraw(&self, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
-    fn get_transaction(
-        &self,
-        token: AuthenticationToken,
-        transaction_id: TransactionId,
-    ) -> Box<Future<Item = Option<TransactionOut>, Error = Error> + Send>;
-    fn get_account_balance(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Account, Error = Error> + Send>;
-    fn get_transactions_for_user(
-        &self,
-        token: AuthenticationToken,
-        user_id: UserId,
-        offset: i64,
-        limit: i64,
-    ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
-    fn get_account_transactions(
-        &self,
-        token: AuthenticationToken,
-        account_id: AccountId,
-        offset: i64,
-        limit: i64,
-    ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
-    fn create_transaction_ethereum(
-        &self,
-        from: AccountAddress,
-        to: AccountAddress,
-        value: Amount,
-        fee: Amount,
-        currency: Currency,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
-    fn create_transaction_bitcoin(
-        &self,
-        from: AccountAddress,
-        to: AccountAddress,
-        value: Amount,
-        fee: Amount,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
-    fn convert_transaction(&self, transaction: Transaction) -> Box<Future<Item = TransactionOut, Error = Error> + Send>;
+            let dr_account = accounts_repo
+                .get(transaction.dr_account_id)
+                .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
+            let dr_account_id = transaction.dr_account_id;
+            let dr_account = dr_account.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => dr_account_id))?;
+
+            if cr_account.kind == AccountKind::Cr && dr_account.kind == AccountKind::Cr {
+                let from = TransactionAddressInfo::new(Some(dr_account.id), dr_account.address);
+                let to = TransactionAddressInfo::new(Some(cr_account.id), cr_account.address);
+                Ok(TransactionOut::new(&transaction, vec![from], to))
+            } else if cr_account.kind == AccountKind::Cr && dr_account.kind == AccountKind::Dr {
+                let hash = transaction
+                    .blockchain_tx_id
+                    .clone()
+                    .ok_or_else(|| ectx!(try err ErrorContext::NoTransaction, ErrorKind::NotFound => transaction_id))?;
+                let to = TransactionAddressInfo::new(Some(cr_account.id), cr_account.address);
+
+                let hash_clone = hash.clone();
+                let hash_clone2 = hash.clone();
+                let hash_clone3 = hash.clone();
+                if let Some(pending_transaction) = pending_transactions_repo
+                    .get(hash.clone())
+                    .map_err(ectx!(try convert => hash_clone))?
+                {
+                    let from = TransactionAddressInfo::new(None, pending_transaction.from_);
+                    Ok(TransactionOut::new(&transaction, vec![from], to))
+                } else if let Some(blockchain_transaction_db) = blockchain_transactions_repo
+                    .get(hash.clone())
+                    .map_err(ectx!(try convert => hash_clone2))?
+                {
+                    let blockchain_transaction: BlockchainTransaction = blockchain_transaction_db.into();
+                    let (froms, _) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash))?;
+                    let from = froms
+                        .into_iter()
+                        .map(|address| TransactionAddressInfo::new(None, address))
+                        .collect();
+                    Ok(TransactionOut::new(&transaction, from, to))
+                } else {
+                    return Err(ectx!(err ErrorContext::NoTransaction, ErrorKind::NotFound => hash_clone3));
+                }
+            } else if cr_account.kind == AccountKind::Dr && dr_account.kind == AccountKind::Cr {
+                let hash = transaction
+                    .blockchain_tx_id
+                    .clone()
+                    .ok_or_else(|| ectx!(try err ErrorContext::NoTransaction, ErrorKind::NotFound => transaction_id))?;
+                let from = TransactionAddressInfo::new(Some(dr_account.id), dr_account.address);
+
+                let hash_clone = hash.clone();
+                let hash_clone2 = hash.clone();
+                let hash_clone3 = hash.clone();
+                if let Some(pending_transaction) = pending_transactions_repo
+                    .get(hash.clone())
+                    .map_err(ectx!(try convert => hash_clone))?
+                {
+                    let to = TransactionAddressInfo::new(None, pending_transaction.to_);
+                    Ok(TransactionOut::new(&transaction, vec![from], to))
+                } else if let Some(blockchain_transaction_db) = blockchain_transactions_repo
+                    .get(hash.clone())
+                    .map_err(ectx!(try convert => hash_clone2))?
+                {
+                    let hash_clone4 = hash.clone();
+                    let blockchain_transaction: BlockchainTransaction = blockchain_transaction_db.into();
+                    let (_, to_s) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash_clone4))?;
+                    let to = to_s
+                        .into_iter()
+                        .map(|(address, _)| TransactionAddressInfo::new(None, address))
+                        .nth(0);
+                    let to = to.ok_or_else(|| ectx!(try err ErrorContext::NoTransaction, ErrorKind::NotFound => hash))?;
+                    Ok(TransactionOut::new(&transaction, vec![from], to))
+                } else {
+                    return Err(ectx!(err ErrorContext::NoTransaction, ErrorKind::NotFound => hash_clone3));
+                }
+            } else {
+                return Err(ectx!(err ErrorContext::InvalidTransaction, ErrorKind::Internal => transaction_id));
+            }
+        }))
+    }
 }
 
 impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
@@ -394,213 +484,6 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         }))
     }
 
-    fn create_transaction_local(&self, input: CreateTransactionLocal) -> Box<Future<Item = Transaction, Error = Error> + Send> {
-        let transactions_repo = self.transactions_repo.clone();
-        let db_executor = self.db_executor.clone();
-        Box::new(
-            input
-                .validate()
-                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
-                .into_future()
-                .and_then(move |_| {
-                    db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
-                        // check that balance > value of input
-                        let dr_account_id = input.dr_account.id;
-                        let balance = transactions_repo
-                            .get_account_balance(dr_account_id, AccountKind::Cr)
-                            .map_err(ectx!(try convert => dr_account_id))?;
-
-                        if balance >= input.value {
-                            let new_transaction: NewTransaction = NewTransaction::from_local(&input);
-                            transactions_repo
-                                .create(new_transaction.clone())
-                                .map_err(ectx!(convert => new_transaction))
-                        } else {
-                            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, input.value))
-                        }
-                    })
-                }),
-        )
-    }
-    fn withdraw(&self, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send> {
-        let transactions_repo = self.transactions_repo.clone();
-        let transactions_repo2 = self.transactions_repo.clone();
-        let db_executor = self.db_executor.clone();
-        let db_executor2 = self.db_executor.clone();
-        let currency = input.currency;
-        let user_id = input.user_id;
-        let fee = input.fee;
-        let service = self.clone();
-        Box::new(
-            input
-                .validate()
-                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
-                .into_future()
-                .and_then(move |_| {
-                    db_executor.execute(move || {
-                        // check that cr account exists and it is belonging to one user
-                        let currency = input.currency;
-                        if input.dr_account.currency != currency {
-                            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Balance => currency));
-                        }
-                        let value = input.value;
-                        let dr_account_id = input.dr_account.id;
-                        let balance = transactions_repo
-                            .get_account_balance(dr_account_id, AccountKind::Cr)
-                            .map_err(ectx!(try convert => dr_account_id))?;
-                        if balance < value {
-                            return Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => value));
-                        }
-
-                        let txs = transactions_repo
-                            .get_with_enough_value(value, currency, user_id)
-                            .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, currency, user_id))?;
-
-                        //double check
-                        for tx in &txs {
-                            let tx_id = tx.0.id;
-                            let needed_amount = tx.1;
-                            let balance = transactions_repo
-                                .get_account_balance(tx_id, AccountKind::Dr)
-                                .map_err(ectx!(try convert => tx_id))?;
-                            if balance < needed_amount {
-                                return Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, needed_amount));
-                            }
-                        }
-                        Ok((input.dr_account.id, input.address, txs))
-                    })
-                }).and_then(move |(dr_acc_id, address, cr_accs)| {
-                    iter_ok::<_, Error>(cr_accs).fold(vec![], move |mut transactions, (cr_acc, value)| {
-                        let cr_acc_id = cr_acc.id;
-                        let db_executor2 = db_executor2.clone();
-                        let transactions_repo2 = transactions_repo2.clone();
-                        let from = cr_acc.address.clone();
-                        let to = address.clone();
-                        match currency {
-                            Currency::Eth => service.create_transaction_ethereum(from, to, value, fee, Currency::Eth),
-                            Currency::Stq => service.create_transaction_ethereum(from, to, value, fee, Currency::Stq),
-                            Currency::Btc => service.create_transaction_bitcoin(from, to, value, fee),
-                        }.and_then(move |blockchain_tx_id| {
-                            db_executor2.execute_transaction(move || {
-                                // creating transaction in db
-                                let new_transaction: NewTransaction = NewTransaction {
-                                    id: TransactionId::generate(),
-                                    user_id,
-                                    dr_account_id: dr_acc_id,
-                                    cr_account_id: cr_acc_id,
-                                    currency,
-                                    value,
-                                    status: TransactionStatus::Pending,
-                                    blockchain_tx_id: Some(blockchain_tx_id.clone()),
-                                    hold_until: None,
-                                    fee,
-                                };
-                                transactions_repo2
-                                    .create(new_transaction.clone())
-                                    .map_err(ectx!(convert => new_transaction))
-                            })
-                        }).then(|res| {
-                            match res {
-                                Ok(r) => transactions.push(r),
-                                Err(e) => log_error(&e),
-                            };
-                            Ok(transactions) as Result<Vec<Transaction>, Error>
-                        })
-                    })
-                }),
-        )
-    }
-
-    fn create_transaction_bitcoin(
-        &self,
-        from: AccountAddress,
-        to: AccountAddress,
-        value: Amount,
-        fee: Amount,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
-        let pending_transactions_repo = self.pending_transactions_repo.clone();
-        let db_executor = self.db_executor.clone();
-        let keys_client = self.keys_client.clone();
-        let blockchain_client = self.blockchain_client.clone();
-        let from_clone = from.clone();
-
-        Box::new(
-            blockchain_client
-                .get_bitcoin_utxos(from_clone.clone())
-                .map_err(ectx!(convert => from_clone))
-                .and_then(move |utxos| {
-                    // creating blockchain transactions array
-                    let create_blockchain_input = CreateBlockchainTx::new(from, to, Currency::Btc, value, fee, None, Some(utxos));
-
-                    let create_blockchain = create_blockchain_input.clone();
-                    keys_client
-                        .sign_transaction(create_blockchain_input.clone())
-                        .map_err(ectx!(convert => create_blockchain_input))
-                        .map(|raw| (raw, create_blockchain))
-                }).and_then(move |(raw, create_blockchain)| {
-                    blockchain_client
-                        .post_bitcoin_transaction(raw)
-                        .map_err(ectx!(convert))
-                        .and_then(move |blockchain_tx_id| {
-                            db_executor.execute_transaction(move || {
-                                let new_pending = (create_blockchain, blockchain_tx_id.clone()).into();
-                                let _ = pending_transactions_repo.create(new_pending).map_err(|e| {
-                                    log_and_capture_error(e);
-                                });
-                                Ok(blockchain_tx_id)
-                            })
-                        })
-                }),
-        )
-    }
-
-    fn create_transaction_ethereum(
-        &self,
-        from: AccountAddress,
-        to: AccountAddress,
-        value: Amount,
-        fee: Amount,
-        currency: Currency,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
-        let pending_transactions_repo = self.pending_transactions_repo.clone();
-        let db_executor = self.db_executor.clone();
-        let keys_client = self.keys_client.clone();
-        let blockchain_client = self.blockchain_client.clone();
-        let from_clone = from.clone();
-
-        Box::new(
-            blockchain_client
-                .get_ethereum_nonce(from_clone.clone())
-                .map_err(ectx!(convert => from_clone))
-                .and_then(move |nonce| {
-                    // creating blockchain transactions array
-                    let create_blockchain_input = CreateBlockchainTx::new(from, to, currency, value, fee, Some(nonce), None);
-
-                    let create_blockchain = create_blockchain_input.clone();
-                    keys_client
-                        .sign_transaction(create_blockchain_input.clone())
-                        .map_err(ectx!(convert => create_blockchain_input))
-                        .map(|raw| (raw, create_blockchain))
-                }).and_then(move |(raw, create_blockchain)| {
-                    blockchain_client
-                        .post_ethereum_transaction(raw)
-                        .map_err(ectx!(convert))
-                        .and_then(move |mut blockchain_tx_id| {
-                            if currency == Currency::Stq {
-                                // if currency is stq, we are adding `:0` to hash.
-                                blockchain_tx_id = BlockchainTransactionId::new(format!("{}:0", blockchain_tx_id));
-                            }
-                            db_executor.execute_transaction(move || {
-                                let new_pending = (create_blockchain, blockchain_tx_id.clone()).into();
-                                let _ = pending_transactions_repo.create(new_pending).map_err(|e| {
-                                    log_and_capture_error(e);
-                                });
-                                Ok(blockchain_tx_id)
-                            })
-                        })
-                }),
-        )
-    }
     fn get_transaction(
         &self,
         token: AuthenticationToken,
@@ -718,138 +601,6 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 })
         }))
     }
-    fn deposit_funds(&self, token: AuthenticationToken, input: DepositFounds) -> Box<Future<Item = Transaction, Error = Error> + Send> {
-        let transactions_repo = self.transactions_repo.clone();
-        let accounts_repo = self.accounts_repo.clone();
-        let db_executor = self.db_executor.clone();
-        Box::new(self.auth_service.authenticate(token).and_then(move |user| {
-            input
-                .validate()
-                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
-                .into_future()
-                .and_then(move |_| {
-                    db_executor.execute_transaction(move || {
-                        let address = input.address.clone();
-                        let currency = input.currency;
-                        // check that cr account exists and it is belonging to one user
-                        let cr_acc = accounts_repo
-                            .get_by_address(address.clone(), currency, AccountKind::Cr)
-                            .map_err(ectx!(try convert => address, AccountKind::Cr))?;
-                        let cr_acc = cr_acc.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => user.id))?;
-                        if cr_acc.user_id != user.id {
-                            return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                        }
-
-                        let address = input.address.clone();
-                        // check that dr account exists and it is belonging to one user
-                        let dr_acc = accounts_repo
-                            .get_by_address(address.clone(), currency, AccountKind::Dr)
-                            .map_err(ectx!(try convert => address, AccountKind::Dr))?;
-                        let dr_acc = dr_acc.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => user.id))?;
-                        if dr_acc.user_id != user.id {
-                            return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                        }
-
-                        // creating transaction
-                        let new_transaction: NewTransaction = NewTransaction::from_deposit(input, cr_acc.id, dr_acc.id);
-                        transactions_repo
-                            .create(new_transaction.clone())
-                            .map_err(ectx!(convert => new_transaction))
-                    })
-                })
-        }))
-    }
-
-    fn convert_transaction(&self, transaction: Transaction) -> Box<Future<Item = TransactionOut, Error = Error> + Send> {
-        let accounts_repo = self.accounts_repo.clone();
-        let db_executor = self.db_executor.clone();
-        let pending_transactions_repo = self.pending_transactions_repo.clone();
-        let blockchain_transactions_repo = self.blockchain_transactions_repo.clone();
-        let transaction_id = transaction.id;
-        Box::new(db_executor.execute(move || {
-            let cr_account = accounts_repo
-                .get(transaction.cr_account_id)
-                .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
-            let cr_account_id = transaction.cr_account_id;
-            let cr_account = cr_account.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => cr_account_id))?;
-
-            let dr_account = accounts_repo
-                .get(transaction.dr_account_id)
-                .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
-            let dr_account_id = transaction.dr_account_id;
-            let dr_account = dr_account.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => dr_account_id))?;
-
-            if cr_account.kind == AccountKind::Cr && dr_account.kind == AccountKind::Cr {
-                let from = TransactionAddressInfo::new(Some(dr_account.id), dr_account.address);
-                let to = TransactionAddressInfo::new(Some(cr_account.id), cr_account.address);
-                Ok(TransactionOut::new(&transaction, vec![from], to))
-            } else if cr_account.kind == AccountKind::Cr && dr_account.kind == AccountKind::Dr {
-                let hash = transaction
-                    .blockchain_tx_id
-                    .clone()
-                    .ok_or_else(|| ectx!(try err ErrorContext::NoTransaction, ErrorKind::NotFound => transaction_id))?;
-                let to = TransactionAddressInfo::new(Some(cr_account.id), cr_account.address);
-
-                let hash_clone = hash.clone();
-                let hash_clone2 = hash.clone();
-                let hash_clone3 = hash.clone();
-                if let Some(pending_transaction) = pending_transactions_repo
-                    .get(hash.clone())
-                    .map_err(ectx!(try convert => hash_clone))?
-                {
-                    let from = TransactionAddressInfo::new(None, pending_transaction.from_);
-                    Ok(TransactionOut::new(&transaction, vec![from], to))
-                } else if let Some(blockchain_transaction_db) = blockchain_transactions_repo
-                    .get(hash.clone())
-                    .map_err(ectx!(try convert => hash_clone2))?
-                {
-                    let blockchain_transaction: BlockchainTransaction = blockchain_transaction_db.into();
-                    let (froms, _) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash))?;
-                    let from = froms
-                        .into_iter()
-                        .map(|address| TransactionAddressInfo::new(None, address))
-                        .collect();
-                    Ok(TransactionOut::new(&transaction, from, to))
-                } else {
-                    return Err(ectx!(err ErrorContext::NoTransaction, ErrorKind::NotFound => hash_clone3));
-                }
-            } else if cr_account.kind == AccountKind::Dr && dr_account.kind == AccountKind::Cr {
-                let hash = transaction
-                    .blockchain_tx_id
-                    .clone()
-                    .ok_or_else(|| ectx!(try err ErrorContext::NoTransaction, ErrorKind::NotFound => transaction_id))?;
-                let from = TransactionAddressInfo::new(Some(dr_account.id), dr_account.address);
-
-                let hash_clone = hash.clone();
-                let hash_clone2 = hash.clone();
-                let hash_clone3 = hash.clone();
-                if let Some(pending_transaction) = pending_transactions_repo
-                    .get(hash.clone())
-                    .map_err(ectx!(try convert => hash_clone))?
-                {
-                    let to = TransactionAddressInfo::new(None, pending_transaction.to_);
-                    Ok(TransactionOut::new(&transaction, vec![from], to))
-                } else if let Some(blockchain_transaction_db) = blockchain_transactions_repo
-                    .get(hash.clone())
-                    .map_err(ectx!(try convert => hash_clone2))?
-                {
-                    let hash_clone4 = hash.clone();
-                    let blockchain_transaction: BlockchainTransaction = blockchain_transaction_db.into();
-                    let (_, to_s) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash_clone4))?;
-                    let to = to_s
-                        .into_iter()
-                        .map(|(address, _)| TransactionAddressInfo::new(None, address))
-                        .nth(0);
-                    let to = to.ok_or_else(|| ectx!(try err ErrorContext::NoTransaction, ErrorKind::NotFound => hash))?;
-                    Ok(TransactionOut::new(&transaction, vec![from], to))
-                } else {
-                    return Err(ectx!(err ErrorContext::NoTransaction, ErrorKind::NotFound => hash_clone3));
-                }
-            } else {
-                return Err(ectx!(err ErrorContext::InvalidTransaction, ErrorKind::Internal => transaction_id));
-            }
-        }))
-    }
 }
 
 #[cfg(test)]
@@ -891,189 +642,189 @@ mod tests {
         (acc_service, trans_service)
     }
 
-    #[test]
-    fn test_transaction_create() {
-        let mut core = Core::new().unwrap();
-        let token = AuthenticationToken::default();
-        let user_id = UserId::generate();
-        let (acc_service, trans_service) = create_services(token.clone(), user_id);
+    //     #[test]
+    //     fn test_transaction_create() {
+    //         let mut core = Core::new().unwrap();
+    //         let token = AuthenticationToken::default();
+    //         let user_id = UserId::generate();
+    //         let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
-        let mut dr_account = CreateAccount::default();
-        dr_account.name = "test test test acc".to_string();
-        dr_account.user_id = user_id;
-        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
+    //         let mut dr_account = CreateAccount::default();
+    //         dr_account.name = "test test test acc".to_string();
+    //         dr_account.user_id = user_id;
+    //         let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
-        let mut new_transaction = DepositFounds::default();
-        new_transaction.value = Amount::new(100501);
-        new_transaction.address = dr_account.address.clone();
+    //         let mut new_transaction = DepositFounds::default();
+    //         new_transaction.value = Amount::new(100501);
+    //         new_transaction.address = dr_account.address.clone();
 
-        core.run(trans_service.deposit_funds(token.clone(), new_transaction)).unwrap();
+    //         core.run(trans_service.deposit_funds(token.clone(), new_transaction)).unwrap();
 
-;        let mut cr_account = CreateAccount::default();
-        cr_account.name = "test test test acc".to_string();
-        cr_account.user_id = user_id;
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account.clone())).unwrap();
+    // ;        let mut cr_account = CreateAccount::default();
+    //         cr_account.name = "test test test acc".to_string();
+    //         cr_account.user_id = user_id;
+    //         let cr_account = core.run(acc_service.create_account(token.clone(), cr_account.clone())).unwrap();
 
-        let mut new_transaction = CreateTransactionLocal::default();
-        new_transaction.value = Amount::new(100500);
-        new_transaction.cr_account = cr_account;
-        new_transaction.dr_account = dr_account;
+    //         let mut new_transaction = CreateTransactionLocal::default();
+    //         new_transaction.value = Amount::new(100500);
+    //         new_transaction.cr_account = cr_account;
+    //         new_transaction.dr_account = dr_account;
 
-        let transaction = core.run(trans_service.create_transaction_local(new_transaction));
-        assert!(transaction.is_ok());
-    }
-    #[test]
-    fn test_transaction_get_by_id() {
-        let mut core = Core::new().unwrap();
-        let token = AuthenticationToken::default();
-        let user_id = UserId::generate();
-        let (acc_service, trans_service) = create_services(token.clone(), user_id);
+    //         let transaction = core.run(trans_service.create_transaction_local(new_transaction));
+    //         assert!(transaction.is_ok());
+    //     }
+    // #[test]
+    // fn test_transaction_get_by_id() {
+    //     let mut core = Core::new().unwrap();
+    //     let token = AuthenticationToken::default();
+    //     let user_id = UserId::generate();
+    //     let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
-        let mut cr_account = CreateAccount::default();
-        cr_account.name = "test test test acc".to_string();
-        cr_account.user_id = user_id;
+    //     let mut cr_account = CreateAccount::default();
+    //     cr_account.name = "test test test acc".to_string();
+    //     cr_account.user_id = user_id;
 
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+    //     let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
-        let mut new_transaction = DepositFounds::default();
-        new_transaction.value = Amount::new(100500);
-        new_transaction.address = cr_account.address;
-        new_transaction.user_id = user_id;
+    //     let mut new_transaction = DepositFounds::default();
+    //     new_transaction.value = Amount::new(100500);
+    //     new_transaction.address = cr_account.address;
+    //     new_transaction.user_id = user_id;
 
-        let transaction = core.run(trans_service.deposit_funds(token.clone(), new_transaction)).unwrap();
-        let transaction = core.run(trans_service.get_transaction(token, transaction.id));
-        assert!(transaction.is_ok());
-    }
-    #[test]
-    fn test_transaction_get_for_users() {
-        let mut core = Core::new().unwrap();
-        let token = AuthenticationToken::default();
-        let user_id = UserId::generate();
-        let (acc_service, trans_service) = create_services(token.clone(), user_id);
+    //     let transaction = core.run(trans_service.deposit_funds(token.clone(), new_transaction)).unwrap();
+    //     let transaction = core.run(trans_service.get_transaction(token, transaction.id));
+    //     assert!(transaction.is_ok());
+    // }
+    // #[test]
+    // fn test_transaction_get_for_users() {
+    //     let mut core = Core::new().unwrap();
+    //     let token = AuthenticationToken::default();
+    //     let user_id = UserId::generate();
+    //     let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
-        let mut cr_account = CreateAccount::default();
-        cr_account.name = "test test test acc".to_string();
-        cr_account.user_id = user_id;
+    //     let mut cr_account = CreateAccount::default();
+    //     cr_account.name = "test test test acc".to_string();
+    //     cr_account.user_id = user_id;
 
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+    //     let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
-        let mut new_transaction = DepositFounds::default();
-        new_transaction.value = Amount::new(100500);
-        new_transaction.address = cr_account.address;
-        new_transaction.user_id = user_id;
+    //     let mut new_transaction = DepositFounds::default();
+    //     new_transaction.value = Amount::new(100500);
+    //     new_transaction.address = cr_account.address;
+    //     new_transaction.user_id = user_id;
 
-        let _ = core.run(trans_service.deposit_funds(token.clone(), new_transaction)).unwrap();
+    //     let _ = core.run(trans_service.deposit_funds(token.clone(), new_transaction)).unwrap();
 
-        let transactions = core.run(trans_service.get_transactions_for_user(token, user_id, 0, 10));
-        assert!(transactions.is_ok());
-        assert_eq!(transactions.unwrap().len(), 1);
-    }
-    #[test]
-    fn test_transaction_get_for_account() {
-        let mut core = Core::new().unwrap();
-        let token = AuthenticationToken::default();
-        let user_id = UserId::generate();
-        let (acc_service, trans_service) = create_services(token.clone(), user_id);
+    //     let transactions = core.run(trans_service.get_transactions_for_user(token, user_id, 0, 10));
+    //     assert!(transactions.is_ok());
+    //     assert_eq!(transactions.unwrap().len(), 1);
+    // }
+    // #[test]
+    // fn test_transaction_get_for_account() {
+    //     let mut core = Core::new().unwrap();
+    //     let token = AuthenticationToken::default();
+    //     let user_id = UserId::generate();
+    //     let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
-        let mut dr_account = CreateAccount::default();
-        dr_account.name = "test test test acc".to_string();
-        dr_account.user_id = user_id;
-        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
+    //     let mut dr_account = CreateAccount::default();
+    //     dr_account.name = "test test test acc".to_string();
+    //     dr_account.user_id = user_id;
+    //     let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
-        let mut new_transaction = DepositFounds::default();
-        new_transaction.value = Amount::new(100501);
-        new_transaction.address = dr_account.address.clone();
+    //     let mut new_transaction = DepositFounds::default();
+    //     new_transaction.value = Amount::new(100501);
+    //     new_transaction.address = dr_account.address.clone();
 
-        core.run(trans_service.deposit_funds(token.clone(), new_transaction)).unwrap();
+    //     core.run(trans_service.deposit_funds(token.clone(), new_transaction)).unwrap();
 
-        let mut cr_account = CreateAccount::default();
-        cr_account.name = "test test test acc".to_string();
-        cr_account.user_id = user_id;
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+    //     let mut cr_account = CreateAccount::default();
+    //     cr_account.name = "test test test acc".to_string();
+    //     cr_account.user_id = user_id;
+    //     let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
-        let mut new_transaction = CreateTransactionLocal::default();
-        new_transaction.value = Amount::new(100500);
-        new_transaction.cr_account = cr_account;
-        new_transaction.dr_account = dr_account;
+    //     let mut new_transaction = CreateTransactionLocal::default();
+    //     new_transaction.value = Amount::new(100500);
+    //     new_transaction.cr_account = cr_account;
+    //     new_transaction.dr_account = dr_account;
 
-        let transaction = core.run(trans_service.create_transaction_local(new_transaction)).unwrap();
-        let transaction = core.run(trans_service.get_account_transactions(token, transaction.cr_account_id, 0, 10));
-        assert!(transaction.is_ok());
-    }
-    #[test]
-    fn test_transaction_deposit_funds() {
-        let mut core = Core::new().unwrap();
-        let token = AuthenticationToken::default();
-        let user_id = UserId::generate();
-        let (acc_service, trans_service) = create_services(token.clone(), user_id);
-        let mut cr_account = CreateAccount::default();
-        cr_account.name = "test test test acc".to_string();
-        cr_account.user_id = user_id;
+    //     let transaction = core.run(trans_service.create_transaction_local(new_transaction)).unwrap();
+    //     let transaction = core.run(trans_service.get_account_transactions(token, transaction.cr_account_id, 0, 10));
+    //     assert!(transaction.is_ok());
+    // }
+    // #[test]
+    // fn test_transaction_deposit_funds() {
+    //     let mut core = Core::new().unwrap();
+    //     let token = AuthenticationToken::default();
+    //     let user_id = UserId::generate();
+    //     let (acc_service, trans_service) = create_services(token.clone(), user_id);
+    //     let mut cr_account = CreateAccount::default();
+    //     cr_account.name = "test test test acc".to_string();
+    //     cr_account.user_id = user_id;
 
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+    //     let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
-        let mut new_transaction = DepositFounds::default();
-        new_transaction.value = Amount::new(100500);
-        new_transaction.address = cr_account.address;
+    //     let mut new_transaction = DepositFounds::default();
+    //     new_transaction.value = Amount::new(100500);
+    //     new_transaction.address = cr_account.address;
 
-        let transaction = core.run(trans_service.deposit_funds(token.clone(), new_transaction));
-        assert!(transaction.is_ok());
-    }
-    #[test]
-    fn test_transaction_withdraw() {
-        let mut core = Core::new().unwrap();
-        let token = AuthenticationToken::default();
-        let user_id = UserId::generate();
-        let (acc_service, trans_service) = create_services(token.clone(), user_id);
+    //     let transaction = core.run(trans_service.deposit_funds(token.clone(), new_transaction));
+    //     assert!(transaction.is_ok());
+    // }
+    // #[test]
+    // fn test_transaction_withdraw() {
+    //     let mut core = Core::new().unwrap();
+    //     let token = AuthenticationToken::default();
+    //     let user_id = UserId::generate();
+    //     let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
-        //creating withdraw account
-        let mut dr_account = CreateAccount::default();
-        dr_account.name = "test test test acc".to_string();
-        dr_account.user_id = user_id;
-        let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
+    //     //creating withdraw account
+    //     let mut dr_account = CreateAccount::default();
+    //     dr_account.name = "test test test acc".to_string();
+    //     dr_account.user_id = user_id;
+    //     let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
-        //depositing on withdraw account
-        let mut deposit = DepositFounds::default();
-        deposit.value = Amount::new(100500);
-        deposit.address = dr_account.address.clone();
+    //     //depositing on withdraw account
+    //     let mut deposit = DepositFounds::default();
+    //     deposit.value = Amount::new(100500);
+    //     deposit.address = dr_account.address.clone();
 
-        core.run(trans_service.deposit_funds(token.clone(), deposit)).unwrap();
+    //     core.run(trans_service.deposit_funds(token.clone(), deposit)).unwrap();
 
-        //creating random account
-        let mut cr_account = CreateAccount::default();
-        cr_account.name = "test test test acc".to_string();
-        cr_account.user_id = user_id;
-        let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
+    //     //creating random account
+    //     let mut cr_account = CreateAccount::default();
+    //     cr_account.name = "test test test acc".to_string();
+    //     cr_account.user_id = user_id;
+    //     let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
-        //depositin on random account
-        let mut deposit = DepositFounds::default();
-        deposit.value = Amount::new(100500);
-        deposit.address = cr_account.address;
+    //     //depositin on random account
+    //     let mut deposit = DepositFounds::default();
+    //     deposit.value = Amount::new(100500);
+    //     deposit.address = cr_account.address;
 
-        core.run(trans_service.deposit_funds(token.clone(), deposit)).unwrap();
+    //     core.run(trans_service.deposit_funds(token.clone(), deposit)).unwrap();
 
-        //withdrawing
-        let mut withdraw = Withdraw::default();
-        withdraw.value = Amount::new(100);
-        withdraw.dr_account = dr_account;
+    //     //withdrawing
+    //     let mut withdraw = Withdraw::default();
+    //     withdraw.value = Amount::new(100);
+    //     withdraw.dr_account = dr_account;
 
-        let transaction = core.run(trans_service.withdraw(withdraw));
-        assert!(transaction.is_ok());
-    }
-    #[test]
-    fn test_account_get_balance() {
-        let mut core = Core::new().unwrap();
-        let token = AuthenticationToken::default();
-        let user_id = UserId::generate();
-        let (acc_service, trans_service) = create_services(token.clone(), user_id);
+    //     let transaction = core.run(trans_service.withdraw(withdraw));
+    //     assert!(transaction.is_ok());
+    // }
+    // #[test]
+    // fn test_account_get_balance() {
+    //     let mut core = Core::new().unwrap();
+    //     let token = AuthenticationToken::default();
+    //     let user_id = UserId::generate();
+    //     let (acc_service, trans_service) = create_services(token.clone(), user_id);
 
-        let mut new_account = CreateAccount::default();
-        new_account.name = "test test test acc".to_string();
-        new_account.user_id = user_id;
+    //     let mut new_account = CreateAccount::default();
+    //     new_account.name = "test test test acc".to_string();
+    //     new_account.user_id = user_id;
 
-        core.run(acc_service.create_account(token.clone(), new_account.clone())).unwrap();
+    //     core.run(acc_service.create_account(token.clone(), new_account.clone())).unwrap();
 
-        let account = core.run(trans_service.get_account_balance(token, new_account.id));
-        assert!(account.is_ok());
-    }
+    //     let account = core.run(trans_service.get_account_balance(token, new_account.id));
+    //     assert!(account.is_ok());
+    // }
 }
