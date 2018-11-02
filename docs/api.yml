@@ -5,7 +5,7 @@ servers:
 info:
   description: Accounts, balances, transactions, etc.
   version: "1.0.0"
-  title: Accounts core
+  title: Transactions core
   contact:
     email: a.karasev@storiqa.com
 tags:
@@ -17,7 +17,33 @@ tags:
     description: Methods for working with account balances
   - name: transactions
     description: Managements of transactions
+  - name: exchange
+    description: rates
 paths:
+  /rate:
+    post:
+      summary: Reserves exchange rate for a period of time
+      security:
+        - Bearer: []
+      tags:
+        - exchange
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateResponse'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/Internal'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RateInput'
+
   /accounts/{accountId}/balances:
     get:
       summary: Returns balance of account
@@ -153,7 +179,7 @@ paths:
           $ref: '#/components/responses/Internal'
 
     put:
-      summary: Updates account 
+      summary: Updates account
       description: Only user, owning the account is allowed to update an account
       security:
         - Bearer: []
@@ -199,7 +225,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
-          
+
   '/users/{userId}/transactions':
     get:
       summary: Lists all transactions of a user
@@ -300,7 +326,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TransactionCreateInput'
-  
+
 
 components:
   responses:
@@ -363,6 +389,63 @@ components:
                 example: Internal server error
 
   schemas:
+    RateResponse:
+      type: object
+      description: >
+        Current exchange rate.
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        from:
+          $ref: '#/components/schemas/Currency'
+        to:
+          $ref: '#/components/schemas/Currency'
+        amount:
+          $ref: '#/components/schemas/Value'
+        rate:
+          $ref: '#/components/schemas/Rate'
+        expiration:
+          $ref: '#/components/schemas/TimeStamp'
+        createdAt:
+          $ref: '#/components/schemas/TimeStamp'
+        updatedAt:
+          $ref: '#/components/schemas/TimeStamp'
+    RateInput:
+      type: object
+      required:
+        - id
+        - from
+        - to
+        - amount
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        from:
+          $ref: '#/components/schemas/Currency'
+        to:
+          $ref: '#/components/schemas/Currency'
+        amount:
+          $ref: '#/components/schemas/Value'
+    Currency:
+      type: string
+      description: >-
+        ISO 4217 alphabetic code for fiat currencies in CAPS
+        [source](https://www.currency-iso.org/en/home/tables/table-a1.html). Or
+        Coinmarketcap symbol in lower case [source](https://coinmarketcap.com/)
+      example: eth
+    Uuid:
+      type: string
+      description: Uuid v4
+      example: '5188dde0-9dc3-461f-b272-dd3b1398c1dc'
+    Rate:
+      type: number
+      description: exchange rate
+      example: 0.0025
+    TimeStamp:
+      type: number
+      description: unix timestamp
+      example: 157239470
+
     ValidationErrors:
       type: array
       items:
@@ -416,7 +499,7 @@ components:
       format: uint256
       description: Monetary value - either fiat or blockchain
       example: 185000000000000000000
-      
+
     Transaction:
       type: object
       required:
@@ -441,7 +524,7 @@ components:
           $ref: '#/components/schemas/Timestamp'
         holdUntil:
           $ref: '#/components/schemas/Timestamp'
-          
+
     TransactionCreateInput:
       type: object
       required:
@@ -479,7 +562,12 @@ components:
           $ref: '#/components/schemas/Value'
         fee:
           $ref: '#/components/schemas/Value'
-          
+        exchangeId:
+          $ref: '#/components/schemas/Uuid'
+        exchangeRate:
+          $ref: '#/components/schemas/Rate'
+
+
     AccountAddress:
       type: string
       description: Either blockchain address or fiat account number (depending on currency)
@@ -542,13 +630,6 @@ components:
           type: string
           description: Short name for the account
           example: My main account
-    Currency:
-      type: string
-      description: >-
-        ISO 4217 alphabetic code for fiat currencies in CAPS
-        [source](https://www.currency-iso.org/en/home/tables/table-a1.html). Or
-        Coinmarketcap symbol in CAPS [source](https://coinmarketcap.com/)
-      example: ETH
     Id:
       type: string
       example: jghkdfgdjfgkdf7gd
@@ -595,7 +676,7 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/Id'
-  
+
     userIdParam:
       name: userId
       in: path
