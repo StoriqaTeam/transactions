@@ -14,6 +14,7 @@ use client::KeysClient;
 use models::*;
 use prelude::*;
 use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, PendingBlockchainTransactionsRepo, TransactionsRepo};
+use tokio_core::reactor::Core;
 use utils::log_and_capture_error;
 
 #[derive(Clone)]
@@ -374,8 +375,9 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         Box::new(self.auth_service.authenticate(token.clone()).and_then(move |user| {
             db_executor
                 .execute_transaction_with_isolation(Isolation::Serializable, move || {
+                    let mut core = Core::new().unwrap();
                     let tx_type = self_clone.validate_and_classify_transaction(&input)?;
-                    match tx_type {
+                    let f = future::lazy(|| match tx_type {
                         TransactionType::Internal(from_account, to_account) => {
                             self_clone.create_internal_mono_currency_tx(input, from_account, to_account, None)
                         }
@@ -383,7 +385,8 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             self_clone.create_external_mono_currency_tx(user.id, input, from_account, to_account_address, currency)
                         }
                         _ => return Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput => tx_type, input_clone)),
-                    }
+                    });
+                    core.run(f)
                 }).and_then(move |txs| {
                     let fs: Vec<_> = txs.into_iter().map(move |tx| self_clone2.convert_transaction(tx)).collect();
                     future::join_all(fs)
