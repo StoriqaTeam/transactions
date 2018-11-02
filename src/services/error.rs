@@ -54,6 +54,8 @@ pub enum ErrorContext {
     NotEnoughFunds,
     #[fail(display = "service error context - invalid currency")]
     InvalidCurrency,
+    #[fail(display = "service error context - exchange rate is required, but not found")]
+    MissingExchangeRate,
     #[fail(display = "service error context - invalid utf8 bytes")]
     UTF8,
     #[fail(display = "service error context - failed to parse string to json")]

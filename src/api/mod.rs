@@ -64,7 +64,7 @@ impl ApiService {
         let cpu_pool = CpuPool::new(config.cpu_pool.size);
         let client = HttpClientImpl::new(config);
         let keys_client = KeysClientImpl::new(&config, client.clone());
-        let blockchain_client = BlockchainClientImpl::new(&config, client);
+        let blockchain_client = BlockchainClientImpl::new(&config, client.clone());
         let exchange_client = ExchangeClientImpl::new(&config, client);
 
         Ok(ApiService {

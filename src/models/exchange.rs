@@ -17,6 +17,12 @@ impl Debug for ExchangeId {
     }
 }
 
+impl Default for ExchangeId {
+    fn default() -> Self {
+        ExchangeId(Uuid::new_v4())
+    }
+}
+
 impl ExchangeId {
     pub fn new(id: Uuid) -> Self {
         ExchangeId(id)
@@ -41,7 +47,7 @@ pub struct ExchangeInput {
     pub actual_amount: Amount,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Exchange {
     pub id: ExchangeId,

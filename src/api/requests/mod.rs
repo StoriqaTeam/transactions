@@ -117,6 +117,8 @@ impl From<PostTransactionsRequest> for CreateTransactionInput {
             to_currency,
             value,
             fee,
+            exchange_id,
+            exchange_rate,
             hold_until,
         } = req;
 
@@ -129,6 +131,8 @@ impl From<PostTransactionsRequest> for CreateTransactionInput {
             to_currency,
             value,
             fee,
+            exchange_id,
+            exchange_rate,
             hold_until,
         }
     }

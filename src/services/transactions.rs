@@ -35,8 +35,8 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
 enum TransactionType {
     Internal(Account, Account),
     Withdrawal(Account, AccountAddress, Currency),
-    InternalExchange(Account, Account),
-    WithdrawalExchange(Account, AccountAddress, Currency),
+    InternalExchange(Account, Account, ExchangeId, f64),
+    WithdrawalExchange(Account, AccountAddress, Currency, ExchangeId, f64),
 }
 
 pub trait TransactionsService: Send + Sync + 'static {
@@ -135,7 +135,16 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                     return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input));
                 }
                 if from_account.currency != to_account.currency {
-                    Ok(TransactionType::InternalExchange(from_account, to_account))
+                    let (exchange_id, exchange_rate) = match (input.exchange_id, input.exchange_rate) {
+                        (Some(exchange_id), Some(exchange_rate)) => (exchange_id, exchange_rate),
+                        _ => return Err(ectx!(err ErrorContext::MissingExchangeRate, ErrorKind::MalformedInput => input)),
+                    };
+                    Ok(TransactionType::InternalExchange(
+                        from_account,
+                        to_account,
+                        exchange_id,
+                        exchange_rate,
+                    ))
                 } else {
                     Ok(TransactionType::Internal(from_account, to_account))
                 }
@@ -154,14 +163,34 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input.clone()));
                         }
                         if from_account.currency != input.to_currency {
-                            Ok(TransactionType::WithdrawalExchange(from_account, to_address, input.to_currency))
+                            let (exchange_id, exchange_rate) = match (input.exchange_id, input.exchange_rate) {
+                                (Some(exchange_id), Some(exchange_rate)) => (exchange_id, exchange_rate),
+                                _ => return Err(ectx!(err ErrorContext::MissingExchangeRate, ErrorKind::MalformedInput => input)),
+                            };
+
+                            Ok(TransactionType::WithdrawalExchange(
+                                from_account,
+                                to_address,
+                                input.to_currency,
+                                exchange_id,
+                                exchange_rate,
+                            ))
                         } else {
                             Ok(TransactionType::Withdrawal(from_account, to_address, input.to_currency))
                         }
                     }
                     Some(to_account) => {
                         if from_account.currency != to_account.currency {
-                            Ok(TransactionType::InternalExchange(from_account, to_account))
+                            let (exchange_id, exchange_rate) = match (input.exchange_id, input.exchange_rate) {
+                                (Some(exchange_id), Some(exchange_rate)) => (exchange_id, exchange_rate),
+                                _ => return Err(ectx!(err ErrorContext::MissingExchangeRate, ErrorKind::MalformedInput => input)),
+                            };
+                            Ok(TransactionType::InternalExchange(
+                                from_account,
+                                to_account,
+                                exchange_id,
+                                exchange_rate,
+                            ))
                         } else {
                             Ok(TransactionType::Internal(from_account, to_account))
                         }
@@ -626,6 +655,7 @@ mod tests {
         let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoMock::default());
         let keys_client = Arc::new(KeysClientMock::default());
         let blockchain_client = Arc::new(BlockchainClientMock::default());
+        let excgange_client = Arc::new(ExchangeClientMock::default());
         let db_executor = DbExecutorMock::default();
         let acc_service = AccountsServiceImpl::new(
             auth_service.clone(),
@@ -642,6 +672,7 @@ mod tests {
             db_executor,
             keys_client,
             blockchain_client,
+            exchange_client,
         );
         (acc_service, trans_service)
     }

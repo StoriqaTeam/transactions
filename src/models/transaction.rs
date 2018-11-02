@@ -92,6 +92,8 @@ pub struct CreateTransactionInput {
     pub to_currency: Currency,
     pub value: Amount,
     pub fee: Amount,
+    pub exchange_id: Option<ExchangeId>,
+    pub exchange_rate: Option<f64>,
     pub hold_until: Option<SystemTime>,
 }
 

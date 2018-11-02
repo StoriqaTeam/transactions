@@ -9,6 +9,7 @@ use hyper::{Body, Request};
 use models::*;
 use serde::Deserialize;
 use serde_json;
+use std::time::SystemTime;
 
 pub use self::error::*;
 use super::HttpClient;
@@ -40,7 +41,7 @@ impl ExchangeClientImpl {
             exchange_gateway_user_id: config.auth.exchange_gateway_user_id.clone(),
             exchange_gateway_token: config.auth.exchange_gateway_token.clone(),
             exchange_gateway_system_user_id: config.system.exhange_gateway_system_user_id,
-            exchange_gateway_system_token: config.system.exhange_gateway_system_user_token,
+            exchange_gateway_system_token: config.system.exhange_gateway_system_user_token.clone(),
         }
     }
 
@@ -80,7 +81,6 @@ impl ExchangeClientImpl {
 impl ExchangeClient for ExchangeClientImpl {
     fn exchange(&self, create_exchange: ExchangeInput, role: Role) -> Box<Future<Item = Exchange, Error = Error> + Send> {
         let client = self.clone();
-        let user_id = self.exchange_gateway_user_id;
         Box::new(
             serde_json::to_string(&create_exchange)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_exchange))
@@ -94,7 +94,6 @@ impl ExchangeClient for ExchangeClientImpl {
 
     fn rate(&self, create_rate: RateInput, role: Role) -> Box<Future<Item = Rate, Error = Error> + Send> {
         let client = self.clone();
-        let user_id = self.exchange_gateway_user_id;
         Box::new(
             serde_json::to_string(&create_rate)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_rate))
@@ -103,6 +102,23 @@ impl ExchangeClient for ExchangeClientImpl {
                     let url = "/rate";
                     client.exec_query::<Rate>(&url, body, Method::POST, role)
                 }),
+        )
+    }
+}
+
+#[derive(Default)]
+pub struct ExchangeClientMock;
+
+impl ExchangeClient for ExchangeClientMock {
+    fn exchange(&self, exchange: ExchangeInput, role: Role) -> Box<Future<Item = Exchange, Error = Error> + Send> {
+        Box::new(Ok(Exchange::default()).into_future())
+    }
+    fn rate(&self, exchange: RateInput, role: Role) -> Box<Future<Item = Rate, Error = Error> + Send> {
+        Box::new(
+            Ok(Rate {
+                expiration: SystemTime::now(),
+                ..Default::default()
+            }).into_future(),
         )
     }
 }
