@@ -10,7 +10,7 @@ use validator::Validate;
 use super::auth::AuthService;
 use super::error::*;
 use client::BlockchainClient;
-use client::ExchangeGatewayClient;
+use client::ExchangeClient;
 use client::KeysClient;
 use models::*;
 use prelude::*;
@@ -28,7 +28,7 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     db_executor: E,
     keys_client: Arc<dyn KeysClient>,
     blockchain_client: Arc<dyn BlockchainClient>,
-    exchange_client: Arc<dyn ExchangeGatewayClient>,
+    exchange_client: Arc<dyn ExchangeClient>,
 }
 
 #[derive(Debug, Clone)]
@@ -96,7 +96,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         db_executor: E,
         keys_client: Arc<dyn KeysClient>,
         blockchain_client: Arc<dyn BlockchainClient>,
-        exchange_client: Arc<dyn ExchangeGatewayClient>,
+        exchange_client: Arc<dyn ExchangeClient>,
     ) -> Self {
         Self {
             auth_service,

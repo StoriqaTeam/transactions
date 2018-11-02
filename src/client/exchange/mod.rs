@@ -15,13 +15,13 @@ use super::HttpClient;
 use config::Config;
 use utils::read_body;
 
-pub trait ExchangeGatewayClient: Send + Sync + 'static {
+pub trait ExchangeClient: Send + Sync + 'static {
     fn exchange(&self, exchange: ExchangeInput, role: Role) -> Box<Future<Item = Exchange, Error = Error> + Send>;
     fn rate(&self, exchange: RateInput, role: Role) -> Box<Future<Item = Rate, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
-pub struct ExchangeGatewayClientImpl {
+pub struct ExchangeClientImpl {
     cli: Arc<HttpClient>,
     exchange_gateway_url: String,
     exchange_gateway_user_id: UserId,
@@ -30,7 +30,7 @@ pub struct ExchangeGatewayClientImpl {
     exchange_gateway_system_token: AuthenticationToken,
 }
 
-impl ExchangeGatewayClientImpl {
+impl ExchangeClientImpl {
     pub fn new<C: HttpClient>(config: &Config, cli: C) -> Self {
         let bitcoin_fee_price = Amount::new(config.fee_price.bitcoin as u128);
         let ethereum_fee_price = Amount::new(config.fee_price.ethereum as u128);
@@ -77,7 +77,7 @@ impl ExchangeGatewayClientImpl {
     }
 }
 
-impl ExchangeGatewayClient for ExchangeGatewayClientImpl {
+impl ExchangeClient for ExchangeClientImpl {
     fn exchange(&self, create_exchange: ExchangeInput, role: Role) -> Box<Future<Item = Exchange, Error = Error> + Send> {
         let client = self.clone();
         let user_id = self.exchange_gateway_user_id;
