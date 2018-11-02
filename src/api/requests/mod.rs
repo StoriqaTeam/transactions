@@ -78,6 +78,7 @@ pub struct GetUsersAccountsParams {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PostTransactionsRequest {
+    pub id: TransactionId,
     pub user_id: UserId,
     pub from: AccountId,
     pub to: Receipt,
@@ -99,6 +100,34 @@ impl From<PostTransactionsRequest> for CreateTransaction {
             value: req.value,
             fee: req.fee,
             hold_until: req.hold_until,
+        }
+    }
+}
+
+impl From<PostTransactionsRequest> for CreateTransactionInput {
+    fn from(req: PostTransactionsRequest) -> Self {
+        let PostTransactionsRequest {
+            id,
+            user_id,
+            from,
+            to,
+            to_type,
+            to_currency,
+            value,
+            fee,
+            hold_until,
+        } = req;
+
+        Self {
+            id,
+            user_id,
+            from,
+            to,
+            to_type,
+            to_currency,
+            value,
+            fee,
+            hold_until,
         }
     }
 }

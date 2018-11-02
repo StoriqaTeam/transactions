@@ -83,6 +83,19 @@ impl Default for NewTransaction {
 }
 
 #[derive(Debug, Clone, Validate)]
+pub struct CreateTransactionInput {
+    pub id: TransactionId,
+    pub user_id: UserId,
+    pub from: AccountId,
+    pub to: Receipt,
+    pub to_type: ReceiptType,
+    pub to_currency: Currency,
+    pub value: Amount,
+    pub fee: Amount,
+    pub hold_until: Option<SystemTime>,
+}
+
+#[derive(Debug, Clone, Validate)]
 pub struct CreateTransaction {
     pub user_id: UserId,
     pub dr_account_id: AccountId,
