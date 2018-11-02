@@ -72,7 +72,7 @@ use self::repos::{
     ErrorKind as ReposErrorKind, PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl, StrangeBlockchainTransactionsRepoImpl,
     TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
 };
-use client::{HttpClient, KeysClient, KeysClientImpl};
+use client::{KeysClient, KeysClientImpl};
 use config::{Config, System};
 use rabbit::{ConnectionHooks, RabbitConnectionManager, TransactionConsumerImpl};
 use rabbit::{ErrorKind, ErrorSource};
@@ -258,7 +258,6 @@ pub fn upsert_system_accounts() {
     let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
 
     let config_clone = config.clone();
-    let config_clone2 = config.clone();
 
     let System {
         btc_liquidity_account_id,
@@ -267,8 +266,6 @@ pub fn upsert_system_accounts() {
         btc_fees_account_id,
         eth_fees_account_id,
         stq_fees_account_id,
-        keys_system_user_id,
-        keys_system_user_token,
         ..
     } = config.system.clone();
 
@@ -289,7 +286,7 @@ pub fn upsert_system_accounts() {
         }).map_err(|e| {
             log_error(&e.compat());
         }).and_then(move |user| {
-            let mut keys_client = keys_client.clone();
+            let keys_client = keys_client.clone();
             let inputs = [
                 (btc_liquidity_account_id, user.id, Currency::Btc, "btc_liquidity_account"),
                 (eth_liquidity_account_id, user.id, Currency::Eth, "eth_liquidity_account"),

@@ -1,10 +1,8 @@
 use std::sync::Arc;
-use utils::log_error;
 
 use futures::future::{self, Either};
 use futures::prelude::*;
 use futures::stream::iter_ok;
-use futures::IntoFuture;
 use validator::Validate;
 
 use super::auth::AuthService;
@@ -638,44 +636,44 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use client::*;
-    use repos::*;
-    use services::*;
-    use tokio_core::reactor::Core;
+    // use super::*;
+    // use client::*;
+    // use repos::*;
+    // use services::*;
+    // use tokio_core::reactor::Core;
 
-    fn create_services(
-        token: AuthenticationToken,
-        user_id: UserId,
-    ) -> (AccountsServiceImpl<DbExecutorMock>, TransactionsServiceImpl<DbExecutorMock>) {
-        let auth_service = Arc::new(AuthServiceMock::new(vec![(token, user_id)]));
-        let accounts_repo = Arc::new(AccountsRepoMock::default());
-        let transactions_repo = Arc::new(TransactionsRepoMock::default());
-        let pending_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoMock::default());
-        let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoMock::default());
-        let keys_client = Arc::new(KeysClientMock::default());
-        let blockchain_client = Arc::new(BlockchainClientMock::default());
-        let excgange_client = Arc::new(ExchangeClientMock::default());
-        let db_executor = DbExecutorMock::default();
-        let acc_service = AccountsServiceImpl::new(
-            auth_service.clone(),
-            accounts_repo.clone(),
-            db_executor.clone(),
-            keys_client.clone(),
-        );
-        let trans_service = TransactionsServiceImpl::new(
-            auth_service,
-            transactions_repo,
-            pending_transactions_repo,
-            blockchain_transactions_repo,
-            accounts_repo,
-            db_executor,
-            keys_client,
-            blockchain_client,
-            exchange_client,
-        );
-        (acc_service, trans_service)
-    }
+    // fn create_services(
+    //     token: AuthenticationToken,
+    //     user_id: UserId,
+    // ) -> (AccountsServiceImpl<DbExecutorMock>, TransactionsServiceImpl<DbExecutorMock>) {
+    //     let auth_service = Arc::new(AuthServiceMock::new(vec![(token, user_id)]));
+    //     let accounts_repo = Arc::new(AccountsRepoMock::default());
+    //     let transactions_repo = Arc::new(TransactionsRepoMock::default());
+    //     let pending_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoMock::default());
+    //     let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoMock::default());
+    //     let keys_client = Arc::new(KeysClientMock::default());
+    //     let blockchain_client = Arc::new(BlockchainClientMock::default());
+    //     let exchange_client = Arc::new(ExchangeClientMock::default());
+    //     let db_executor = DbExecutorMock::default();
+    //     let acc_service = AccountsServiceImpl::new(
+    //         auth_service.clone(),
+    //         accounts_repo.clone(),
+    //         db_executor.clone(),
+    //         keys_client.clone(),
+    //     );
+    //     let trans_service = TransactionsServiceImpl::new(
+    //         auth_service,
+    //         transactions_repo,
+    //         pending_transactions_repo,
+    //         blockchain_transactions_repo,
+    //         accounts_repo,
+    //         db_executor,
+    //         keys_client,
+    //         blockchain_client,
+    //         exchange_client,
+    //     );
+    //     (acc_service, trans_service)
+    // }
 
     //     #[test]
     //     fn test_transaction_create() {

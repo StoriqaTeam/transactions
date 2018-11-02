@@ -33,8 +33,6 @@ pub struct ExchangeClientImpl {
 
 impl ExchangeClientImpl {
     pub fn new<C: HttpClient>(config: &Config, cli: C) -> Self {
-        let bitcoin_fee_price = Amount::new(config.fee_price.bitcoin as u128);
-        let ethereum_fee_price = Amount::new(config.fee_price.ethereum as u128);
         Self {
             cli: Arc::new(cli),
             exchange_gateway_url: config.client.exchange_gateway_url.clone(),
@@ -110,14 +108,18 @@ impl ExchangeClient for ExchangeClientImpl {
 pub struct ExchangeClientMock;
 
 impl ExchangeClient for ExchangeClientMock {
-    fn exchange(&self, exchange: ExchangeInput, role: Role) -> Box<Future<Item = Exchange, Error = Error> + Send> {
+    fn exchange(&self, _exchange: ExchangeInput, _role: Role) -> Box<Future<Item = Exchange, Error = Error> + Send> {
         Box::new(Ok(Exchange::default()).into_future())
     }
-    fn rate(&self, exchange: RateInput, role: Role) -> Box<Future<Item = Rate, Error = Error> + Send> {
+    fn rate(&self, _exchange: RateInput, _role: Role) -> Box<Future<Item = Rate, Error = Error> + Send> {
         Box::new(
             Ok(Rate {
                 expiration: SystemTime::now(),
-                ..Default::default()
+                id: Default::default(),
+                from: Default::default(),
+                to: Default::default(),
+                amount: Default::default(),
+                rate: Default::default(),
             }).into_future(),
         )
     }
