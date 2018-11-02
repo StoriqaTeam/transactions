@@ -28,6 +28,7 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     blockchain_client: Arc<dyn BlockchainClient>,
 }
 
+#[derive(Debug, Clone)]
 enum TransactionType {
     Internal(Account, Account),
     Withdrawal(Account, AccountAddress, Currency),
@@ -164,8 +165,8 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
             match blockchain_tx_id_res {
                 Ok(tx_id) => {
-                    let tx = self.create_internal_mono_currency_tx(input.clone(), from_account.clone(), acc.clone(), Some(tx_id))?;
-                    res.push(tx);
+                    let txs = self.create_internal_mono_currency_tx(input.clone(), from_account.clone(), acc.clone(), Some(tx_id))?;
+                    res.extend(txs.into_iter());
                 }
                 Err(e) => {
                     if res.len() == 0 {
@@ -188,7 +189,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         from_account: Account,
         to_account: Account,
         blockchain_tx_id: Option<BlockchainTransactionId>,
-    ) -> Result<Transaction, Error> {
+    ) -> Result<Vec<Transaction>, Error> {
         if from_account.currency != to_account.currency {
             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account));
         }
@@ -213,6 +214,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             };
             self.transactions_repo
                 .create(new_transaction.clone())
+                .map(|tx| vec![tx])
                 .map_err(ectx!(convert => new_transaction))
         } else {
             Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, input.value))
@@ -316,7 +318,7 @@ pub trait TransactionsService: Send + Sync + 'static {
     fn create_transaction(
         &self,
         token: AuthenticationToken,
-        input: CreateTransaction,
+        input: CreateTransactionInput,
     ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
     fn create_transaction_local(&self, input: CreateTransactionLocal) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     fn deposit_funds(&self, token: AuthenticationToken, input: DepositFounds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
@@ -363,85 +365,28 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
     fn create_transaction(
         &self,
         token: AuthenticationToken,
-        input: CreateTransaction,
+        input: CreateTransactionInput,
     ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send> {
-        let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
-        let service = self.clone();
-        let service2 = self.clone();
+        let self_clone = self.clone();
+        let self_clone2 = self.clone();
+        let input_clone = input.clone();
         Box::new(self.auth_service.authenticate(token.clone()).and_then(move |user| {
-            input
-                .validate()
-                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
-                .into_future()
-                .and_then({
-                    let input = input.clone();
-                    move |_| {
-                        db_executor.execute(move || {
-                            // check that dr account exists and it is belonging to one user
-                            let dr_account_id = input.dr_account_id;
-                            let dr_acc = accounts_repo
-                                .get(dr_account_id)
-                                .map_err(ectx!(try ErrorKind::Internal => dr_account_id))?;
-                            let dr_acc =
-                                dr_acc.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => dr_account_id))?;
-                            if dr_acc.user_id != user.id {
-                                return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                            }
-
-                            // check that cr account exists and it is belonging to one user
-                            let to = input.to.clone();
-                            let input_type = input.to_type.clone();
-                            let currency = input.to_currency;
-                            match input_type {
-                                ReceiptType::Account => {
-                                    let cr_account_id = to.clone().to_account_id().map_err(
-                                        move |_| ectx!(try err ErrorKind::MalformedInput, ErrorKind::MalformedInput => to, input_type),
-                                    )?;
-                                    let cr_acc = accounts_repo
-                                        .get(cr_account_id)
-                                        .map_err(ectx!(try ErrorKind::Internal => cr_account_id))?;
-                                    let cr_acc = cr_acc
-                                        .ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => cr_account_id))?;
-                                    if cr_acc.user_id != user.id {
-                                        return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                                    }
-                                    Ok((dr_acc, CrReceiptType::Account(cr_acc)))
-                                }
-                                ReceiptType::Address => {
-                                    let cr_account_address = to.to_account_address();
-                                    let cr_account_address_clone = cr_account_address.clone();
-                                    let cr_acc = accounts_repo
-                                        .get_by_address(cr_account_address.clone(), currency, AccountKind::Cr)
-                                        .map_err(ectx!(try ErrorKind::Internal => cr_account_address))?;
-                                    if let Some(cr_acc) = cr_acc {
-                                        if cr_acc.user_id != user.id {
-                                            return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                                        }
-                                        Ok((dr_acc, CrReceiptType::Account(cr_acc)))
-                                    } else {
-                                        Ok((dr_acc, CrReceiptType::Address(cr_account_address_clone)))
-                                    }
-                                }
-                            }
-                        })
+            db_executor
+                .execute_transaction_with_isolation(Isolation::Serializable, move || {
+                    let tx_type = self_clone.validate_and_classify_transaction(&input)?;
+                    match tx_type {
+                        TransactionType::Internal(from_account, to_account) => {
+                            self_clone.create_internal_mono_currency_tx(input, from_account, to_account, None)
+                        }
+                        TransactionType::Withdrawal(from_account, to_account_address, currency) => {
+                            self_clone.create_external_mono_currency_tx(user.id, input, from_account, to_account_address, currency)
+                        }
+                        _ => return Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput => tx_type, input_clone)),
                     }
-                }).and_then(move |(dr_acc, cr_acc)| match cr_acc {
-                    CrReceiptType::Account(cr_acc) => Either::A(
-                        service
-                            .create_transaction_local(CreateTransactionLocal::new(&input, dr_acc, cr_acc))
-                            .map(|tr| vec![tr]),
-                    ),
-                    CrReceiptType::Address(cr_account_address) => {
-                        Either::B(service.withdraw(Withdraw::new(&input, dr_acc, cr_account_address)))
-                    }
-                }).and_then(move |transactions| {
-                    iter_ok::<_, Error>(transactions).fold(vec![], move |mut transactions, transaction| {
-                        service2.convert_transaction(transaction).and_then(|res| {
-                            transactions.push(res);
-                            Ok(transactions) as Result<Vec<TransactionOut>, Error>
-                        })
-                    })
+                }).and_then(move |txs| {
+                    let fs: Vec<_> = txs.into_iter().map(move |tx| self_clone2.convert_transaction(tx)).collect();
+                    future::join_all(fs)
                 })
         }))
     }
