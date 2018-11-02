@@ -61,6 +61,7 @@ use lapin_futures::channel::Channel;
 use tokio::net::tcp::TcpStream;
 use tokio::prelude::*;
 use tokio::timer::{Delay, Timeout};
+use tokio_core::reactor::Core;
 use uuid::Uuid;
 
 use self::client::HttpClientImpl;
@@ -92,6 +93,7 @@ pub fn start_server() {
     let config = get_config();
     // Prepare sentry integration
     let _sentry = sentry_integration::init(config.sentry.as_ref());
+    upsert_system_accounts();
 
     let config_clone = config.clone();
     thread::spawn(move || {
@@ -257,6 +259,19 @@ pub fn upsert_system_accounts() {
 
     let config_clone = config.clone();
     let config_clone2 = config.clone();
+
+    let System {
+        btc_liquidity_account_id,
+        eth_liquidity_account_id,
+        stq_liquidity_account_id,
+        btc_fees_account_id,
+        eth_fees_account_id,
+        stq_fees_account_id,
+        keys_system_user_id,
+        keys_system_user_token,
+        ..
+    } = config.system.clone();
+
     let f = db_executor
         .execute(move || {
             let users_repo = UsersRepoImpl::default();
@@ -274,15 +289,9 @@ pub fn upsert_system_accounts() {
         }).map_err(|e| {
             log_error(&e.compat());
         }).and_then(move |user| {
-            let System {
-                btc_liquidity_account_id,
-                eth_liquidity_account_id,
-                stq_liquidity_account_id,
-                btc_fees_account_id,
-                eth_fees_account_id,
-                stq_fees_account_id,
-                ..
-            } = config_clone2.system;
+            let mut keys_client = keys_client.clone();
+            keys_client.keys_user_id = keys_system_user_id;
+            keys_client.keys_token = keys_system_user_token;
             let inputs = [
                 (btc_liquidity_account_id, user.id, Currency::Btc, "btc_liquidity_account"),
                 (eth_liquidity_account_id, user.id, Currency::Eth, "eth_liquidity_account"),
@@ -325,15 +334,22 @@ fn upsert_system_account(
                         id: account_id.inner().clone(),
                         currency,
                     };
-                    let accocunt_address = keys_client
-                        .create_account_address(input)
-                        .map_err(ectx!(try ReposErrorKind::Internal))
-                        .wait()?;
+                    let mut core = Core::new().unwrap();
+                    let account_address_res = core.run(
+                        keys_client
+                            .create_account_address(input)
+                            .map_err(ectx!(try ReposErrorKind::Internal)),
+                    );
+                    if let Err(_) = account_address_res {
+                        // just skip if smth is wrong, like account is already created
+                        return Ok(());
+                    }
+                    let account_address = account_address_res.unwrap();
                     let new_cr_account = NewAccount {
                         id: account_id,
                         user_id,
                         currency,
-                        address: accocunt_address.clone(),
+                        address: account_address.clone(),
                         name: Some(name.clone()),
                         kind: AccountKind::Cr,
                     };
@@ -344,7 +360,7 @@ fn upsert_system_account(
                         id: dr_account_id,
                         user_id,
                         currency,
-                        address: accocunt_address.clone(),
+                        address: account_address.clone(),
                         name: Some(format!("{}_deposit", name.clone())),
                         kind: AccountKind::Dr,
                     };

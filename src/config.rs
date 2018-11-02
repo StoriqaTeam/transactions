@@ -71,6 +71,8 @@ pub struct System {
     pub btc_fees_account_id: AccountId,
     pub eth_fees_account_id: AccountId,
     pub stq_fees_account_id: AccountId,
+    pub keys_system_user_id: UserId,
+    pub keys_system_user_token: AuthenticationToken,
 }
 
 impl Config {

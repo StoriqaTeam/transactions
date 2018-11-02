@@ -29,8 +29,9 @@ pub trait KeysClient: Send + Sync + 'static {
 pub struct KeysClientImpl {
     cli: Arc<HttpClient>,
     keys_url: String,
-    keys_user_id: UserId,
-    keys_token: AuthenticationToken,
+    // Todo - hack to make things quicker in upsert_system_accounts
+    pub keys_user_id: UserId,
+    pub keys_token: AuthenticationToken,
     bitcoin_fee_price: Amount,
     ethereum_fee_price: Amount,
 }
