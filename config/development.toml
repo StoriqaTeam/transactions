@@ -1,6 +1,6 @@
 [server]
 host = "0.0.0.0"
-port = 8010
+port = 8000
 
 [client]
 dns_threads = 4
