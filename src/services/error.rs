@@ -5,6 +5,7 @@ use failure::{Backtrace, Context, Fail};
 use validator::ValidationErrors;
 
 use client::blockchain_gateway::ErrorKind as BlockchainClientErrorKind;
+use client::exchange::ErrorKind as ExchangeClientErrorKind;
 use client::keys::ErrorKind as KeysClientErrorKind;
 use repos::{Error as ReposError, ErrorKind as ReposErrorKind};
 
@@ -105,6 +106,16 @@ impl From<BlockchainClientErrorKind> for ErrorKind {
             BlockchainClientErrorKind::Internal => ErrorKind::Internal,
             BlockchainClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
             BlockchainClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
+        }
+    }
+}
+
+impl From<ExchangeClientErrorKind> for ErrorKind {
+    fn from(err: BlockchainClientErrorKind) -> Self {
+        match err {
+            ExchangeClientErrorKind::Internal => ErrorKind::Internal,
+            ExchangeClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
+            ExchangeClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
         }
     }
 }

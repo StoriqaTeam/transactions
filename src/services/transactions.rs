@@ -27,6 +27,9 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     keys_client: Arc<dyn KeysClient>,
     blockchain_client: Arc<dyn BlockchainClient>,
     exchange_client: Arc<dyn ExchangeClient>,
+    btc_liquidity_cr_account_id: AccountId,
+    eth_liquidity_cr_account_id: AccountId,
+    stq_liquidity_cr_account_id: AccountId,
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +98,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         keys_client: Arc<dyn KeysClient>,
         blockchain_client: Arc<dyn BlockchainClient>,
         exchange_client: Arc<dyn ExchangeClient>,
+        btc_liquidity_cr_account_id: AccountId,
+        eth_liquidity_cr_account_id: AccountId,
+        stq_liquidity_cr_account_id: AccountId,
     ) -> Self {
         Self {
             auth_service,
@@ -106,6 +112,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             keys_client,
             blockchain_client,
             exchange_client,
+            btc_liquidity_cr_account_id,
+            eth_liquidity_cr_account_id,
+            stq_liquidity_cr_account_id,
         }
     }
 
@@ -262,6 +271,56 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         Ok(res)
     }
 
+    fn get_system_liquidity_account(&self, currency: Currency) -> Result<Account, Error> {
+        let acc_id = match currency {
+            Currency::Btc => self.btc_liquidity_cr_account_id,
+            Currency::Eth => self.eth_liquidity_cr_account_id,
+            Currency::Stq => self.stq_liquidity_cr_account_id,
+        };
+        let acc = self
+            .accounts_repo
+            .get(acc_id)?
+            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
+        Ok(acc)
+    }
+
+    fn create_internal_multi_currency_tx(
+        &self,
+        input: CreateTransactionInput,
+        from_account: Account,
+        to_account: Account,
+        exchange_id: ExchangeId,
+        exchange_rate: f64,
+    ) -> Result<Vec<Transaction>, Error> {
+        let mut result: Vec<Transaction> = Vec::new();
+
+        // Moving money from `from` account to system liquidity account
+        let from_counterpart_acc = self.get_system_liquidity_account(from_account.currency)?;
+        let txs = self.create_internal_mono_currency_tx(input.clone(), from_account.clone(), from_counterpart_acc, None)?;
+        result.extend(txs.into_iter());
+
+        // Moving money from system liquidity account to `to` account
+        let to_counterpart_acc = self.get_system_liquidity_account(to_account.currency)?;
+        let txs = self.create_internal_mono_currency_tx(input.clone(), to_counterpart_acc, to_account.clone(), None)?;
+        result.extend(txs.into_iter());
+
+        let exchange_input = ExchangeInput {
+            id: exchange_id,
+            from: from_account.currency,
+            to: to_account.currency,
+            rate: exchange_rate,
+            actual_amount: input.value,
+        };
+        let exchange_input = exchange_input.clone();
+        let _ = self
+            .exchange_client
+            .exchange(exchange_input, Role::User)
+            .map_err(ectx!(try convert => exchange_input))
+            .wait()?;
+
+        Ok(result)
+    }
+
     fn create_internal_mono_currency_tx(
         &self,
         input: CreateTransactionInput,
@@ -391,6 +450,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         };
         Ok(tx_id)
     }
+
     fn convert_transaction(&self, transaction: Transaction) -> Box<Future<Item = TransactionOut, Error = Error> + Send> {
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();

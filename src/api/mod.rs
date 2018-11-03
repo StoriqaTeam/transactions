@@ -93,6 +93,7 @@ impl Service for ApiService {
         let blockchain_client = self.blockchain_client.clone();
         let exchange_client = self.exchange_client.clone();
         let db_executor = DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone());
+        let config = self.config.clone();
         Box::new(
             read_body(http_body)
                 .map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal))
@@ -133,6 +134,9 @@ impl Service for ApiService {
                         keys_client,
                         blockchain_client,
                         exchange_client,
+                        config.system.btc_liquidity_account_id,
+                        config.system.eth_liquidity_account_id,
+                        config.system.stq_liquidity_account_id,
                     ));
 
                     let ctx = Context {

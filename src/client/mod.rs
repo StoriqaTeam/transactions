@@ -1,5 +1,5 @@
 pub mod blockchain_gateway;
-mod exchange;
+pub mod exchange;
 mod http_client;
 pub mod keys;
 
