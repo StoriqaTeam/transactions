@@ -76,8 +76,8 @@ pub struct System {
     pub stq_fees_account_id: AccountId,
     pub keys_system_user_id: UserId,
     pub keys_system_user_token: AuthenticationToken,
-    pub exhange_gateway_system_user_id: UserId,
-    pub exhange_gateway_system_user_token: AuthenticationToken,
+    pub exchange_gateway_system_user_id: UserId,
+    pub exchange_gateway_system_user_token: AuthenticationToken,
 }
 
 impl Config {

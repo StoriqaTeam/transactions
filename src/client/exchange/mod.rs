@@ -38,8 +38,8 @@ impl ExchangeClientImpl {
             exchange_gateway_url: config.client.exchange_gateway_url.clone(),
             exchange_gateway_user_id: config.auth.exchange_gateway_user_id.clone(),
             exchange_gateway_token: config.auth.exchange_gateway_token.clone(),
-            exchange_gateway_system_user_id: config.system.exhange_gateway_system_user_id,
-            exchange_gateway_system_token: config.system.exhange_gateway_system_user_token.clone(),
+            exchange_gateway_system_user_id: config.system.exchange_gateway_system_user_id,
+            exchange_gateway_system_token: config.system.exchange_gateway_system_user_token.clone(),
         }
     }
 

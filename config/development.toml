@@ -16,8 +16,8 @@ size = 1
 [auth]
 keys_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
 keys_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
-exhange_gateway_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
-exhange_gateway_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
+exchange_gateway_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
+exchange_gateway_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
 
 
 [rabbit]

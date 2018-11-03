@@ -57,7 +57,7 @@ pub struct Exchange {
     pub actual: Amount,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RateInput {
     pub id: ExchangeId,

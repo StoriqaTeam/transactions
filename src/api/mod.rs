@@ -31,7 +31,7 @@ use repos::{
     AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutorImpl, PendingBlockchainTransactionsRepoImpl, TransactionsRepoImpl,
     UsersRepoImpl,
 };
-use services::{AccountsServiceImpl, AuthServiceImpl, TransactionsServiceImpl, UsersServiceImpl};
+use services::{AccountsServiceImpl, AuthServiceImpl, ExchangeServiceImpl, TransactionsServiceImpl, UsersServiceImpl};
 
 #[derive(Clone)]
 pub struct ApiService {
@@ -133,11 +133,12 @@ impl Service for ApiService {
                         db_executor.clone(),
                         keys_client,
                         blockchain_client,
-                        exchange_client,
+                        exchange_client.clone(),
                         config.system.btc_liquidity_account_id,
                         config.system.eth_liquidity_account_id,
                         config.system.stq_liquidity_account_id,
                     ));
+                    let exchange_service = Arc::new(ExchangeServiceImpl::new(exchange_client));
 
                     let ctx = Context {
                         body,
@@ -147,6 +148,7 @@ impl Service for ApiService {
                         users_service,
                         accounts_service,
                         transactions_service,
+                        exchange_service,
                     };
 
                     debug!("Received request {}", ctx);
