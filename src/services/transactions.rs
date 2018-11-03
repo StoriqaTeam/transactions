@@ -311,11 +311,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             rate: exchange_rate,
             actual_amount: input.value,
         };
-        let exchange_input = exchange_input.clone();
+        let exchange_input_clone = exchange_input.clone();
         let _ = self
             .exchange_client
             .exchange(exchange_input, Role::User)
-            .map_err(ectx!(try convert => exchange_input))
+            .map_err(ectx!(try convert => exchange_input_clone))
             .wait()?;
 
         Ok(result)

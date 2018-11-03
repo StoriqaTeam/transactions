@@ -111,7 +111,7 @@ impl From<BlockchainClientErrorKind> for ErrorKind {
 }
 
 impl From<ExchangeClientErrorKind> for ErrorKind {
-    fn from(err: BlockchainClientErrorKind) -> Self {
+    fn from(err: ExchangeClientErrorKind) -> Self {
         match err {
             ExchangeClientErrorKind::Internal => ErrorKind::Internal,
             ExchangeClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
