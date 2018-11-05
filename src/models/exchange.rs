@@ -64,6 +64,7 @@ pub struct RateInput {
     pub from: Currency,
     pub to: Currency,
     pub amount: Amount,
+    pub amount_currency: Currency,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
