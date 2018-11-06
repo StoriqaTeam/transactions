@@ -47,8 +47,16 @@ pub trait AccountsService: Send + Sync + 'static {
         offset: i64,
         limit: i64,
     ) -> Box<Future<Item = Vec<Account>, Error = Error> + Send>;
-    fn get_account_balance(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Balance, Error = Error> + Send>;
-    fn get_user_balance(&self, token: AuthenticationToken, user_id: UserId) -> Box<Future<Item = Vec<Balance>, Error = Error> + Send>;
+    fn get_account_balance(
+        &self,
+        token: AuthenticationToken,
+        account_id: AccountId,
+    ) -> Box<Future<Item = AccountWithBalance, Error = Error> + Send>;
+    fn get_user_balance(
+        &self,
+        token: AuthenticationToken,
+        user_id: UserId,
+    ) -> Box<Future<Item = Vec<AccountWithBalance>, Error = Error> + Send>;
 }
 
 impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {

@@ -6,7 +6,6 @@ table! {
         address -> Varchar,
         name -> Nullable<Varchar>,
         kind -> Varchar,
-        balance -> Numeric,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }

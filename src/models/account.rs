@@ -5,7 +5,7 @@ use validator::Validate;
 use models::*;
 use schema::accounts;
 
-#[derive(Debug, Queryable, Clone)]
+#[derive(Debug, Queryable, Clone, Serialize)]
 pub struct Account {
     pub id: AccountId,
     pub user_id: UserId,
@@ -13,7 +13,6 @@ pub struct Account {
     pub address: AccountAddress,
     pub name: Option<String>,
     pub kind: AccountKind,
-    pub balance: Amount,
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
 }
@@ -27,7 +26,6 @@ impl Default for Account {
             address: AccountAddress::default(),
             name: None,
             kind: AccountKind::Cr,
-            balance: Amount::default(),
             created_at: SystemTime::now(),
             updated_at: SystemTime::now(),
         }
@@ -96,23 +94,14 @@ pub struct UpdateAccount {
 }
 
 #[derive(Debug, Clone)]
-pub struct Balance {
-    pub currency: Currency,
+pub struct AccountWithBalance {
+    pub account: Account,
     pub balance: Amount,
 }
 
-impl Balance {
-    pub fn new(currency: Currency, balance: Amount) -> Self {
-        Self { currency, balance }
-    }
-}
-
-impl From<Account> for Balance {
-    fn from(acc: Account) -> Self {
-        Self {
-            currency: acc.currency,
-            balance: acc.balance,
-        }
+impl AccountWithBalance {
+    pub fn new(account: Account, balance: Amount) -> Self {
+        Self { account, balance }
     }
 }
 

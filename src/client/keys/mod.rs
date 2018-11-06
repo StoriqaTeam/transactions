@@ -101,7 +101,7 @@ impl KeysClient for KeysClientImpl {
         let client = self.clone();
         let user_id = match role {
             Role::System => self.keys_system_user_id,
-            Role::User => self.keys_system_user_id,
+            Role::User => self.keys_user_id,
         };
         Box::new(
             serde_json::to_string(&create_account)

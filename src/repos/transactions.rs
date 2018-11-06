@@ -21,6 +21,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>>;
     fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Transaction>;
     fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount>;
+    fn get_accounts_balance(&self, account_ids: &[Account]) -> RepoResult<AccountWithBalance>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<(Account, Amount)>>;
@@ -154,6 +155,18 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     ectx!(err e, error_kind => transaction_id_arg, blockchain_tx_id_)
                 })
         })
+    }
+    fn get_accounts_balance(&self, account_ids: &[Account]) -> RepoResult<AccountWithBalance> {
+        let dr_sum_accounts: Vec<TransactionSum> =
+                sql_query(
+                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE dr_account_id IN ($1) AND user_id = $2 GROUP BY dr_account_id")
+                    .bind::<VarChar, _>(currency_)
+                    .bind::<SqlUuid, _>(user_id_)
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
     }
     fn get_with_enough_value(&self, mut value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<(Account, Amount)>> {
         with_tls_connection(|conn| {
