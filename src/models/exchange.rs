@@ -45,6 +45,7 @@ pub struct ExchangeInput {
     pub to: Currency,
     pub rate: f64,
     pub actual_amount: Amount,
+    pub amount_currency: Currency,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

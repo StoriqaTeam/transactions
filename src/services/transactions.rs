@@ -324,9 +324,14 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         result.extend(txs.into_iter());
 
         // Moving money from system liquidity account to `to` account
+        let tx_next_id = input.id.next();
+        let input_next = CreateTransactionInput {
+            id: tx_next_id,
+            ..input.clone()
+        };
         let to_counterpart_acc = self.get_system_liquidity_account(to_account.currency)?;
         let txs =
-            self.create_internal_mono_currency_tx(input.clone(), to_counterpart_acc, to_account.clone(), None, TransactionStatus::Done)?;
+            self.create_internal_mono_currency_tx(input_next, to_counterpart_acc, to_account.clone(), None, TransactionStatus::Done)?;
         result.extend(txs.into_iter());
 
         let exchange_input = ExchangeInput {
@@ -335,6 +340,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             to: to_account.currency,
             rate: exchange_rate,
             actual_amount: input.value,
+            amount_currency: input.to_currency,
         };
         let exchange_input_clone = exchange_input.clone();
         let _ = self
@@ -590,6 +596,9 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         }
                         TransactionType::Withdrawal(from_account, to_account_address, currency) => {
                             self_clone.create_external_mono_currency_tx(user.id, input, from_account, to_account_address, currency)
+                        }
+                        TransactionType::InternalExchange(from, to, exchange_id, rate) => {
+                            self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
                         }
                         _ => return Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput => tx_type, input_clone)),
                     });
