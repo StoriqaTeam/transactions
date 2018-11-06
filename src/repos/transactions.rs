@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use diesel;
-use diesel::dsl::sum;
+use diesel::dsl::{any, sum};
 use diesel::sql_query;
 use diesel::sql_types::Uuid as SqlUuid;
 use diesel::sql_types::VarChar;
@@ -21,7 +21,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>>;
     fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Transaction>;
     fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount>;
-    fn get_accounts_balance(&self, account_ids: &[Account]) -> RepoResult<AccountWithBalance>;
+    fn get_accounts_balance(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<(Account, Amount)>>;
@@ -156,17 +156,52 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
-    fn get_accounts_balance(&self, account_ids: &[Account]) -> RepoResult<AccountWithBalance> {
-        let dr_sum_accounts: Vec<TransactionSum> =
-                sql_query(
-                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE dr_account_id IN ($1) AND user_id = $2 GROUP BY dr_account_id")
-                    .bind::<VarChar, _>(currency_)
-                    .bind::<SqlUuid, _>(user_id_)
-                    .get_results(conn)
-                    .map_err(move |e| {
-                        let error_kind = ErrorKind::from(&e);
-                        ectx!(try err e, error_kind)
-                    })?;
+    fn get_accounts_balance(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>> {
+        // assert all accounts in the same workspace with authed user
+        with_tls_connection(|conn| {
+            let ids: Vec<_> = accounts.into_iter().map(|acc| acc.id).collect();
+            let txs = transactions
+                .filter(dr_account_id.eq(any(ids)).or(cr_account_id.eq(any(ids))))
+                .get_results::<Transaction>(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => auth_user_id, accounts)
+                })?;
+            let txs_grouped_initial: HashMap<AccountId, Vec<Transaction>> = accounts.into_iter().map(|acc| (acc.id, vec![])).collect();
+            let txs_grouped: HashMap<AccountId, Vec<Transaction>> = txs.into_iter().fold(txs_grouped_initial, |acc, elem| {
+                acc.entry(elem.dr_account_id).and_modify(|txs| txs.push(elem));
+                acc
+            });
+            accounts
+                .into_iter()
+                .map(|account| {
+                    let plus = txs_grouped
+                        .get(&account.id)
+                        .unwrap()
+                        .into_iter()
+                        .filter(|tx| match account.kind {
+                            AccountKind::Cr => tx.cr_account_id == account.id,
+                            AccountKind::Dr => tx.dr_account_id == account.id,
+                        }).fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
+                        .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                    let minus = txs_grouped
+                        .get(&account.id)
+                        .unwrap()
+                        .into_iter()
+                        .filter(|tx| match account.kind {
+                            AccountKind::Cr => tx.dr_account_id == account.id,
+                            AccountKind::Dr => tx.cr_account_id == account.id,
+                        }).fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
+                        .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                    let balance = plus
+                        .checked_sub(minus)
+                        .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                    Ok(AccountWithBalance {
+                        account: account.clone(),
+                        balance,
+                    })
+                }).collect()
+        })
     }
     fn get_with_enough_value(&self, mut value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<(Account, Amount)>> {
         with_tls_connection(|conn| {
