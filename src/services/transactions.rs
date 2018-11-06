@@ -265,7 +265,13 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
             match blockchain_tx_id_res {
                 Ok(tx_id) => {
-                    let txs = self.create_internal_mono_currency_tx(input.clone(), from_account.clone(), acc.clone(), Some(tx_id))?;
+                    let txs = self.create_internal_mono_currency_tx(
+                        input.clone(),
+                        from_account.clone(),
+                        acc.clone(),
+                        Some(tx_id),
+                        TransactionStatus::Pending,
+                    )?;
                     res.extend(txs.into_iter());
                 }
                 Err(e) => {
@@ -308,12 +314,19 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         // Moving money from `from` account to system liquidity account
         let from_counterpart_acc = self.get_system_liquidity_account(from_account.currency)?;
-        let txs = self.create_internal_mono_currency_tx(input.clone(), from_account.clone(), from_counterpart_acc, None)?;
+        let txs = self.create_internal_mono_currency_tx(
+            input.clone(),
+            from_account.clone(),
+            from_counterpart_acc,
+            None,
+            TransactionStatus::Done,
+        )?;
         result.extend(txs.into_iter());
 
         // Moving money from system liquidity account to `to` account
         let to_counterpart_acc = self.get_system_liquidity_account(to_account.currency)?;
-        let txs = self.create_internal_mono_currency_tx(input.clone(), to_counterpart_acc, to_account.clone(), None)?;
+        let txs =
+            self.create_internal_mono_currency_tx(input.clone(), to_counterpart_acc, to_account.clone(), None, TransactionStatus::Done)?;
         result.extend(txs.into_iter());
 
         let exchange_input = ExchangeInput {
@@ -339,6 +352,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         from_account: Account,
         to_account: Account,
         blockchain_tx_id: Option<BlockchainTransactionId>,
+        status: TransactionStatus,
     ) -> Result<Vec<Transaction>, Error> {
         if from_account.currency != to_account.currency {
             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account));
@@ -357,7 +371,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 currency: input.to_currency,
                 value: input.value,
                 hold_until: input.hold_until,
-                status: TransactionStatus::Done,
+                status,
                 blockchain_tx_id,
                 // Todo - fees
                 fee: Amount::default(),
@@ -572,7 +586,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     let tx_type = self_clone.validate_and_classify_transaction(&input)?;
                     let f = future::lazy(|| match tx_type {
                         TransactionType::Internal(from_account, to_account) => {
-                            self_clone.create_internal_mono_currency_tx(input, from_account, to_account, None)
+                            self_clone.create_internal_mono_currency_tx(input, from_account, to_account, None, TransactionStatus::Done)
                         }
                         TransactionType::Withdrawal(from_account, to_account_address, currency) => {
                             self_clone.create_external_mono_currency_tx(user.id, input, from_account, to_account_address, currency)
