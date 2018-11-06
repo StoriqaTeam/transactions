@@ -32,7 +32,6 @@ pub struct AccountsResponse {
     pub currency: Currency,
     pub address: AccountAddress,
     pub name: Option<String>,
-    pub balance: Amount,
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
 }
@@ -45,7 +44,6 @@ impl From<Account> for AccountsResponse {
             currency: account.currency,
             address: account.address,
             name: account.name,
-            balance: account.balance,
             created_at: account.created_at,
             updated_at: account.updated_at,
         }
@@ -56,14 +54,14 @@ impl From<Account> for AccountsResponse {
 #[serde(rename_all = "camelCase")]
 pub struct BalanceResponse {
     pub balance: Amount,
-    pub currency: Currency,
+    pub account: Account,
 }
 
-impl From<Balance> for BalanceResponse {
-    fn from(balance: Balance) -> Self {
+impl From<AccountWithBalance> for BalanceResponse {
+    fn from(balance: AccountWithBalance) -> Self {
         Self {
             balance: balance.balance,
-            currency: balance.currency,
+            account: balance.account,
         }
     }
 }
@@ -75,8 +73,8 @@ pub struct BalancesResponse {
     pub data: Vec<BalanceResponse>,
 }
 
-impl From<Vec<Balance>> for BalancesResponse {
-    fn from(balances: Vec<Balance>) -> Self {
+impl From<Vec<AccountWithBalance>> for BalancesResponse {
+    fn from(balances: Vec<AccountWithBalance>) -> Self {
         Self {
             data: balances.into_iter().map(From::from).collect(),
         }

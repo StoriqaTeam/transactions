@@ -1,15 +1,14 @@
 use std::sync::Arc;
-use utils::log_error;
 
 use futures::future::{self, Either};
 use futures::prelude::*;
 use futures::stream::iter_ok;
-use futures::IntoFuture;
 use validator::Validate;
 
 use super::auth::AuthService;
 use super::error::*;
 use client::BlockchainClient;
+use client::ExchangeClient;
 use client::KeysClient;
 use models::*;
 use prelude::*;
@@ -27,14 +26,18 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     db_executor: E,
     keys_client: Arc<dyn KeysClient>,
     blockchain_client: Arc<dyn BlockchainClient>,
+    exchange_client: Arc<dyn ExchangeClient>,
+    btc_liquidity_cr_account_id: AccountId,
+    eth_liquidity_cr_account_id: AccountId,
+    stq_liquidity_cr_account_id: AccountId,
 }
 
 #[derive(Debug, Clone)]
 enum TransactionType {
     Internal(Account, Account),
     Withdrawal(Account, AccountAddress, Currency),
-    InternalExchange(Account, Account),
-    WithdrawalExchange(Account, AccountAddress, Currency),
+    InternalExchange(Account, Account, ExchangeId, f64),
+    WithdrawalExchange(Account, AccountAddress, Currency, ExchangeId, f64),
 }
 
 pub trait TransactionsService: Send + Sync + 'static {
@@ -51,7 +54,11 @@ pub trait TransactionsService: Send + Sync + 'static {
         token: AuthenticationToken,
         transaction_id: TransactionId,
     ) -> Box<Future<Item = Option<TransactionOut>, Error = Error> + Send>;
-    fn get_account_balance(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Account, Error = Error> + Send>;
+    fn get_account_balance(
+        &self,
+        token: AuthenticationToken,
+        account_id: AccountId,
+    ) -> Box<Future<Item = AccountWithBalance, Error = Error> + Send>;
     fn get_transactions_for_user(
         &self,
         token: AuthenticationToken,
@@ -94,6 +101,10 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         db_executor: E,
         keys_client: Arc<dyn KeysClient>,
         blockchain_client: Arc<dyn BlockchainClient>,
+        exchange_client: Arc<dyn ExchangeClient>,
+        btc_liquidity_cr_account_id: AccountId,
+        eth_liquidity_cr_account_id: AccountId,
+        stq_liquidity_cr_account_id: AccountId,
     ) -> Self {
         Self {
             auth_service,
@@ -104,6 +115,10 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             db_executor,
             keys_client,
             blockchain_client,
+            exchange_client,
+            btc_liquidity_cr_account_id,
+            eth_liquidity_cr_account_id,
+            stq_liquidity_cr_account_id,
         }
     }
 
@@ -131,7 +146,16 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                     return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input));
                 }
                 if from_account.currency != to_account.currency {
-                    Ok(TransactionType::InternalExchange(from_account, to_account))
+                    let (exchange_id, exchange_rate) = match (input.exchange_id, input.exchange_rate) {
+                        (Some(exchange_id), Some(exchange_rate)) => (exchange_id, exchange_rate),
+                        _ => return Err(ectx!(err ErrorContext::MissingExchangeRate, ErrorKind::MalformedInput => input)),
+                    };
+                    Ok(TransactionType::InternalExchange(
+                        from_account,
+                        to_account,
+                        exchange_id,
+                        exchange_rate,
+                    ))
                 } else {
                     Ok(TransactionType::Internal(from_account, to_account))
                 }
@@ -150,14 +174,34 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input.clone()));
                         }
                         if from_account.currency != input.to_currency {
-                            Ok(TransactionType::WithdrawalExchange(from_account, to_address, input.to_currency))
+                            let (exchange_id, exchange_rate) = match (input.exchange_id, input.exchange_rate) {
+                                (Some(exchange_id), Some(exchange_rate)) => (exchange_id, exchange_rate),
+                                _ => return Err(ectx!(err ErrorContext::MissingExchangeRate, ErrorKind::MalformedInput => input)),
+                            };
+
+                            Ok(TransactionType::WithdrawalExchange(
+                                from_account,
+                                to_address,
+                                input.to_currency,
+                                exchange_id,
+                                exchange_rate,
+                            ))
                         } else {
                             Ok(TransactionType::Withdrawal(from_account, to_address, input.to_currency))
                         }
                     }
                     Some(to_account) => {
                         if from_account.currency != to_account.currency {
-                            Ok(TransactionType::InternalExchange(from_account, to_account))
+                            let (exchange_id, exchange_rate) = match (input.exchange_id, input.exchange_rate) {
+                                (Some(exchange_id), Some(exchange_rate)) => (exchange_id, exchange_rate),
+                                _ => return Err(ectx!(err ErrorContext::MissingExchangeRate, ErrorKind::MalformedInput => input)),
+                            };
+                            Ok(TransactionType::InternalExchange(
+                                from_account,
+                                to_account,
+                                exchange_id,
+                                exchange_rate,
+                            ))
                         } else {
                             Ok(TransactionType::Internal(from_account, to_account))
                         }
@@ -186,7 +230,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, currency, user_id))?;
 
         //double check
-        for (acc, needed_amount) in &withdrawal_accs_and_vals {
+        for AccountWithBalance {
+            account: acc,
+            balance: needed_amount,
+        } in &withdrawal_accs_and_vals
+        {
             let acc_id = acc.id;
             let balance = self
                 .transactions_repo
@@ -199,7 +247,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         let mut res: Vec<Transaction> = Vec::new();
 
-        for (acc, value) in &withdrawal_accs_and_vals {
+        for AccountWithBalance {
+            account: acc,
+            balance: value,
+        } in &withdrawal_accs_and_vals
+        {
             let to = to_account_address.clone();
             // Todo this fee is ineffective, since keys client take system's fee
             let fee = Amount::new(0);
@@ -213,7 +265,13 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
             match blockchain_tx_id_res {
                 Ok(tx_id) => {
-                    let txs = self.create_internal_mono_currency_tx(input.clone(), from_account.clone(), acc.clone(), Some(tx_id))?;
+                    let txs = self.create_internal_mono_currency_tx(
+                        input.clone(),
+                        from_account.clone(),
+                        acc.clone(),
+                        Some(tx_id),
+                        TransactionStatus::Pending,
+                    )?;
                     res.extend(txs.into_iter());
                 }
                 Err(e) => {
@@ -231,12 +289,76 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         Ok(res)
     }
 
+    fn get_system_liquidity_account(&self, currency: Currency) -> Result<Account, Error> {
+        let acc_id = match currency {
+            Currency::Btc => self.btc_liquidity_cr_account_id,
+            Currency::Eth => self.eth_liquidity_cr_account_id,
+            Currency::Stq => self.stq_liquidity_cr_account_id,
+        };
+        let acc = self
+            .accounts_repo
+            .get(acc_id)?
+            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
+        Ok(acc)
+    }
+
+    fn create_internal_multi_currency_tx(
+        &self,
+        input: CreateTransactionInput,
+        from_account: Account,
+        to_account: Account,
+        exchange_id: ExchangeId,
+        exchange_rate: f64,
+    ) -> Result<Vec<Transaction>, Error> {
+        let mut result: Vec<Transaction> = Vec::new();
+
+        // Moving money from `from` account to system liquidity account
+        let from_counterpart_acc = self.get_system_liquidity_account(from_account.currency)?;
+        let txs = self.create_internal_mono_currency_tx(
+            input.clone(),
+            from_account.clone(),
+            from_counterpart_acc,
+            None,
+            TransactionStatus::Done,
+        )?;
+        result.extend(txs.into_iter());
+
+        // Moving money from system liquidity account to `to` account
+        let tx_next_id = input.id.next();
+        let input_next = CreateTransactionInput {
+            id: tx_next_id,
+            ..input.clone()
+        };
+        let to_counterpart_acc = self.get_system_liquidity_account(to_account.currency)?;
+        let txs =
+            self.create_internal_mono_currency_tx(input_next, to_counterpart_acc, to_account.clone(), None, TransactionStatus::Done)?;
+        result.extend(txs.into_iter());
+
+        let exchange_input = ExchangeInput {
+            id: exchange_id,
+            from: from_account.currency,
+            to: to_account.currency,
+            rate: exchange_rate,
+            actual_amount: input.value,
+            amount_currency: input.to_currency,
+        };
+        let exchange_input_clone = exchange_input.clone();
+        let _ = self
+            .exchange_client
+            .exchange(exchange_input, Role::User)
+            .map_err(ectx!(try convert => exchange_input_clone))
+            .wait()?;
+
+        Ok(result)
+    }
+
     fn create_internal_mono_currency_tx(
         &self,
         input: CreateTransactionInput,
         from_account: Account,
         to_account: Account,
         blockchain_tx_id: Option<BlockchainTransactionId>,
+        status: TransactionStatus,
     ) -> Result<Vec<Transaction>, Error> {
         if from_account.currency != to_account.currency {
             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account));
@@ -255,7 +377,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 currency: input.to_currency,
                 value: input.value,
                 hold_until: input.hold_until,
-                status: TransactionStatus::Done,
+                status,
                 blockchain_tx_id,
                 // Todo - fees
                 fee: Amount::default(),
@@ -288,7 +410,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         let raw_tx = self
             .keys_client
-            .sign_transaction(create_blockchain_input.clone())
+            .sign_transaction(create_blockchain_input.clone(), Role::User)
             .map_err(ectx!(try convert => create_blockchain_input_clone))
             .wait()?;
 
@@ -336,7 +458,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         let create_blockchain = create_blockchain_input.clone();
         let raw_tx = self
             .keys_client
-            .sign_transaction(create_blockchain_input.clone())
+            .sign_transaction(create_blockchain_input.clone(), Role::User)
             .map_err(ectx!(try convert => create_blockchain_input))
             .wait()?;
         let tx_id = self
@@ -360,6 +482,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         };
         Ok(tx_id)
     }
+
     fn convert_transaction(&self, transaction: Transaction) -> Box<Future<Item = TransactionOut, Error = Error> + Send> {
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
@@ -469,10 +592,13 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     let tx_type = self_clone.validate_and_classify_transaction(&input)?;
                     let f = future::lazy(|| match tx_type {
                         TransactionType::Internal(from_account, to_account) => {
-                            self_clone.create_internal_mono_currency_tx(input, from_account, to_account, None)
+                            self_clone.create_internal_mono_currency_tx(input, from_account, to_account, None, TransactionStatus::Done)
                         }
                         TransactionType::Withdrawal(from_account, to_account_address, currency) => {
                             self_clone.create_external_mono_currency_tx(user.id, input, from_account, to_account_address, currency)
+                        }
+                        TransactionType::InternalExchange(from, to, exchange_id, rate) => {
+                            self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
                         }
                         _ => return Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput => tx_type, input_clone)),
                     });
@@ -513,22 +639,25 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 })
         }))
     }
-    fn get_account_balance(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Account, Error = Error> + Send> {
+    fn get_account_balance(
+        &self,
+        token: AuthenticationToken,
+        account_id: AccountId,
+    ) -> Box<Future<Item = AccountWithBalance, Error = Error> + Send> {
         let transactions_repo = self.transactions_repo.clone();
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
-            db_executor.execute(move || {
+            db_executor.execute(move || -> Result<AccountWithBalance, Error> {
                 let account = accounts_repo.get(account_id).map_err(ectx!(try convert => account_id))?;
                 if let Some(mut account) = account {
                     if account.user_id != user.id {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                     }
-                    let balance = transactions_repo
-                        .get_account_balance(account_id, account.kind)
-                        .map_err(ectx!(try convert => account_id))?;
-                    account.balance = balance;
-                    Ok(account)
+                    transactions_repo
+                        .get_accounts_balance(user.id, &[account])
+                        .map(|accounts| accounts[0].clone())
+                        .map_err(ectx!(convert => account_id))
                 } else {
                     return Err(ectx!(err ErrorContext::NoAccount, ErrorKind::NotFound => account_id));
                 }
@@ -605,42 +734,44 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use client::*;
-    use repos::*;
-    use services::*;
-    use tokio_core::reactor::Core;
+    // use super::*;
+    // use client::*;
+    // use repos::*;
+    // use services::*;
+    // use tokio_core::reactor::Core;
 
-    fn create_services(
-        token: AuthenticationToken,
-        user_id: UserId,
-    ) -> (AccountsServiceImpl<DbExecutorMock>, TransactionsServiceImpl<DbExecutorMock>) {
-        let auth_service = Arc::new(AuthServiceMock::new(vec![(token, user_id)]));
-        let accounts_repo = Arc::new(AccountsRepoMock::default());
-        let transactions_repo = Arc::new(TransactionsRepoMock::default());
-        let pending_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoMock::default());
-        let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoMock::default());
-        let keys_client = Arc::new(KeysClientMock::default());
-        let blockchain_client = Arc::new(BlockchainClientMock::default());
-        let db_executor = DbExecutorMock::default();
-        let acc_service = AccountsServiceImpl::new(
-            auth_service.clone(),
-            accounts_repo.clone(),
-            db_executor.clone(),
-            keys_client.clone(),
-        );
-        let trans_service = TransactionsServiceImpl::new(
-            auth_service,
-            transactions_repo,
-            pending_transactions_repo,
-            blockchain_transactions_repo,
-            accounts_repo,
-            db_executor,
-            keys_client,
-            blockchain_client,
-        );
-        (acc_service, trans_service)
-    }
+    // fn create_services(
+    //     token: AuthenticationToken,
+    //     user_id: UserId,
+    // ) -> (AccountsServiceImpl<DbExecutorMock>, TransactionsServiceImpl<DbExecutorMock>) {
+    //     let auth_service = Arc::new(AuthServiceMock::new(vec![(token, user_id)]));
+    //     let accounts_repo = Arc::new(AccountsRepoMock::default());
+    //     let transactions_repo = Arc::new(TransactionsRepoMock::default());
+    //     let pending_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoMock::default());
+    //     let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoMock::default());
+    //     let keys_client = Arc::new(KeysClientMock::default());
+    //     let blockchain_client = Arc::new(BlockchainClientMock::default());
+    //     let exchange_client = Arc::new(ExchangeClientMock::default());
+    //     let db_executor = DbExecutorMock::default();
+    //     let acc_service = AccountsServiceImpl::new(
+    //         auth_service.clone(),
+    //         accounts_repo.clone(),
+    //         db_executor.clone(),
+    //         keys_client.clone(),
+    //     );
+    //     let trans_service = TransactionsServiceImpl::new(
+    //         auth_service,
+    //         transactions_repo,
+    //         pending_transactions_repo,
+    //         blockchain_transactions_repo,
+    //         accounts_repo,
+    //         db_executor,
+    //         keys_client,
+    //         blockchain_client,
+    //         exchange_client,
+    //     );
+    //     (acc_service, trans_service)
+    // }
 
     //     #[test]
     //     fn test_transaction_create() {

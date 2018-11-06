@@ -113,19 +113,3 @@ pub fn delete_accounts(ctx: &Context, account_id: AccountId) -> ControllerFuture
             }),
     )
 }
-
-pub fn get_users_balances(ctx: &Context, user_id: UserId) -> ControllerFuture {
-    let accounts_service = ctx.accounts_service.clone();
-    let maybe_token = ctx.get_auth_token();
-    Box::new(
-        maybe_token
-            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
-            .into_future()
-            .and_then(move |token| {
-                accounts_service
-                    .get_user_balance(token, user_id)
-                    .map_err(ectx!(convert))
-                    .and_then(|balance| response_with_model(&BalancesResponse::from(balance)))
-            }),
-    )
-}

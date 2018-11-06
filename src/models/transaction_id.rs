@@ -27,6 +27,14 @@ impl TransactionId {
     pub fn generate() -> Self {
         TransactionId(Uuid::new_v4())
     }
+
+    pub fn next(&self) -> Self {
+        let mut bytes = self.0.as_bytes().to_vec();
+        let last = bytes.len() - 1;
+        bytes[last] = bytes[last].wrapping_add(1);
+        let uuid = Uuid::from_bytes(&bytes).unwrap();
+        TransactionId(uuid)
+    }
 }
 
 impl FromStr for TransactionId {

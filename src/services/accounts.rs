@@ -47,8 +47,6 @@ pub trait AccountsService: Send + Sync + 'static {
         offset: i64,
         limit: i64,
     ) -> Box<Future<Item = Vec<Account>, Error = Error> + Send>;
-    fn get_account_balance(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Balance, Error = Error> + Send>;
-    fn get_user_balance(&self, token: AuthenticationToken, user_id: UserId) -> Box<Future<Item = Vec<Balance>, Error = Error> + Send>;
 }
 
 impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
@@ -71,7 +69,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
                             let input = input.clone();
                             move |_| {
                                 keys_client
-                                    .create_account_address(input.clone().into())
+                                    .create_account_address(input.clone().into(), Role::User)
                                     .map_err(ectx!(convert => input))
                             }
                         }).and_then(move |address| {
@@ -172,39 +170,6 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
             })
         }))
     }
-    fn get_account_balance(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Balance, Error = Error> + Send> {
-        let accounts_repo = self.accounts_repo.clone();
-        let db_executor = self.db_executor.clone();
-        Box::new(self.auth_service.authenticate(token).and_then(move |user| {
-            db_executor.execute(move || {
-                let account = accounts_repo
-                    .get(account_id)
-                    .map_err(ectx!(try ErrorKind::Internal => account_id))?;
-                if let Some(account) = account {
-                    if account.user_id != user.id {
-                        return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                    }
-                    Ok(account.into())
-                } else {
-                    return Err(ectx!(err ErrorContext::NoAccount, ErrorKind::NotFound => account_id));
-                }
-            })
-        }))
-    }
-    fn get_user_balance(&self, token: AuthenticationToken, user_id: UserId) -> Box<Future<Item = Vec<Balance>, Error = Error> + Send> {
-        let accounts_repo = self.accounts_repo.clone();
-        let db_executor = self.db_executor.clone();
-        Box::new(self.auth_service.authenticate(token).and_then(move |user| {
-            db_executor.execute(move || {
-                if user_id != user.id {
-                    return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                }
-                accounts_repo
-                    .get_balance_for_user(user_id)
-                    .map_err(ectx!(ErrorKind::Internal => user_id))
-            })
-        }))
-    }
 }
 
 #[cfg(test)]
@@ -298,47 +263,47 @@ mod tests {
         let account = core.run(service.get_accounts_for_user(token, new_account.user_id, 0, 10));
         assert!(account.is_ok());
     }
-    #[test]
-    fn test_account_get_balance() {
-        let mut core = Core::new().unwrap();
-        let token = AuthenticationToken::default();
-        let user_id = UserId::generate();
-        let service = create_account_service(token.clone(), user_id);
+    // #[test]
+    // fn test_account_get_balance() {
+    //     let mut core = Core::new().unwrap();
+    //     let token = AuthenticationToken::default();
+    //     let user_id = UserId::generate();
+    //     let service = create_account_service(token.clone(), user_id);
 
-        let mut new_account = CreateAccount::default();
-        new_account.name = "test test test acc".to_string();
-        new_account.user_id = user_id;
+    //     let mut new_account = CreateAccount::default();
+    //     new_account.name = "test test test acc".to_string();
+    //     new_account.user_id = user_id;
 
-        core.run(service.create_account(token.clone(), new_account.clone())).unwrap();
+    //     core.run(service.create_account(token.clone(), new_account.clone())).unwrap();
 
-        let account = core.run(service.get_account_balance(token, new_account.id));
-        assert!(account.is_ok());
-    }
-    #[test]
-    fn test_account_get_balance_for_users() {
-        let mut core = Core::new().unwrap();
-        let token = AuthenticationToken::default();
-        let user_id = UserId::generate();
-        let service = create_account_service(token.clone(), user_id);
+    //     let account = core.run(service.get_account_balance(token, new_account.id));
+    //     assert!(account.is_ok());
+    // }
+    // #[test]
+    // fn test_account_get_balance_for_users() {
+    //     let mut core = Core::new().unwrap();
+    //     let token = AuthenticationToken::default();
+    //     let user_id = UserId::generate();
+    //     let service = create_account_service(token.clone(), user_id);
 
-        let mut new_account = CreateAccount::default();
-        new_account.name = "test test test acc".to_string();
-        new_account.currency = Currency::Eth;
-        new_account.user_id = user_id;
+    //     let mut new_account = CreateAccount::default();
+    //     new_account.name = "test test test acc".to_string();
+    //     new_account.currency = Currency::Eth;
+    //     new_account.user_id = user_id;
 
-        core.run(service.create_account(token.clone(), new_account)).unwrap();
+    //     core.run(service.create_account(token.clone(), new_account)).unwrap();
 
-        let mut new_account2 = CreateAccount::default();
-        new_account2.name = "test tвфвest test acc".to_string();
-        new_account2.currency = Currency::Stq;
-        new_account2.user_id = user_id;
+    //     let mut new_account2 = CreateAccount::default();
+    //     new_account2.name = "test tвфвest test acc".to_string();
+    //     new_account2.currency = Currency::Stq;
+    //     new_account2.user_id = user_id;
 
-        core.run(service.create_account(token.clone(), new_account2)).unwrap();
+    //     core.run(service.create_account(token.clone(), new_account2)).unwrap();
 
-        let balance = core.run(service.get_user_balance(token, user_id));
-        assert!(balance.is_ok());
-        let balance = balance.unwrap();
-        assert_eq!(balance.len(), 2);
-    }
+    //     let balance = core.run(service.get_user_balance(token, user_id));
+    //     assert!(balance.is_ok());
+    //     let balance = balance.unwrap();
+    //     assert_eq!(balance.len(), 2);
+    // }
 
 }

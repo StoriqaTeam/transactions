@@ -1,6 +1,7 @@
 mod accounts;
 mod auth;
 mod error;
+mod exchange;
 #[cfg(test)]
 mod mocks;
 mod rabbit;
@@ -10,6 +11,7 @@ mod users;
 pub use self::accounts::*;
 pub use self::auth::*;
 pub use self::error::*;
+pub use self::exchange::*;
 #[cfg(test)]
 pub use self::mocks::*;
 pub use self::rabbit::*;

@@ -86,6 +86,8 @@ pub struct PostTransactionsRequest {
     pub to_currency: Currency,
     pub value: Amount,
     pub fee: Amount,
+    pub exchange_id: Option<ExchangeId>,
+    pub exchange_rate: Option<f64>,
     pub hold_until: Option<SystemTime>,
 }
 
@@ -115,6 +117,8 @@ impl From<PostTransactionsRequest> for CreateTransactionInput {
             to_currency,
             value,
             fee,
+            exchange_id,
+            exchange_rate,
             hold_until,
         } = req;
 
@@ -127,6 +131,8 @@ impl From<PostTransactionsRequest> for CreateTransactionInput {
             to_currency,
             value,
             fee,
+            exchange_id,
+            exchange_rate,
             hold_until,
         }
     }

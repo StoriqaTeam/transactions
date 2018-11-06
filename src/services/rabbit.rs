@@ -3,7 +3,6 @@ use std::sync::Arc;
 use super::error::*;
 use models::*;
 use prelude::*;
-use repos::error::{Error as RepoError, ErrorContext as RepoErrorContex, ErrorKind as RepoErrorKind};
 use repos::{
     AccountsRepo, BlockchainTransactionsRepo, DbExecutor, PendingBlockchainTransactionsRepo, SeenHashesRepo,
     StrangeBlockchainTransactionsRepo, TransactionsRepo,
@@ -62,7 +61,7 @@ pub enum InvariantViolation {
     WithdrawalNoPendingTx,
     #[fail(display = "blockchain transaction invariant violation - withdrawal blockchain tx value is not equal to pending tx value")]
     WithdrawalValue,
-    #[fail(display = "blockchain transaction invariant violation - withdrawal blockchain tx value is not equal to pending tx value")]
+    #[fail(display = "blockchain transaction invariant violation - deposit arrived from internal address")]
     DepositAddressInternal,
 }
 
