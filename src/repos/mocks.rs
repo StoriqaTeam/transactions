@@ -269,7 +269,7 @@ impl TransactionsRepo for TransactionsRepoMock {
         Ok(u.unwrap())
     }
 
-    fn get_with_enough_value(&self, value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<(Account, Amount)>> {
+    fn get_with_enough_value(&self, value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<AccountWithBalance>> {
         let data = self.data.lock().unwrap();
         Ok(data
             .clone()
@@ -277,9 +277,11 @@ impl TransactionsRepo for TransactionsRepoMock {
             .filter(|x| x.currency == currency_ && x.value > value_ && user_id_ == x.user_id)
             .map(|t| {
                 let mut acc = Account::default();
-                acc.balance = t.value;
                 acc.id = t.cr_account_id;
-                (acc, value_)
+                AccountWithBalance {
+                    account: acc,
+                    balance: value_,
+                }
             }).collect())
     }
 }
