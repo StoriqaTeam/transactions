@@ -108,7 +108,6 @@ impl Service for ApiService {
                         DELETE /v1/accounts/{account_id: AccountId} => delete_accounts,
                         GET /v1/accounts/{account_id: AccountId}/balances => get_accounts_balances,
                         GET /v1/accounts/{account_id: AccountId}/transactions => get_accounts_transactions,
-                        GET /v1/users/{user_id: UserId}/balances => get_users_balances,
                         GET /v1/users/{user_id: UserId}/transactions => get_users_transactions,
                         POST /v1/transactions => post_transactions,
                         GET /v1/transactions/{transaction_id: TransactionId} => get_transactions,

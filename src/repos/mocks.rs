@@ -105,25 +105,6 @@ impl AccountsRepo for AccountsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id_arg).collect())
     }
-    fn get_balance_for_user(&self, user_id: UserId) -> RepoResult<Vec<Balance>> {
-        let data = self.data.lock().unwrap();
-        let accounts_: Vec<Account> = data.clone().into_iter().filter(|x| x.user_id == user_id).collect();
-        let mut hashmap = HashMap::new();
-        for account in accounts_ {
-            let mut balance_ = hashmap.entry(account.currency).or_insert_with(Amount::default);
-            let new_balance = balance_.checked_add(account.balance);
-            if let Some(new_balance) = new_balance {
-                *balance_ = new_balance;
-            } else {
-                return Err(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => balance_, account.balance));
-            }
-        }
-        let balances = hashmap
-            .into_iter()
-            .map(|(currency_, balance_)| Balance::new(currency_, balance_))
-            .collect();
-        Ok(balances)
-    }
     fn get_by_address(&self, address_: AccountAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
         let data = self.data.lock().unwrap();
         let u = data
@@ -148,33 +129,6 @@ impl AccountsRepo for AccountsRepoMock {
             .filter(|x| addresses.contains(&x.address) && x.kind == kind_ && x.currency == currency_)
             .cloned()
             .collect();
-        Ok(u)
-    }
-
-    fn get_with_enough_value(&self, value: Amount, currency: Currency, _user_id: UserId) -> RepoResult<Vec<(Account, Amount)>> {
-        let data = self.data.lock().unwrap();
-        let u = data
-            .clone()
-            .into_iter()
-            .filter(|x| x.currency == currency && x.balance >= value && x.kind == AccountKind::Dr)
-            .scan(value, |remaining_balance, account| match *remaining_balance {
-                x if x == Amount::new(0) => None,
-                x if x <= account.balance => {
-                    let balance_to_sub = *remaining_balance;
-                    *remaining_balance = Amount::new(0);
-                    Some((account, balance_to_sub))
-                }
-                x if x > account.balance => {
-                    if let Some(new_balance) = remaining_balance.checked_sub(account.balance) {
-                        let balance_to_sub = account.balance;
-                        *remaining_balance = new_balance;
-                        Some((account, balance_to_sub))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            }).collect();
         Ok(u)
     }
 }
@@ -239,6 +193,17 @@ impl TransactionsRepo for TransactionsRepoMock {
     fn list_for_user(&self, user_id: UserId, _offset: i64, _limit: i64) -> RepoResult<Vec<Transaction>> {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id).collect())
+    }
+    fn get_accounts_balance(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>> {
+        accounts
+            .into_iter()
+            .map(|account| {
+                let balance = self.get_account_balance(account.id, account.kind)?;
+                Ok(AccountWithBalance {
+                    account: account.clone(),
+                    balance,
+                })
+            }).collect()
     }
     fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount> {
         let data = self.data.lock().unwrap();

@@ -60,7 +60,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Account'
+                $ref: '#/components/schemas/AccountWithBalance'
   /users/{userId}/balances:
     get:
       summary: Returns total balances of a user
@@ -80,7 +80,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Balance'
+                  $ref: '#/components/schemas/AccountWithBalance'
   /users/me:
     get:
       summary: Returns current user
@@ -596,16 +596,6 @@ components:
           type: string
           description: Short name for the account
           example: My main account
-    Balance:
-      type: object
-      required:
-        - currency
-        - value
-      properties:
-        currency:
-          $ref: '#/components/schemas/Currency'
-        value:
-          $ref: '#/components/schemas/Value'
     Account:
       type: object
       required:
@@ -618,8 +608,6 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/Id'
-        balance:
-          $ref: '#/components/schemas/Value'
         currency:
           $ref: '#/components/schemas/Currency'
         userId:
@@ -630,6 +618,17 @@ components:
           type: string
           description: Short name for the account
           example: My main account
+    AccountWithBalance:
+      type: object
+      required:
+        - balance
+        - account
+      properties:
+        account:
+          $ref: '#/components/schemas/Account'
+        balance:
+          $ref: '#/components/schemas/Value'
+
     Id:
       type: string
       example: jghkdfgdjfgkdf7gd

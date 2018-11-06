@@ -93,7 +93,7 @@ pub struct UpdateAccount {
     pub name: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AccountWithBalance {
     pub account: Account,
     pub balance: Amount,

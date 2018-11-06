@@ -54,7 +54,11 @@ pub trait TransactionsService: Send + Sync + 'static {
         token: AuthenticationToken,
         transaction_id: TransactionId,
     ) -> Box<Future<Item = Option<TransactionOut>, Error = Error> + Send>;
-    fn get_account_balance(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Account, Error = Error> + Send>;
+    fn get_account_balance(
+        &self,
+        token: AuthenticationToken,
+        account_id: AccountId,
+    ) -> Box<Future<Item = AccountWithBalance, Error = Error> + Send>;
     fn get_transactions_for_user(
         &self,
         token: AuthenticationToken,
@@ -226,7 +230,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, currency, user_id))?;
 
         //double check
-        for (acc, needed_amount) in &withdrawal_accs_and_vals {
+        for AccountWithBalance {
+            account: acc,
+            balance: needed_amount,
+        } in &withdrawal_accs_and_vals
+        {
             let acc_id = acc.id;
             let balance = self
                 .transactions_repo
@@ -239,7 +247,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         let mut res: Vec<Transaction> = Vec::new();
 
-        for (acc, value) in &withdrawal_accs_and_vals {
+        for AccountWithBalance {
+            account: acc,
+            balance: value,
+        } in &withdrawal_accs_and_vals
+        {
             let to = to_account_address.clone();
             // Todo this fee is ineffective, since keys client take system's fee
             let fee = Amount::new(0);
@@ -604,22 +616,25 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 })
         }))
     }
-    fn get_account_balance(&self, token: AuthenticationToken, account_id: AccountId) -> Box<Future<Item = Account, Error = Error> + Send> {
+    fn get_account_balance(
+        &self,
+        token: AuthenticationToken,
+        account_id: AccountId,
+    ) -> Box<Future<Item = AccountWithBalance, Error = Error> + Send> {
         let transactions_repo = self.transactions_repo.clone();
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
-            db_executor.execute(move || {
+            db_executor.execute(move || -> Result<AccountWithBalance, Error> {
                 let account = accounts_repo.get(account_id).map_err(ectx!(try convert => account_id))?;
                 if let Some(mut account) = account {
                     if account.user_id != user.id {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                     }
-                    let balance = transactions_repo
-                        .get_account_balance(account_id, account.kind)
-                        .map_err(ectx!(try convert => account_id))?;
-                    account.balance = balance;
-                    Ok(account)
+                    transactions_repo
+                        .get_accounts_balance(user.id, &[account])
+                        .map(|accounts| accounts[0].clone())
+                        .map_err(ectx!(convert => account_id))
                 } else {
                     return Err(ectx!(err ErrorContext::NoAccount, ErrorKind::NotFound => account_id));
                 }

@@ -123,7 +123,7 @@ pub fn get_accounts_balances(ctx: &Context, account_id: AccountId) -> Controller
                 transactions_service
                     .get_account_balance(token, account_id)
                     .map_err(ectx!(convert))
-                    .and_then(|account| response_with_model(&AccountsResponse::from(account)))
+                    .and_then(|account_with_balance| response_with_model(&account_with_balance))
             }),
     )
 }
