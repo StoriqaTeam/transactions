@@ -170,6 +170,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
             let txs_grouped_initial: HashMap<AccountId, Vec<Transaction>> = accounts.into_iter().map(|acc| (acc.id, vec![])).collect();
             let txs_grouped: HashMap<AccountId, Vec<Transaction>> = txs.into_iter().fold(txs_grouped_initial, |acc, elem| {
                 acc.entry(elem.dr_account_id).and_modify(|txs| txs.push(elem));
+                acc.entry(elem.cr_account_id).and_modify(|txs| txs.push(elem));
                 acc
             });
             accounts
