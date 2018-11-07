@@ -17,7 +17,6 @@ pub struct Transaction {
     pub value: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-    pub hold_until: Option<NaiveDateTime>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub fee: Amount,
@@ -42,7 +41,6 @@ impl Default for Transaction {
             value: Amount::default(),
             status: TransactionStatus::Pending,
             blockchain_tx_id: None,
-            hold_until: None,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
             fee: Amount::default(),
@@ -61,7 +59,6 @@ pub struct NewTransaction {
     pub value: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-    pub hold_until: Option<NaiveDateTime>,
     pub fee: Amount,
 }
 
@@ -76,7 +73,6 @@ impl Default for NewTransaction {
             value: Amount::default(),
             status: TransactionStatus::Pending,
             blockchain_tx_id: None,
-            hold_until: None,
             fee: Amount::default(),
         }
     }
@@ -91,10 +87,10 @@ pub struct CreateTransactionInput {
     pub to_type: ReceiptType,
     pub to_currency: Currency,
     pub value: Amount,
+    pub value_currency: Currency,
     pub fee: Amount,
     pub exchange_id: Option<ExchangeId>,
     pub exchange_rate: Option<f64>,
-    pub hold_until: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Clone, Validate)]
@@ -145,23 +141,6 @@ impl Default for CreateTransactionLocal {
     }
 }
 
-impl NewTransaction {
-    pub fn from_local(create: &CreateTransactionLocal) -> Self {
-        Self {
-            id: TransactionId::generate(),
-            user_id: create.user_id,
-            dr_account_id: create.dr_account.id,
-            cr_account_id: create.cr_account.id,
-            currency: create.currency,
-            value: create.value,
-            hold_until: create.hold_until,
-            status: TransactionStatus::Done,
-            blockchain_tx_id: None,
-            fee: Amount::default(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Validate)]
 pub struct DepositFounds {
     pub user_id: UserId,
@@ -179,23 +158,6 @@ impl Default for DepositFounds {
             currency: Currency::Eth,
             value: Amount::default(),
             blockchain_tx_id: BlockchainTransactionId::default(),
-        }
-    }
-}
-
-impl NewTransaction {
-    pub fn from_deposit(deposit: DepositFounds, cr_account_id: AccountId, dr_account_id: AccountId) -> Self {
-        Self {
-            id: TransactionId::generate(),
-            user_id: deposit.user_id,
-            currency: deposit.currency,
-            value: deposit.value,
-            hold_until: None,
-            cr_account_id,
-            dr_account_id,
-            status: TransactionStatus::Done,
-            blockchain_tx_id: Some(deposit.blockchain_tx_id),
-            fee: Amount::default(),
         }
     }
 }

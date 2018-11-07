@@ -85,25 +85,10 @@ pub struct PostTransactionsRequest {
     pub to_type: ReceiptType,
     pub to_currency: Currency,
     pub value: Amount,
+    pub value_currency: Currency,
     pub fee: Amount,
     pub exchange_id: Option<ExchangeId>,
     pub exchange_rate: Option<f64>,
-    pub hold_until: Option<NaiveDateTime>,
-}
-
-impl From<PostTransactionsRequest> for CreateTransaction {
-    fn from(req: PostTransactionsRequest) -> Self {
-        Self {
-            user_id: req.user_id,
-            dr_account_id: req.from,
-            to: req.to,
-            to_type: req.to_type,
-            to_currency: req.to_currency,
-            value: req.value,
-            fee: req.fee,
-            hold_until: req.hold_until,
-        }
-    }
 }
 
 impl From<PostTransactionsRequest> for CreateTransactionInput {
@@ -116,10 +101,10 @@ impl From<PostTransactionsRequest> for CreateTransactionInput {
             to_type,
             to_currency,
             value,
+            value_currency,
             fee,
             exchange_id,
             exchange_rate,
-            hold_until,
         } = req;
 
         Self {
@@ -130,10 +115,10 @@ impl From<PostTransactionsRequest> for CreateTransactionInput {
             to_type,
             to_currency,
             value,
+            value_currency,
             fee,
             exchange_id,
             exchange_rate,
-            hold_until,
         }
     }
 }

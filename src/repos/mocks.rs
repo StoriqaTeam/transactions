@@ -150,7 +150,6 @@ impl TransactionsRepo for TransactionsRepoMock {
             value: payload.value,
             status: payload.status,
             blockchain_tx_id: payload.blockchain_tx_id,
-            hold_until: payload.hold_until,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
             fee: payload.fee,

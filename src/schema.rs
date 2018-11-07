@@ -73,7 +73,6 @@ table! {
         value -> Numeric,
         status -> Varchar,
         blockchain_tx_id -> Nullable<Varchar>,
-        hold_until -> Nullable<Timestamp>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
         fee -> Numeric,

@@ -376,7 +376,6 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 cr_account_id: to_account.id,
                 currency: input.to_currency,
                 value: input.value,
-                hold_until: input.hold_until,
                 status,
                 blockchain_tx_id,
                 // Todo - fees

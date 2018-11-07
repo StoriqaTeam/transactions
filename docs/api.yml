@@ -511,7 +511,9 @@ components:
         - toValue
         - toCurrency
         - fee
+        - status
         - createdAt
+        - updatedAt
       properties:
         id:
           $ref: '#/components/schemas/Id'
@@ -531,8 +533,15 @@ components:
           $ref: '#/components/schemas/Currency'
         fee:
           $ref: '#/components/schemas/Value'
+        status:
+          $ref: '#/components/schemas/TransactionStatus'
+        blockchainTxId:
+          $ref: '#/components/schemas/TxHash'
         createdAt:
           $ref: '#/components/schemas/Timestamp'
+        updatedAt:
+          $ref: '#/components/schemas/Timestamp'
+
 
     TransactionCreateInput:
       type: object
@@ -579,7 +588,14 @@ components:
         exchangeRate:
           $ref: '#/components/schemas/Rate'
 
-
+    TxHash:
+      type: string
+      description: Blockchain transaction hash
+      example: 'e9df6e87f6de875fe8f5e98f57de89f5'
+    TransactionStatus:
+      type: string
+      enum: [pending|done]
+      example: done
     AccountAddress:
       type: string
       description: Either blockchain address or fiat account number (depending on currency)
