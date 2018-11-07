@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use chrono::NaiveDateTime;
 
 use validator::Validate;
 
@@ -13,8 +13,8 @@ pub struct Account {
     pub address: AccountAddress,
     pub name: Option<String>,
     pub kind: AccountKind,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 impl Default for Account {
@@ -26,8 +26,8 @@ impl Default for Account {
             address: AccountAddress::default(),
             name: None,
             kind: AccountKind::Cr,
-            created_at: SystemTime::now(),
-            updated_at: SystemTime::now(),
+            created_at: ::chrono::Utc::now().naive_utc(),
+            updated_at: ::chrono::Utc::now().naive_utc(),
         }
     }
 }

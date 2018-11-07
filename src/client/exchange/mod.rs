@@ -2,6 +2,7 @@ mod error;
 
 use std::sync::Arc;
 
+use chrono::NaiveDateTime;
 use failure::Fail;
 use futures::prelude::*;
 use hyper::Method;
@@ -9,7 +10,6 @@ use hyper::{Body, Request};
 use models::*;
 use serde::Deserialize;
 use serde_json;
-use std::time::SystemTime;
 
 pub use self::error::*;
 use super::HttpClient;
@@ -114,7 +114,7 @@ impl ExchangeClient for ExchangeClientMock {
     fn rate(&self, _exchange: RateInput, _role: Role) -> Box<Future<Item = Rate, Error = Error> + Send> {
         Box::new(
             Ok(Rate {
-                expiration: SystemTime::now(),
+                expiration: ::chrono::Utc::now().naive_utc(),
                 id: Default::default(),
                 from: Default::default(),
                 to: Default::default(),

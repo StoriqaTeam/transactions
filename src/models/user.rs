@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use chrono::NaiveDateTime;
 
 use validator::Validate;
 
@@ -10,8 +10,8 @@ pub struct User {
     pub id: UserId,
     pub name: String,
     pub authentication_token: AuthenticationToken,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 impl Default for User {
@@ -20,8 +20,8 @@ impl Default for User {
             id: UserId::generate(),
             name: String::default(),
             authentication_token: AuthenticationToken::default(),
-            created_at: SystemTime::now(),
-            updated_at: SystemTime::now(),
+            created_at: ::chrono::Utc::now().naive_utc(),
+            updated_at: ::chrono::Utc::now().naive_utc(),
         }
     }
 }

@@ -30,6 +30,7 @@ extern crate num;
 extern crate validator;
 #[macro_use]
 extern crate sentry;
+extern crate chrono;
 extern crate tokio;
 extern crate tokio_core;
 extern crate uuid;

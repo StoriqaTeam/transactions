@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use chrono::NaiveDateTime;
 
 use serde_json;
 
@@ -14,8 +14,8 @@ pub struct StrangeBlockchainTransactionDB {
     pub currency: Currency,
     pub fee: Amount,
     pub confirmations: i32,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
     pub commentary: String,
 }
 

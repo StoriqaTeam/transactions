@@ -1,6 +1,6 @@
+use chrono::NaiveDateTime;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
-use std::time::SystemTime;
 
 use serde_json;
 
@@ -93,8 +93,8 @@ pub struct BlockchainTransactionDB {
     pub currency: Currency,
     pub fee: Amount,
     pub confirmations: i32,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
     pub from_: serde_json::Value,
     pub to_: serde_json::Value,
 }

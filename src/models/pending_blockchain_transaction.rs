@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use chrono::NaiveDateTime;
 
 use models::*;
 use schema::pending_blockchain_transactions;
@@ -11,8 +11,8 @@ pub struct PendingBlockchainTransactionDB {
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchainTransactionDB {
