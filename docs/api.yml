@@ -504,10 +504,13 @@ components:
       type: object
       required:
         - id
-        - fromAddress
-        - toAddress
-        - currency
-        - value
+        - from
+        - to
+        - fromValue
+        - fromCurrency
+        - toValue
+        - toCurrency
+        - fee
         - createdAt
       properties:
         id:
@@ -529,8 +532,6 @@ components:
         fee:
           $ref: '#/components/schemas/Value'
         createdAt:
-          $ref: '#/components/schemas/Timestamp'
-        holdUntil:
           $ref: '#/components/schemas/Timestamp'
 
     TransactionCreateInput:
