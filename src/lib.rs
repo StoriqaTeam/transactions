@@ -5,7 +5,9 @@ extern crate failure;
 extern crate futures;
 #[macro_use]
 extern crate diesel;
+extern crate env_logger;
 extern crate futures_cpupool;
+extern crate gelf;
 extern crate hyper;
 extern crate r2d2;
 extern crate serde;
@@ -40,6 +42,7 @@ mod macros;
 pub mod api;
 mod client;
 mod config;
+mod logger;
 mod models;
 mod prelude;
 mod rabbit;
@@ -94,8 +97,9 @@ pub fn start_server() {
     let config = get_config();
     // Prepare sentry integration
     let _sentry = sentry_integration::init(config.sentry.as_ref());
+    // Prepare logger
+    logger::init(config.graylog.as_ref());
     upsert_system_accounts();
-
     let config_clone = config.clone();
     thread::spawn(move || {
         let mut core = tokio_core::reactor::Core::new().unwrap();
