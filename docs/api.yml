@@ -512,13 +512,21 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/Id'
-        fromAddress:
-          $ref: '#/components/schemas/AccountAddress'
-        toAddress:
-          $ref: '#/components/schemas/AccountAddress'
-        currency:
+        from:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountInfo'
+        to:
+          $ref: '#/components/schemas/AccountInfo'
+        fromValue:
+          $ref: '#/components/schemas/Value'
+        fromCurrency:
           $ref: '#/components/schemas/Currency'
-        value:
+        toValue:
+          $ref: '#/components/schemas/Value'
+        toCurrency:
+          $ref: '#/components/schemas/Currency'
+        fee:
           $ref: '#/components/schemas/Value'
         createdAt:
           $ref: '#/components/schemas/Timestamp'
@@ -532,8 +540,9 @@ components:
         - from
         - to
         - toType
-        - currency
+        - toCurrency
         - value
+        - valueCurrency
         - fee
       properties:
         userId:
@@ -556,10 +565,12 @@ components:
         toType:
           type: string
           enum: [account|address]
-        currency:
+        toCurrency:
           $ref: '#/components/schemas/Currency'
         value:
           $ref: '#/components/schemas/Value'
+        valueCurrency:
+          $ref: '#/components/schemas/Currency'
         fee:
           $ref: '#/components/schemas/Value'
         exchangeId:
@@ -618,6 +629,15 @@ components:
           type: string
           description: Short name for the account
           example: My main account
+    AccountInfo:
+      type: object
+      required:
+        - blockchainAddress
+      properties:
+        accountId:
+          $ref: '#/components/schemas/AccountId'
+        blockchainAddress:
+          $ref: '#/components/schemas/AccountAddress'
     AccountWithBalance:
       type: object
       required:
