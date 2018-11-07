@@ -1,10 +1,15 @@
+use std::env;
+use std::fs::File;
+use std::io::Write;
+use std::sync::Arc;
+
 use chrono::prelude::*;
 use env_logger::Builder as EnvLogBuilder;
 use gelf;
 use log::{self, LevelFilter as LogLevelFilter, Log, Metadata, Record};
-use std::env;
-use std::io::Write;
-use std::sync::Arc;
+use simplelog::{Config as SimpleLoggerConfig, WriteLogger};
+
+use config::Config;
 
 pub struct CombinedLogger {
     pub inner: Vec<Arc<Log>>,
@@ -47,7 +52,13 @@ pub struct GrayLogConfig {
     pub cluster: Option<String>,
 }
 
-pub fn init(graylog_config: Option<&GrayLogConfig>) {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FileLogConfig {
+    /// Path to file
+    pub path: String,
+}
+
+pub fn init(config: &Config) {
     let mut builder = EnvLogBuilder::new();
     builder
         .format(|formatter, record| {
@@ -60,25 +71,30 @@ pub fn init(graylog_config: Option<&GrayLogConfig>) {
     }
 
     let mut combined_logger = CombinedLogger::default();
-
     let stdio_logger = Arc::new(builder.build());
     let log_level = stdio_logger.filter();
     let log_filter = {
         let stdio_logger = stdio_logger.clone();
         move |record: &Record| stdio_logger.matches(record)
     };
-
     combined_logger.filter = Box::new(log_filter);
-    combined_logger.inner.push(stdio_logger);
 
-    if let Some(config) = graylog_config {
+    if let Some(ref config) = config.filelog {
+        let logger = WriteLogger::new(log_level, SimpleLoggerConfig::default(), File::create(&config.path).unwrap());
+        combined_logger.inner.push(Arc::new(*logger));
+    } else {
+        combined_logger.inner.push(stdio_logger);
+    }
+
+    if let Some(ref config) = config.graylog {
         let backend = gelf::UdpBackend::new(&config.addr).unwrap();
         let mut logger = gelf::Logger::new(Box::new(backend)).unwrap();
 
         if let Some(cluster) = config.cluster.as_ref() {
             logger.set_default_metadata(String::from("cluster"), cluster.clone());
         }
-
+        logger.set_default_metadata("source_type", "backend");
+        logger.set_default_metadata("stack", "payments");
         combined_logger.inner.push(Arc::new(logger));
     }
 
