@@ -382,15 +382,17 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account));
         }
         let from_account_id = from_account.id;
+        let from_account_clone = from_account.clone();
         let balance = self
             .transactions_repo
-            .get_account_balance(from_account_id, AccountKind::Cr)
+            .get_accounts_balance(input.user_id, &[from_account_clone])
+            .map(|accounts| accounts[0].balance)
             .map_err(ectx!(try convert => from_account_id))?;
         if balance >= input.value {
             let new_transaction = NewTransaction {
                 id: input.id,
                 user_id: input.user_id,
-                dr_account_id: from_account.id,
+                dr_account_id: from_account_id,
                 cr_account_id: to_account.id,
                 currency: input.to_currency,
                 value: input.value,
@@ -404,7 +406,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 .map(|tx| vec![tx])
                 .map_err(ectx!(convert => new_transaction))
         } else {
-            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, input.value))
+            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => from_account, balance, input.value))
         }
     }
 
