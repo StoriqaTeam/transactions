@@ -1,9 +1,9 @@
 use std::env;
 
-use sentry_integration::SentryConfig;
-
 use config_crate::{Config as RawConfig, ConfigError, Environment, File};
+use logger::GrayLogConfig;
 use models::*;
+use sentry_integration::SentryConfig;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
@@ -16,6 +16,7 @@ pub struct Config {
     pub fee_price: FeePrice,
     pub system: System,
     pub sentry: Option<SentryConfig>,
+    pub graylog: Option<GrayLogConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
