@@ -6,6 +6,7 @@ use models::*;
 use schema::accounts;
 
 #[derive(Debug, Queryable, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Account {
     pub id: AccountId,
     pub user_id: UserId,
