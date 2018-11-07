@@ -76,6 +76,7 @@ table! {
         created_at -> Timestamp,
         updated_at -> Timestamp,
         fee -> Numeric,
+        gid -> Uuid,
     }
 }
 

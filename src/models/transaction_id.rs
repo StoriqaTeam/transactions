@@ -4,7 +4,7 @@ use std::str::FromStr;
 use diesel::sql_types::Uuid as SqlUuid;
 use uuid::{self, Uuid};
 
-#[derive(Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, PartialEq, Eq, Hash)]
 #[sql_type = "SqlUuid"]
 pub struct TransactionId(Uuid);
 derive_newtype_sql!(transaction_id, SqlUuid, TransactionId, TransactionId);
@@ -34,6 +34,20 @@ impl TransactionId {
         bytes[last] = bytes[last].wrapping_add(1);
         let uuid = Uuid::from_bytes(&bytes).unwrap();
         TransactionId(uuid)
+    }
+
+    pub fn prev(&self) -> Self {
+        let mut bytes = self.0.as_bytes().to_vec();
+        let last = bytes.len() - 1;
+        bytes[last] = bytes[last].wrapping_sub(1);
+        let uuid = Uuid::from_bytes(&bytes).unwrap();
+        TransactionId(uuid)
+    }
+
+    pub fn last_byte(&self) -> u8 {
+        let mut bytes = self.0.as_bytes().to_vec();
+        let last = bytes.len() - 1;
+        bytes[last]
     }
 }
 

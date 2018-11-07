@@ -142,7 +142,7 @@ impl Default for CreateTransactionLocal {
 }
 
 #[derive(Debug, Clone, Validate)]
-pub struct DepositFounds {
+pub struct DepositFunds {
     pub user_id: UserId,
     pub address: AccountAddress,
     pub currency: Currency,
@@ -150,7 +150,7 @@ pub struct DepositFounds {
     pub blockchain_tx_id: BlockchainTransactionId,
 }
 
-impl Default for DepositFounds {
+impl Default for DepositFunds {
     fn default() -> Self {
         Self {
             user_id: UserId::default(),
@@ -273,7 +273,10 @@ pub struct TransactionOut {
     pub from: Vec<TransactionAddressInfo>,
     pub to: TransactionAddressInfo,
     pub currency: Currency,
-    pub value: Amount,
+    pub from_value: Amount,
+    pub from_currency: Currency,
+    pub to_value: Amount,
+    pub to_currency: Currency,
     pub fee: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
@@ -281,22 +284,22 @@ pub struct TransactionOut {
     pub updated_at: NaiveDateTime,
 }
 
-impl TransactionOut {
-    pub fn new(transaction: &Transaction, from: Vec<TransactionAddressInfo>, to: TransactionAddressInfo) -> Self {
-        Self {
-            id: transaction.id,
-            from,
-            to,
-            currency: transaction.currency,
-            value: transaction.value,
-            fee: transaction.fee,
-            status: transaction.status,
-            blockchain_tx_id: transaction.blockchain_tx_id.clone(),
-            created_at: transaction.created_at.clone(),
-            updated_at: transaction.updated_at.clone(),
-        }
-    }
-}
+// impl TransactionOut {
+//     pub fn new(transaction: &Transaction, from: Vec<TransactionAddressInfo>, to: TransactionAddressInfo) -> Self {
+//         Self {
+//             id: transaction.id,
+//             from,
+//             to,
+//             currency: transaction.currency,
+//             value: transaction.value,
+//             fee: transaction.fee,
+//             status: transaction.status,
+//             blockchain_tx_id: transaction.blockchain_tx_id.clone(),
+//             created_at: transaction.created_at.clone(),
+//             updated_at: transaction.updated_at.clone(),
+//         }
+//     }
+// }
 
 #[derive(Debug, Serialize, Clone)]
 pub struct TransactionAddressInfo {

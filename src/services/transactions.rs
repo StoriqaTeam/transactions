@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::future::{self, Either};
@@ -47,7 +48,7 @@ pub trait TransactionsService: Send + Sync + 'static {
         input: CreateTransactionInput,
     ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
     // fn create_transaction_local(&self, input: CreateTransactionLocal) -> Box<Future<Item = Transaction, Error = Error> + Send>;
-    // fn deposit_funds(&self, token: AuthenticationToken, input: DepositFounds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
+    // fn deposit_funds(&self, token: AuthenticationToken, input: DepositFunds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     // fn withdraw(&self, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
     fn get_transaction(
         &self,
@@ -751,6 +752,38 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
     }
 }
 
+const TRANSACTION_ID_RADUIS: u8 = 5;
+
+// group transactions into subgroups of related txs. I.e. group tx itself + related fee
+fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
+    let res: HashMap<TransactionId, Vec<Transaction>> = HashMap::new();
+    for tx in transactions.into_iter() {
+        let mut ids = Vec::new();
+        let mut current_next_id = tx.id;
+        let mut current_prev_id = tx.id;
+        for _ in 0..TRANSACTION_ID_RADUIS {
+            ids.push(current_prev_id);
+            ids.push(current_next_id);
+            current_prev_id = current_prev_id.prev();
+            current_next_id = current_next_id.next();
+        }
+        let mut inserted = false;
+        for tx_id in ids.into_iter() {
+            if tx.id == tx_id {
+                res.entry(tx_id).and_modify(|value| {
+                    value.push(tx);
+                });
+                inserted = true;
+                break;
+            }
+        }
+        if !inserted {
+            res.insert(tx.id, vec![tx]);
+        }
+    }
+    res.into_iter().map(|(_, txs)| txs).collect()
+}
+
 #[cfg(test)]
 mod tests {
     // use super::*;
@@ -804,7 +837,7 @@ mod tests {
     //         dr_account.user_id = user_id;
     //         let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
-    //         let mut new_transaction = DepositFounds::default();
+    //         let mut new_transaction = DepositFunds::default();
     //         new_transaction.value = Amount::new(100501);
     //         new_transaction.address = dr_account.address.clone();
 
@@ -836,7 +869,7 @@ mod tests {
 
     //     let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
-    //     let mut new_transaction = DepositFounds::default();
+    //     let mut new_transaction = DepositFunds::default();
     //     new_transaction.value = Amount::new(100500);
     //     new_transaction.address = cr_account.address;
     //     new_transaction.user_id = user_id;
@@ -858,7 +891,7 @@ mod tests {
 
     //     let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
-    //     let mut new_transaction = DepositFounds::default();
+    //     let mut new_transaction = DepositFunds::default();
     //     new_transaction.value = Amount::new(100500);
     //     new_transaction.address = cr_account.address;
     //     new_transaction.user_id = user_id;
@@ -881,7 +914,7 @@ mod tests {
     //     dr_account.user_id = user_id;
     //     let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
-    //     let mut new_transaction = DepositFounds::default();
+    //     let mut new_transaction = DepositFunds::default();
     //     new_transaction.value = Amount::new(100501);
     //     new_transaction.address = dr_account.address.clone();
 
@@ -913,7 +946,7 @@ mod tests {
 
     //     let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
-    //     let mut new_transaction = DepositFounds::default();
+    //     let mut new_transaction = DepositFunds::default();
     //     new_transaction.value = Amount::new(100500);
     //     new_transaction.address = cr_account.address;
 
@@ -934,7 +967,7 @@ mod tests {
     //     let dr_account = core.run(acc_service.create_account(token.clone(), dr_account)).unwrap();
 
     //     //depositing on withdraw account
-    //     let mut deposit = DepositFounds::default();
+    //     let mut deposit = DepositFunds::default();
     //     deposit.value = Amount::new(100500);
     //     deposit.address = dr_account.address.clone();
 
@@ -947,7 +980,7 @@ mod tests {
     //     let cr_account = core.run(acc_service.create_account(token.clone(), cr_account)).unwrap();
 
     //     //depositin on random account
-    //     let mut deposit = DepositFounds::default();
+    //     let mut deposit = DepositFunds::default();
     //     deposit.value = Amount::new(100500);
     //     deposit.address = cr_account.address;
 
