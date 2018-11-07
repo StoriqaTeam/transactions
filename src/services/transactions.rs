@@ -150,6 +150,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                         (Some(exchange_id), Some(exchange_rate)) => (exchange_id, exchange_rate),
                         _ => return Err(ectx!(err ErrorContext::MissingExchangeRate, ErrorKind::MalformedInput => input)),
                     };
+                    if (input.value_currency != from_account.currency) && (input.value_currency != to_account.currency) {
+                        return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input));
+                    }
                     Ok(TransactionType::InternalExchange(
                         from_account,
                         to_account,
@@ -312,10 +315,25 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
     ) -> Result<Vec<Transaction>, Error> {
         let mut result: Vec<Transaction> = Vec::new();
 
+        let (from_value, to_value) = if from_account.currency == input.value_currency {
+            (input.value, input.value.convert(from_account.currency, exchange_rate))
+        } else if to_account.currency == input.value_currency {
+            (input.value.convert(to_account.currency, 1.0 / exchange_rate), input.value)
+        } else {
+            panic!(
+                "Unexpected currency. Input: {:#?}, from_account: {:#?}, to_account: {:#?}",
+                input, from_account, to_account
+            )
+        };
+
         // Moving money from `from` account to system liquidity account
         let from_counterpart_acc = self.get_system_liquidity_account(from_account.currency)?;
+        let from_input = CreateTransactionInput {
+            value: from_value,
+            ..input.clone()
+        };
         let txs = self.create_internal_mono_currency_tx(
-            input.clone(),
+            from_input,
             from_account.clone(),
             from_counterpart_acc,
             None,
@@ -325,13 +343,13 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         // Moving money from system liquidity account to `to` account
         let tx_next_id = input.id.next();
-        let input_next = CreateTransactionInput {
+        let to_input = CreateTransactionInput {
             id: tx_next_id,
+            value: to_value,
             ..input.clone()
         };
         let to_counterpart_acc = self.get_system_liquidity_account(to_account.currency)?;
-        let txs =
-            self.create_internal_mono_currency_tx(input_next, to_counterpart_acc, to_account.clone(), None, TransactionStatus::Done)?;
+        let txs = self.create_internal_mono_currency_tx(to_input, to_counterpart_acc, to_account.clone(), None, TransactionStatus::Done)?;
         result.extend(txs.into_iter());
 
         let exchange_input = ExchangeInput {
@@ -340,7 +358,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             to: to_account.currency,
             rate: exchange_rate,
             actual_amount: input.value,
-            amount_currency: input.to_currency,
+            amount_currency: input.value_currency,
         };
         let exchange_input_clone = exchange_input.clone();
         let _ = self
