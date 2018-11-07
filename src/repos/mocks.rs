@@ -1,6 +1,6 @@
+use chrono::NaiveDateTime;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
 
 use super::accounts::*;
 use super::blockchain_transactions::*;
@@ -30,8 +30,8 @@ impl UsersRepo for UsersRepoMock {
             id: payload.id,
             name: payload.name,
             authentication_token: payload.authentication_token,
-            created_at: SystemTime::now(),
-            updated_at: SystemTime::now(),
+            created_at: ::chrono::Utc::now().naive_utc(),
+            updated_at: ::chrono::Utc::now().naive_utc(),
         };
         data.push(res.clone());
         Ok(res)
@@ -151,8 +151,8 @@ impl TransactionsRepo for TransactionsRepoMock {
             status: payload.status,
             blockchain_tx_id: payload.blockchain_tx_id,
             hold_until: payload.hold_until,
-            created_at: SystemTime::now(),
-            updated_at: SystemTime::now(),
+            created_at: ::chrono::Utc::now().naive_utc(),
+            updated_at: ::chrono::Utc::now().naive_utc(),
             fee: payload.fee,
         };
         data.push(res.clone());
@@ -301,8 +301,8 @@ impl PendingBlockchainTransactionsRepo for PendingBlockchainTransactionsRepoMock
             currency: payload.currency,
             value: payload.value,
             fee: payload.fee,
-            created_at: SystemTime::now(),
-            updated_at: SystemTime::now(),
+            created_at: ::chrono::Utc::now().naive_utc(),
+            updated_at: ::chrono::Utc::now().naive_utc(),
         };
         data.push(res.clone());
         Ok(res)
@@ -333,8 +333,8 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoMock {
             fee: payload.fee,
             block_number: payload.block_number,
             confirmations: payload.confirmations,
-            created_at: SystemTime::now(),
-            updated_at: SystemTime::now(),
+            created_at: ::chrono::Utc::now().naive_utc(),
+            updated_at: ::chrono::Utc::now().naive_utc(),
         };
         data.push(res.clone());
         Ok(res)

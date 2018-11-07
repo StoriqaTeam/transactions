@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use chrono::NaiveDateTime;
 
 use models::*;
 
@@ -88,7 +88,7 @@ pub struct PostTransactionsRequest {
     pub fee: Amount,
     pub exchange_id: Option<ExchangeId>,
     pub exchange_rate: Option<f64>,
-    pub hold_until: Option<SystemTime>,
+    pub hold_until: Option<NaiveDateTime>,
 }
 
 impl From<PostTransactionsRequest> for CreateTransaction {

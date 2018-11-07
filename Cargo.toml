@@ -11,6 +11,7 @@ path = "src/lib.rs"
 base64 = "0.9"
 clap = {version = "2", features = ["yaml"]}
 config = "0.9"
+chrono = "0.4"
 diesel = { version = "1.3.3", features = ["postgres", "chrono", "extras"] }
 env_logger = "0.5"
 failure = "0.1"

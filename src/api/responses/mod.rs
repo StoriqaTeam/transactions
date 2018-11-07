@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use chrono::NaiveDateTime;
 
 use models::*;
 
@@ -8,8 +8,8 @@ pub struct UsersResponse {
     pub id: UserId,
     pub name: String,
     pub authentication_token: AuthenticationToken,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 impl From<User> for UsersResponse {
@@ -32,8 +32,8 @@ pub struct AccountsResponse {
     pub currency: Currency,
     pub address: AccountAddress,
     pub name: Option<String>,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 impl From<Account> for AccountsResponse {
@@ -92,8 +92,8 @@ pub struct TransactionsResponse {
     pub fee: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 impl From<TransactionOut> for TransactionsResponse {

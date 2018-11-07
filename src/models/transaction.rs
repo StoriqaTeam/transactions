@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use chrono::NaiveDateTime;
 
 use diesel::sql_types::Numeric;
 use diesel::sql_types::Uuid as SqlUuid;
@@ -17,9 +17,9 @@ pub struct Transaction {
     pub value: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-    pub hold_until: Option<SystemTime>,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub hold_until: Option<NaiveDateTime>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
     pub fee: Amount,
 }
 
@@ -43,8 +43,8 @@ impl Default for Transaction {
             status: TransactionStatus::Pending,
             blockchain_tx_id: None,
             hold_until: None,
-            created_at: SystemTime::now(),
-            updated_at: SystemTime::now(),
+            created_at: ::chrono::Utc::now().naive_utc(),
+            updated_at: ::chrono::Utc::now().naive_utc(),
             fee: Amount::default(),
         }
     }
@@ -61,7 +61,7 @@ pub struct NewTransaction {
     pub value: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-    pub hold_until: Option<SystemTime>,
+    pub hold_until: Option<NaiveDateTime>,
     pub fee: Amount,
 }
 
@@ -94,7 +94,7 @@ pub struct CreateTransactionInput {
     pub fee: Amount,
     pub exchange_id: Option<ExchangeId>,
     pub exchange_rate: Option<f64>,
-    pub hold_until: Option<SystemTime>,
+    pub hold_until: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Clone, Validate)]
@@ -106,7 +106,7 @@ pub struct CreateTransaction {
     pub to_currency: Currency,
     pub value: Amount,
     pub fee: Amount,
-    pub hold_until: Option<SystemTime>,
+    pub hold_until: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Clone, Validate)]
@@ -116,7 +116,7 @@ pub struct CreateTransactionLocal {
     pub cr_account: Account,
     pub currency: Currency,
     pub value: Amount,
-    pub hold_until: Option<SystemTime>,
+    pub hold_until: Option<NaiveDateTime>,
 }
 
 impl CreateTransactionLocal {
@@ -315,8 +315,8 @@ pub struct TransactionOut {
     pub fee: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 impl TransactionOut {

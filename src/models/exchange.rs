@@ -1,7 +1,7 @@
 use super::{Amount, Currency};
 
+use chrono::NaiveDateTime;
 use std::fmt::{self, Debug, Display};
-use std::time::SystemTime;
 
 use diesel::sql_types::Uuid as SqlUuid;
 use uuid::Uuid;
@@ -76,5 +76,5 @@ pub struct Rate {
     pub to: Currency,
     pub amount: Amount,
     pub rate: f64,
-    pub expiration: SystemTime,
+    pub expiration: NaiveDateTime,
 }

@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use chrono::NaiveDateTime;
 
 use models::*;
 use schema::seen_hashes;
@@ -8,8 +8,8 @@ pub struct SeenHashes {
     pub hash: BlockchainTransactionId,
     pub block_number: i64,
     pub currency: Currency,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 impl From<BlockchainTransaction> for NewSeenHashes {
