@@ -73,6 +73,9 @@ pub struct Rate {
     pub from: Currency,
     pub to: Currency,
     pub amount: Amount,
+    pub amount_currency: Currency,
     pub rate: f64,
     pub expiration: NaiveDateTime,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
