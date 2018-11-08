@@ -40,7 +40,6 @@ impl Default for Transaction {
             cr_account_id: AccountId::generate(),
             currency: Currency::Stq,
             value: Amount::default(),
-            status: TransactionStatus::Pending,
             blockchain_tx_id: None,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
@@ -58,7 +57,6 @@ pub struct NewTransaction {
     pub cr_account_id: AccountId,
     pub currency: Currency,
     pub value: Amount,
-    pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
 }
 
@@ -73,7 +71,6 @@ impl Default for NewTransaction {
             cr_account_id: AccountId::generate(),
             currency: Currency::Stq,
             value: Amount::default(),
-            status: TransactionStatus::Pending,
             blockchain_tx_id: None,
         }
     }
@@ -104,42 +101,6 @@ pub struct CreateTransaction {
     pub value: Amount,
     pub fee: Amount,
     pub hold_until: Option<NaiveDateTime>,
-}
-
-#[derive(Debug, Clone, Validate)]
-pub struct CreateTransactionLocal {
-    pub user_id: UserId,
-    pub dr_account: Account,
-    pub cr_account: Account,
-    pub currency: Currency,
-    pub value: Amount,
-    pub hold_until: Option<NaiveDateTime>,
-}
-
-impl CreateTransactionLocal {
-    pub fn new(create: &CreateTransaction, dr_account: Account, cr_account: Account) -> Self {
-        Self {
-            user_id: create.user_id,
-            dr_account,
-            cr_account,
-            currency: create.to_currency,
-            value: create.value,
-            hold_until: create.hold_until,
-        }
-    }
-}
-
-impl Default for CreateTransactionLocal {
-    fn default() -> Self {
-        Self {
-            user_id: UserId::generate(),
-            dr_account: Account::default(),
-            cr_account: Account::default(),
-            currency: Currency::Eth,
-            value: Amount::default(),
-            hold_until: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Validate)]

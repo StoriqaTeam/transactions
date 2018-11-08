@@ -52,9 +52,6 @@ pub trait TransactionsService: Send + Sync + 'static {
         token: AuthenticationToken,
         input: CreateTransactionInput,
     ) -> Box<Future<Item = TransactionOut, Error = Error> + Send>;
-    // fn create_transaction_local(&self, input: CreateTransactionLocal) -> Box<Future<Item = Transaction, Error = Error> + Send>;
-    // fn deposit_funds(&self, token: AuthenticationToken, input: DepositFunds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
-    // fn withdraw(&self, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
     fn get_transaction(
         &self,
         token: AuthenticationToken,
