@@ -5,7 +5,7 @@ use models::*;
 use prelude::*;
 use repos::{
     AccountsRepo, BlockchainTransactionsRepo, DbExecutor, PendingBlockchainTransactionsRepo, SeenHashesRepo,
-    StrangeBlockchainTransactionsRepo, TransactionsRepo,
+    StrangeBlockchainTransactionsRepo, TransactionsRepo, TxGroupsRepo,
 };
 use serde_json;
 use utils::log_error;
@@ -13,6 +13,7 @@ use utils::log_error;
 #[derive(Clone)]
 pub struct BlockchainFetcher<E: DbExecutor> {
     transactions_repo: Arc<TransactionsRepo>,
+    tx_groups_repo: Arc<TxGroupsRepo>,
     accounts_repo: Arc<AccountsRepo>,
     seen_hashes_repo: Arc<SeenHashesRepo>,
     blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
@@ -27,6 +28,7 @@ pub struct BlockchainFetcher<E: DbExecutor> {
 impl<E: DbExecutor> BlockchainFetcher<E> {
     pub fn new(
         transactions_repo: Arc<TransactionsRepo>,
+        tx_groups_repo: Arc<TxGroupsRepo>,
         accounts_repo: Arc<AccountsRepo>,
         seen_hashes_repo: Arc<SeenHashesRepo>,
         blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
@@ -39,6 +41,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
     ) -> Self {
         BlockchainFetcher {
             transactions_repo,
+            tx_groups_repo,
             accounts_repo,
             seen_hashes_repo,
             blockchain_transactions_repo,
@@ -156,8 +159,17 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 cr_account_id: to_cr_account.id,
                 currency: to_dr_account.currency,
                 value: to_entry.value,
-                status: TransactionStatus::Done,
                 blockchain_tx_id: Some(blockchain_tx.hash.clone()),
+            };
+
+            let new_tx_group = NewTxGroup {
+                id: tx_id.into(),
+                status: TransactionStatus::Done,
+                kind: TxGroupKind::Deposit,
+                tx_1: Some(tx_id),
+                tx_2: None,
+                tx_3: None,
+                tx_4: None,
             };
 
             let fees_account = self.get_system_fees_account(to_dr_account.currency)?;

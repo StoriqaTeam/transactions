@@ -75,7 +75,7 @@ use self::prelude::*;
 use self::repos::{
     AccountsRepo, AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError,
     ErrorKind as ReposErrorKind, PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl, StrangeBlockchainTransactionsRepoImpl,
-    TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
+    TransactionsRepoImpl, TxGroupsRepo, TxGroupsRepoImpl, UsersRepo, UsersRepoImpl,
 };
 use client::{KeysClient, KeysClientImpl};
 use config::{Config, System};
@@ -108,6 +108,7 @@ pub fn start_server() {
         let cpu_pool = CpuPool::new(config_clone.rabbit.thread_pool_size);
         let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
         let transactions_repo = Arc::new(TransactionsRepoImpl);
+        let tx_groups_repo = Arc::new(TxGroupsRepoImpl);
         let accounts_repo = Arc::new(AccountsRepoImpl);
         let seen_hashes_repo = Arc::new(SeenHashesRepoImpl);
         let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoImpl);
@@ -115,6 +116,7 @@ pub fn start_server() {
         let pending_blockchain_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoImpl);
         let fetcher = BlockchainFetcher::new(
             transactions_repo,
+            tx_groups_repo,
             accounts_repo,
             seen_hashes_repo,
             blockchain_transactions_repo,

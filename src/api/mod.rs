@@ -29,7 +29,7 @@ use models::*;
 use prelude::*;
 use repos::{
     AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutorImpl, PendingBlockchainTransactionsRepoImpl, TransactionsRepoImpl,
-    UsersRepoImpl,
+    TxGroupsRepoImpl, UsersRepoImpl,
 };
 use services::{AccountsServiceImpl, AuthServiceImpl, ExchangeServiceImpl, TransactionsServiceImpl, UsersServiceImpl};
 
@@ -130,6 +130,7 @@ impl Service for ApiService {
                         Arc::new(PendingBlockchainTransactionsRepoImpl),
                         Arc::new(BlockchainTransactionsRepoImpl),
                         Arc::new(AccountsRepoImpl),
+                        Arc::new(TxGroupsRepoImpl),
                         db_executor.clone(),
                         keys_client,
                         blockchain_client,

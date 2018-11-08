@@ -10,13 +10,20 @@ use diesel::sql_types::VarChar;
 use uuid::Uuid;
 use validator::Validate;
 
-use super::{TransactionId, TransactionStatus};
+use super::UserId;
+use super::{BlockchainTransactionId, TransactionId, TransactionStatus, UserId};
 use schema::tx_groups;
 
 #[derive(Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, PartialEq, Eq, Hash)]
 #[sql_type = "SqlUuid"]
 pub struct TxGroupId(Uuid);
 derive_newtype_sql!(transaction_id, SqlUuid, TxGroupId, TxGroupId);
+
+impl From<TransactionId> for TxGroupId {
+    fn from(tid: TransactionId) -> Self {
+        TxGroupId(*tid.inner())
+    }
+}
 
 impl Debug for TxGroupId {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
@@ -28,6 +35,7 @@ impl Debug for TxGroupId {
 #[sql_type = "VarChar"]
 #[serde(rename_all = "lowercase")]
 pub enum TxGroupKind {
+    Deposit,
     Internal,
     InternalMulti,
     Withdrawal,
@@ -65,25 +73,27 @@ impl ToSql<VarChar, Pg> for TxGroupKind {
 
 #[derive(Debug, Queryable, Clone)]
 pub struct TxGroup {
-    id: TxGroupId,
-    status: TransactionStatus,
-    kind: TxGroupKind,
-    tx_1: Option<TransactionId>,
-    tx_2: Option<TransactionId>,
-    tx_3: Option<TransactionId>,
-    tx_4: Option<TransactionId>,
-    created_at: NaiveDateTime,
-    updated_at: NaiveDateTime,
+    pub id: TxGroupId,
+    pub status: TransactionStatus,
+    pub kind: TxGroupKind,
+    pub tx_1: Option<TransactionId>,
+    pub tx_2: Option<TransactionId>,
+    pub tx_3: Option<TransactionId>,
+    pub tx_4: Option<TransactionId>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+    pub user_id: UserId,
+    pub blockchain_tx_id: Option<BlockchainTransactionId>,
 }
 
 #[derive(Debug, Insertable, Validate, Clone)]
 #[table_name = "tx_groups"]
 pub struct NewTxGroup {
-    id: TxGroupId,
-    status: TransactionStatus,
-    kind: TxGroupKind,
-    tx_1: Option<TransactionId>,
-    tx_2: Option<TransactionId>,
-    tx_3: Option<TransactionId>,
-    tx_4: Option<TransactionId>,
+    pub id: TxGroupId,
+    pub status: TransactionStatus,
+    pub kind: TxGroupKind,
+    pub tx_1: Option<TransactionId>,
+    pub tx_2: Option<TransactionId>,
+    pub tx_3: Option<TransactionId>,
+    pub tx_4: Option<TransactionId>,
 }

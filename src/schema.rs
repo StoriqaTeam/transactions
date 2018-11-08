@@ -66,12 +66,10 @@ table! {
 table! {
     transactions (id) {
         id -> Uuid,
-        user_id -> Uuid,
         dr_account_id -> Uuid,
         cr_account_id -> Uuid,
         currency -> Varchar,
         value -> Numeric,
-        blockchain_tx_id -> Nullable<Varchar>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
         gid -> Uuid,
@@ -89,6 +87,8 @@ table! {
         tx_4 -> Nullable<Uuid>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        user_id -> Uuid,
+        blockchain_tx_id -> Nullable<Varchar>,
     }
 }
 
@@ -103,7 +103,7 @@ table! {
 }
 
 joinable!(accounts -> users (user_id));
-joinable!(transactions -> users (user_id));
+joinable!(tx_groups -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
     accounts,

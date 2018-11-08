@@ -10,12 +10,10 @@ use schema::transactions;
 #[derive(Debug, Queryable, Clone)]
 pub struct Transaction {
     pub id: TransactionId,
-    pub user_id: UserId,
     pub dr_account_id: AccountId,
     pub cr_account_id: AccountId,
     pub currency: Currency,
     pub value: Amount,
-    pub blockchain_tx_id: Option<BlockchainTransactionId>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub gid: TransactionId,
