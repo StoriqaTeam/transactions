@@ -524,8 +524,8 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         }
         // internal + withdrawal tx
         if transactions.len() == 1 {
-            let tx = transactions[0];
-            let (from_addrs, to_addr) = self.extract_address_info(tx)?;
+            let tx = transactions[0].clone();
+            let (from_addrs, to_addr) = self.extract_address_info(tx.clone())?;
             return Ok(TransactionOut {
                 id: tx.id,
                 from: from_addrs,
@@ -551,19 +551,19 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                     "Inconsistency in exchange currencies: {:#?}",
                     transactions
                 );
-                (transactions[0], transactions[1])
+                (transactions[0].clone(), transactions[1].clone())
             } else if transactions[0].dr_account_id == system_acc_id0 {
                 assert_eq!(
                     transactions[1].cr_account_id, system_acc_id1,
                     "Inconsistency in exchange currencies: {:#?}",
                     transactions
                 );
-                (transactions[1], transactions[0])
+                (transactions[1].clone(), transactions[0].clone())
             } else {
                 panic!("Unexpected transactions sequence for multicurrency tx: {:#?}", transactions)
             };
-            let (from_addrs, _) = self.extract_address_info(from_tx)?;
-            let (_, to_addr) = self.extract_address_info(to_tx)?;
+            let (from_addrs, _) = self.extract_address_info(from_tx.clone())?;
+            let (_, to_addr) = self.extract_address_info(to_tx.clone())?;
             return Ok(TransactionOut {
                 id: from_tx.id,
                 from: from_addrs,
@@ -689,7 +689,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     let tx_type = self_clone.validate_and_classify_transaction(&input)?;
                     let f = future::lazy(|| match tx_type {
                         TransactionType::Internal(from_account, to_account) => self_clone.create_internal_mono_currency_tx(
-                            input,
+                            input.clone(),
                             from_account,
                             to_account,
                             None,
@@ -829,7 +829,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
 
 // group transactions into subgroups of related txs. I.e. group tx itself + fee
 fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
-    let res: HashMap<TransactionId, Vec<Transaction>> = HashMap::new();
+    let mut res: HashMap<TransactionId, Vec<Transaction>> = HashMap::new();
     for tx in transactions.into_iter() {
         res.entry(tx.gid).and_modify(|txs| txs.push(tx.clone())).or_insert(vec![tx.clone()]);
     }
