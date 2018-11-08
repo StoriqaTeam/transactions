@@ -20,6 +20,7 @@ pub struct Transaction {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub fee: Amount,
+    pub gid: TransactionId,
 }
 
 #[derive(Debug, Queryable, Clone, QueryableByName)]
@@ -32,8 +33,10 @@ pub struct TransactionSum {
 
 impl Default for Transaction {
     fn default() -> Self {
+        let id = TransactionId::generate();
         Self {
-            id: TransactionId::generate(),
+            id,
+            gid: id,
             user_id: UserId::generate(),
             dr_account_id: AccountId::generate(),
             cr_account_id: AccountId::generate(),
@@ -52,6 +55,7 @@ impl Default for Transaction {
 #[table_name = "transactions"]
 pub struct NewTransaction {
     pub id: TransactionId,
+    pub gid: TransactionId,
     pub user_id: UserId,
     pub dr_account_id: AccountId,
     pub cr_account_id: AccountId,
@@ -64,8 +68,10 @@ pub struct NewTransaction {
 
 impl Default for NewTransaction {
     fn default() -> Self {
+        let id = TransactionId::generate();
         Self {
-            id: TransactionId::generate(),
+            id,
+            gid: id,
             user_id: UserId::generate(),
             dr_account_id: AccountId::generate(),
             cr_account_id: AccountId::generate(),
@@ -272,7 +278,6 @@ pub struct TransactionOut {
     pub id: TransactionId,
     pub from: Vec<TransactionAddressInfo>,
     pub to: TransactionAddressInfo,
-    pub currency: Currency,
     pub from_value: Amount,
     pub from_currency: Currency,
     pub to_value: Amount,

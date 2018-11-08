@@ -143,6 +143,7 @@ impl TransactionsRepo for TransactionsRepoMock {
         let mut data = self.data.lock().unwrap();
         let res = Transaction {
             id: payload.id,
+            gid: payload.id,
             user_id: payload.user_id,
             dr_account_id: payload.dr_account_id,
             cr_account_id: payload.cr_account_id,
