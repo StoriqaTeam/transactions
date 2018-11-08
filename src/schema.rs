@@ -71,12 +71,24 @@ table! {
         cr_account_id -> Uuid,
         currency -> Varchar,
         value -> Numeric,
-        status -> Varchar,
         blockchain_tx_id -> Nullable<Varchar>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
-        fee -> Numeric,
         gid -> Uuid,
+    }
+}
+
+table! {
+    tx_groups (id) {
+        id -> Uuid,
+        kind -> Varchar,
+        status -> Varchar,
+        tx_1 -> Nullable<Uuid>,
+        tx_2 -> Nullable<Uuid>,
+        tx_3 -> Nullable<Uuid>,
+        tx_4 -> Nullable<Uuid>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
     }
 }
 
@@ -100,5 +112,6 @@ allow_tables_to_appear_in_same_query!(
     seen_hashes,
     strange_blockchain_transactions,
     transactions,
+    tx_groups,
     users,
 );

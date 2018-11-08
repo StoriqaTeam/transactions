@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use futures::future::{self, Either};
+use futures::future;
 use futures::prelude::*;
-use futures::stream::iter_ok;
 use validator::Validate;
 
 use super::auth::AuthService;
@@ -13,7 +12,10 @@ use client::ExchangeClient;
 use client::KeysClient;
 use models::*;
 use prelude::*;
-use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, PendingBlockchainTransactionsRepo, TransactionsRepo};
+use repos::{
+    AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, PendingBlockchainTransactionsRepo, TransactionsRepo, TxGroupsRepo,
+    TxGroupsRepoImpl,
+};
 use tokio_core::reactor::Core;
 use utils::log_and_capture_error;
 
@@ -26,6 +28,7 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     pending_transactions_repo: Arc<dyn PendingBlockchainTransactionsRepo>,
     blockchain_transactions_repo: Arc<dyn BlockchainTransactionsRepo>,
     accounts_repo: Arc<dyn AccountsRepo>,
+    tx_groups_repo: Arc<dyn TxGroupsRepo>,
     db_executor: E,
     keys_client: Arc<dyn KeysClient>,
     blockchain_client: Arc<dyn BlockchainClient>,
@@ -76,22 +79,6 @@ pub trait TransactionsService: Send + Sync + 'static {
         offset: i64,
         limit: i64,
     ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
-    // fn create_transaction_ethereum(
-    //     &self,
-    //     from: AccountAddress,
-    //     to: AccountAddress,
-    //     value: Amount,
-    //     fee: Amount,
-    //     currency: Currency,
-    // ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
-    // fn create_transaction_bitcoin(
-    //     &self,
-    //     from: AccountAddress,
-    //     to: AccountAddress,
-    //     value: Amount,
-    //     fee: Amount,
-    // ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
-    // fn convert_transaction(&self, transaction: Transaction) -> Box<Future<Item = TransactionOut, Error = Error> + Send>;
 }
 
 impl<E: DbExecutor> TransactionsServiceImpl<E> {
@@ -101,6 +88,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         pending_transactions_repo: Arc<dyn PendingBlockchainTransactionsRepo>,
         blockchain_transactions_repo: Arc<dyn BlockchainTransactionsRepo>,
         accounts_repo: Arc<dyn AccountsRepo>,
+        tx_groups_repo: Arc<dyn TxGroupsRepo>,
         db_executor: E,
         keys_client: Arc<dyn KeysClient>,
         blockchain_client: Arc<dyn BlockchainClient>,
@@ -115,6 +103,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             pending_transactions_repo,
             blockchain_transactions_repo,
             accounts_repo,
+            tx_groups_repo,
             db_executor,
             keys_client,
             blockchain_client,
@@ -247,8 +236,6 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 value: input.value,
                 status,
                 blockchain_tx_id,
-                // Todo - fees
-                fee: Amount::default(),
             };
             self.transactions_repo
                 .create(new_transaction.clone())

@@ -120,6 +120,9 @@ pub fn start_server() {
             blockchain_transactions_repo,
             strange_blockchain_transactions_repo,
             pending_blockchain_transactions_repo,
+            config_clone.system.btc_fees_account_id,
+            config_clone.system.eth_fees_account_id,
+            config_clone.system.stq_fees_account_id,
             db_executor,
         );
         debug!("Started creating rabbit connection pool");

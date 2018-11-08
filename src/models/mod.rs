@@ -19,6 +19,7 @@ mod strange_blockchain_transaction;
 mod transaction;
 mod transaction_id;
 mod transaction_status;
+mod tx_group;
 mod user;
 mod user_id;
 
@@ -43,5 +44,6 @@ pub use self::strange_blockchain_transaction::*;
 pub use self::transaction::*;
 pub use self::transaction_id::*;
 pub use self::transaction_status::*;
+pub use self::tx_group::*;
 pub use self::user::*;
 pub use self::user_id::*;

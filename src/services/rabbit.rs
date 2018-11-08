@@ -18,6 +18,9 @@ pub struct BlockchainFetcher<E: DbExecutor> {
     blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
     strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
     pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+    btc_fees_cr_account_id: AccountId,
+    eth_fees_cr_account_id: AccountId,
+    stq_fees_cr_account_id: AccountId,
     db_executor: E,
 }
 
@@ -29,6 +32,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
         strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
         pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+        btc_fees_cr_account_id: AccountId,
+        eth_fees_cr_account_id: AccountId,
+        stq_fees_cr_account_id: AccountId,
         db_executor: E,
     ) -> Self {
         BlockchainFetcher {
@@ -38,6 +44,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             blockchain_transactions_repo,
             strange_blockchain_transactions_repo,
             pending_blockchain_transactions_repo,
+            btc_fees_cr_account_id,
+            eth_fees_cr_account_id,
+            stq_fees_cr_account_id,
             db_executor,
         }
     }
@@ -149,9 +158,24 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 value: to_entry.value,
                 status: TransactionStatus::Done,
                 blockchain_tx_id: Some(blockchain_tx.hash.clone()),
-                fee: blockchain_tx.fee,
+            };
+
+            let fees_account = self.get_system_fees_account(to_dr_account.currency)?;
+            let fee_tx_hash = tx_id.next();
+
+            let new_fee_tx = NewTransaction {
+                id: fee_tx_hash,
+                gid: tx_id,
+                user_id: to_dr_account.user_id,
+                dr_account_id: fees_account.id,
+                cr_account_id: to_dr_account.id,
+                currency: to_dr_account.currency,
+                status: TransactionStatus::Done,
+                blockchain_tx_id: Some(blockchain_tx.hash.clone()),
+                value: blockchain_tx.fee,
             };
             self.transactions_repo.create(new_tx)?;
+            self.transactions_repo.create(new_fee_tx)?;
             self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
             self.seen_hashes_repo.create(NewSeenHashes {
                 hash: blockchain_tx.hash.clone(),
@@ -175,6 +199,19 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             currency: blockchain_tx.currency,
         })?;
         Ok(())
+    }
+
+    fn get_system_fees_account(&self, currency: Currency) -> Result<Account, Error> {
+        let acc_id = match currency {
+            Currency::Btc => self.btc_fees_cr_account_id,
+            Currency::Eth => self.eth_fees_cr_account_id,
+            Currency::Stq => self.stq_fees_cr_account_id,
+        };
+        let acc = self
+            .accounts_repo
+            .get(acc_id)?
+            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
+        Ok(acc)
     }
 
     fn verify_deposit_tx(&self, blockchain_tx: &BlockchainTransaction) -> Result<Option<InvariantViolation>, Error> {

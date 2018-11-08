@@ -15,11 +15,9 @@ pub struct Transaction {
     pub cr_account_id: AccountId,
     pub currency: Currency,
     pub value: Amount,
-    pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
-    pub fee: Amount,
     pub gid: TransactionId,
 }
 
@@ -46,7 +44,6 @@ impl Default for Transaction {
             blockchain_tx_id: None,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
-            fee: Amount::default(),
         }
     }
 }
@@ -63,7 +60,6 @@ pub struct NewTransaction {
     pub value: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-    pub fee: Amount,
 }
 
 impl Default for NewTransaction {
@@ -79,7 +75,6 @@ impl Default for NewTransaction {
             value: Amount::default(),
             status: TransactionStatus::Pending,
             blockchain_tx_id: None,
-            fee: Amount::default(),
         }
     }
 }
