@@ -7,6 +7,8 @@ use diesel::pg::Pg;
 use diesel::serialize::{self, Output, ToSql};
 use diesel::sql_types::Numeric;
 
+use super::Currency;
+
 /// This is a wrapper for monetary amounts in blockchain.
 /// You have to be careful that it has a limited amount of 38 significant digits
 /// So make sure that total monetary supply of a coin (in satoshis, wei, etc) does not exceed that.
@@ -18,6 +20,11 @@ use diesel::sql_types::Numeric;
 #[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, FromSqlRow, AsExpression, Default, PartialOrd)]
 #[sql_type = "Numeric"]
 pub struct Amount(u128);
+
+const WEI_IN_ETH: u32 = 18;
+const SATOSHIS_IN_BTC: u32 = 8;
+const MAX_WEI_PRECISION: u32 = 6;
+const MAX_SATOSHIS_PRECISION: u32 = 6;
 
 impl Amount {
     ///Make addition, return None on overflow
@@ -36,6 +43,18 @@ impl Amount {
 
     pub fn raw(&self) -> u128 {
         self.0
+    }
+
+    pub fn convert(&self, current_currency: Currency, rate: f64) -> Amount {
+        let divisor_exp = match current_currency {
+            Currency::Btc => SATOSHIS_IN_BTC - MAX_SATOSHIS_PRECISION,
+            Currency::Eth => WEI_IN_ETH - MAX_WEI_PRECISION,
+            Currency::Stq => WEI_IN_ETH - MAX_WEI_PRECISION,
+        };
+        let divisor = 10u128.pow(divisor_exp);
+        let amount: u128 = self.0 / divisor;
+        let converted: f64 = (amount as f64) * rate;
+        Amount::new((converted as u128) * divisor)
     }
 }
 
@@ -167,6 +186,41 @@ mod tests {
                 },
                 _ => PgNumeric::NaN,
             }
+        }
+    }
+
+    #[test]
+    fn test_convert() {
+        let cases = [
+            // 0.1 ETH
+            (
+                100_000_000_000_000_000,
+                Currency::Eth,
+                1.5f64,
+                1_499_999_000_000_000_00,
+                1_500_001_000_000_000_00,
+            ),
+            // 1 STQ
+            (
+                1_000_000_000_000_000_000,
+                Currency::Stq,
+                0.0015f64,
+                1_499_999_000_000_000,
+                1_500_001_000_000_000,
+            ),
+            // 0.01 BTC
+            (1_000_000, Currency::Btc, 1.5f64, 1_499_999, 1_500_001),
+        ];
+        for (amount, currency, rate, lower, upper) in cases.into_iter() {
+            let converted = Amount::new(*amount).convert(*currency, *rate).raw();
+            assert!(
+                (converted > *lower) && (converted < *upper),
+                "original: {}, converted: {}, lower: {}, upper: {}",
+                amount,
+                converted,
+                lower,
+                upper
+            );
         }
     }
 

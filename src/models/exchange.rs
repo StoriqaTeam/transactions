@@ -51,11 +51,9 @@ pub struct ExchangeInput {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Exchange {
-    pub id: ExchangeId,
     pub from: Currency,
     pub to: Currency,
-    pub actual_rate: f64,
-    pub actual: Amount,
+    pub amount: Amount,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

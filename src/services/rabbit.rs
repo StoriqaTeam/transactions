@@ -138,8 +138,10 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 .accounts_repo
                 .get_by_address(to_dr_account.address, to_dr_account.currency, AccountKind::Cr)?
                 .unwrap();
+            let tx_id = TransactionId::generate();
             let new_tx = NewTransaction {
-                id: TransactionId::generate(),
+                id: tx_id,
+                gid: tx_id,
                 user_id: to_dr_account.user_id,
                 dr_account_id: to_dr_account.id,
                 cr_account_id: to_cr_account.id,
@@ -147,7 +149,6 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 value: to_entry.value,
                 status: TransactionStatus::Done,
                 blockchain_tx_id: Some(blockchain_tx.hash.clone()),
-                hold_until: None,
                 fee: blockchain_tx.fee,
             };
             self.transactions_repo.create(new_tx)?;

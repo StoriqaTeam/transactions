@@ -17,10 +17,10 @@ pub struct Transaction {
     pub value: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-    pub hold_until: Option<NaiveDateTime>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub fee: Amount,
+    pub gid: TransactionId,
 }
 
 #[derive(Debug, Queryable, Clone, QueryableByName)]
@@ -33,8 +33,10 @@ pub struct TransactionSum {
 
 impl Default for Transaction {
     fn default() -> Self {
+        let id = TransactionId::generate();
         Self {
-            id: TransactionId::generate(),
+            id,
+            gid: id,
             user_id: UserId::generate(),
             dr_account_id: AccountId::generate(),
             cr_account_id: AccountId::generate(),
@@ -42,7 +44,6 @@ impl Default for Transaction {
             value: Amount::default(),
             status: TransactionStatus::Pending,
             blockchain_tx_id: None,
-            hold_until: None,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
             fee: Amount::default(),
@@ -54,6 +55,7 @@ impl Default for Transaction {
 #[table_name = "transactions"]
 pub struct NewTransaction {
     pub id: TransactionId,
+    pub gid: TransactionId,
     pub user_id: UserId,
     pub dr_account_id: AccountId,
     pub cr_account_id: AccountId,
@@ -61,14 +63,15 @@ pub struct NewTransaction {
     pub value: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-    pub hold_until: Option<NaiveDateTime>,
     pub fee: Amount,
 }
 
 impl Default for NewTransaction {
     fn default() -> Self {
+        let id = TransactionId::generate();
         Self {
-            id: TransactionId::generate(),
+            id,
+            gid: id,
             user_id: UserId::generate(),
             dr_account_id: AccountId::generate(),
             cr_account_id: AccountId::generate(),
@@ -76,7 +79,6 @@ impl Default for NewTransaction {
             value: Amount::default(),
             status: TransactionStatus::Pending,
             blockchain_tx_id: None,
-            hold_until: None,
             fee: Amount::default(),
         }
     }
@@ -91,10 +93,10 @@ pub struct CreateTransactionInput {
     pub to_type: ReceiptType,
     pub to_currency: Currency,
     pub value: Amount,
+    pub value_currency: Currency,
     pub fee: Amount,
     pub exchange_id: Option<ExchangeId>,
     pub exchange_rate: Option<f64>,
-    pub hold_until: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Clone, Validate)]
@@ -145,25 +147,8 @@ impl Default for CreateTransactionLocal {
     }
 }
 
-impl NewTransaction {
-    pub fn from_local(create: &CreateTransactionLocal) -> Self {
-        Self {
-            id: TransactionId::generate(),
-            user_id: create.user_id,
-            dr_account_id: create.dr_account.id,
-            cr_account_id: create.cr_account.id,
-            currency: create.currency,
-            value: create.value,
-            hold_until: create.hold_until,
-            status: TransactionStatus::Done,
-            blockchain_tx_id: None,
-            fee: Amount::default(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Validate)]
-pub struct DepositFounds {
+pub struct DepositFunds {
     pub user_id: UserId,
     pub address: AccountAddress,
     pub currency: Currency,
@@ -171,7 +156,7 @@ pub struct DepositFounds {
     pub blockchain_tx_id: BlockchainTransactionId,
 }
 
-impl Default for DepositFounds {
+impl Default for DepositFunds {
     fn default() -> Self {
         Self {
             user_id: UserId::default(),
@@ -179,23 +164,6 @@ impl Default for DepositFounds {
             currency: Currency::Eth,
             value: Amount::default(),
             blockchain_tx_id: BlockchainTransactionId::default(),
-        }
-    }
-}
-
-impl NewTransaction {
-    pub fn from_deposit(deposit: DepositFounds, cr_account_id: AccountId, dr_account_id: AccountId) -> Self {
-        Self {
-            id: TransactionId::generate(),
-            user_id: deposit.user_id,
-            currency: deposit.currency,
-            value: deposit.value,
-            hold_until: None,
-            cr_account_id,
-            dr_account_id,
-            status: TransactionStatus::Done,
-            blockchain_tx_id: Some(deposit.blockchain_tx_id),
-            fee: Amount::default(),
         }
     }
 }
@@ -310,8 +278,10 @@ pub struct TransactionOut {
     pub id: TransactionId,
     pub from: Vec<TransactionAddressInfo>,
     pub to: TransactionAddressInfo,
-    pub currency: Currency,
-    pub value: Amount,
+    pub from_value: Amount,
+    pub from_currency: Currency,
+    pub to_value: Amount,
+    pub to_currency: Currency,
     pub fee: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
@@ -319,22 +289,22 @@ pub struct TransactionOut {
     pub updated_at: NaiveDateTime,
 }
 
-impl TransactionOut {
-    pub fn new(transaction: &Transaction, from: Vec<TransactionAddressInfo>, to: TransactionAddressInfo) -> Self {
-        Self {
-            id: transaction.id,
-            from,
-            to,
-            currency: transaction.currency,
-            value: transaction.value,
-            fee: transaction.fee,
-            status: transaction.status,
-            blockchain_tx_id: transaction.blockchain_tx_id.clone(),
-            created_at: transaction.created_at.clone(),
-            updated_at: transaction.updated_at.clone(),
-        }
-    }
-}
+// impl TransactionOut {
+//     pub fn new(transaction: &Transaction, from: Vec<TransactionAddressInfo>, to: TransactionAddressInfo) -> Self {
+//         Self {
+//             id: transaction.id,
+//             from,
+//             to,
+//             currency: transaction.currency,
+//             value: transaction.value,
+//             fee: transaction.fee,
+//             status: transaction.status,
+//             blockchain_tx_id: transaction.blockchain_tx_id.clone(),
+//             created_at: transaction.created_at.clone(),
+//             updated_at: transaction.updated_at.clone(),
+//         }
+//     }
+// }
 
 #[derive(Debug, Serialize, Clone)]
 pub struct TransactionAddressInfo {

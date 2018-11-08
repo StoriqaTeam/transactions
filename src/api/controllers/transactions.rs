@@ -24,9 +24,9 @@ pub fn post_transactions(ctx: &Context) -> ControllerFuture {
                     transactions_service
                         .create_transaction(token, input.into())
                         .map_err(ectx!(convert => input_clone))
-                        .and_then(|transactions| {
-                            let transactions: Vec<TransactionsResponse> = transactions.into_iter().map(From::from).collect();
-                            response_with_model(&transactions)
+                        .and_then(|transaction| {
+                            let resp: TransactionsResponse = transaction.into();
+                            response_with_model(&resp)
                         })
                 })
             }),

@@ -143,6 +143,7 @@ impl TransactionsRepo for TransactionsRepoMock {
         let mut data = self.data.lock().unwrap();
         let res = Transaction {
             id: payload.id,
+            gid: payload.id,
             user_id: payload.user_id,
             dr_account_id: payload.dr_account_id,
             cr_account_id: payload.cr_account_id,
@@ -150,7 +151,6 @@ impl TransactionsRepo for TransactionsRepoMock {
             value: payload.value,
             status: payload.status,
             blockchain_tx_id: payload.blockchain_tx_id,
-            hold_until: payload.hold_until,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
             fee: payload.fee,
@@ -161,6 +161,10 @@ impl TransactionsRepo for TransactionsRepoMock {
     fn get(&self, transaction_id: TransactionId) -> RepoResult<Option<Transaction>> {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == transaction_id).nth(0).cloned())
+    }
+    fn get_by_gid(&self, gid: TransactionId) -> RepoResult<Vec<Transaction>> {
+        let data = self.data.lock().unwrap();
+        Ok(data.iter().filter(|x| x.gid == gid).cloned().collect())
     }
     fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>> {
         let data = self.data.lock().unwrap();
