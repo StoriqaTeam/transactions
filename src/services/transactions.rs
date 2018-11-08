@@ -243,7 +243,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 user_id: input.user_id,
                 dr_account_id: from_account_id,
                 cr_account_id: to_account.id,
-                currency: input.to_currency,
+                currency: from_account.currency,
                 value: input.value,
                 status,
                 blockchain_tx_id,
@@ -517,7 +517,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
     }
 
     // Input txs should be with len() > 0 and have the same `gid`- this guarantees exactly one TransactionOut
-    fn convert_transaction(&self, mut transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
+    fn convert_transaction(&self, transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
         let gid = transactions[0].gid;
         for tx in transactions.iter() {
             assert_eq!(gid, tx.gid, "Transaction gids doesn't match: {:#?}", transactions);
@@ -683,11 +683,11 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let self_clone2 = self.clone();
         let input_clone = input.clone();
         Box::new(self.auth_service.authenticate(token.clone()).and_then(move |user| {
-            db_executor
-                .execute_transaction_with_isolation(Isolation::Serializable, move || {
-                    let mut core = Core::new().unwrap();
-                    let tx_type = self_clone.validate_and_classify_transaction(&input)?;
-                    let f = future::lazy(|| match tx_type {
+            db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
+                let mut core = Core::new().unwrap();
+                let tx_type = self_clone.validate_and_classify_transaction(&input)?;
+                let f = future::lazy(|| {
+                    let tx_group = match tx_type {
                         TransactionType::Internal(from_account, to_account) => self_clone.create_internal_mono_currency_tx(
                             input.clone(),
                             from_account,
@@ -703,9 +703,11 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
                         }
                         _ => return Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput => tx_type, input_clone)),
-                    });
-                    core.run(f)
-                }).and_then(move |txs| self_clone2.convert_transaction(txs))
+                    }?;
+                    self_clone.convert_transaction(tx_group)
+                });
+                core.run(f)
+            })
         }))
     }
 
@@ -772,21 +774,19 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let db_executor = self.db_executor.clone();
         let service = self.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
-            db_executor
-                .execute(move || {
-                    if user_id != user.id {
-                        return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                    }
-                    transactions_repo
-                        .list_for_user(user_id, offset, limit * MAX_TRANSACTIONS_PER_TRANSACTION_OUT)
-                        .map_err(ectx!(convert => user_id, offset, limit))
-                }).and_then(move |transactions| -> Result<Vec<TransactionOut>, Error> {
-                    group_transactions(&transactions)
-                        .into_iter()
-                        .map(|tx_group| service.convert_transaction(tx_group))
-                        .take(limit as usize)
-                        .collect()
-                })
+            db_executor.execute(move || -> Result<Vec<TransactionOut>, Error> {
+                if user_id != user.id {
+                    return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
+                }
+                let txs = transactions_repo
+                    .list_for_user(user_id, offset, limit * MAX_TRANSACTIONS_PER_TRANSACTION_OUT)
+                    .map_err(ectx!(try convert => user_id, offset, limit))?;
+                group_transactions(&txs)
+                    .into_iter()
+                    .map(|tx_group| service.convert_transaction(tx_group))
+                    .take(limit as usize)
+                    .collect()
+            })
         }))
     }
     fn get_account_transactions(
@@ -801,28 +801,26 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let db_executor = self.db_executor.clone();
         let service = self.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
-            db_executor
-                .execute(move || {
-                    let account = accounts_repo
-                        .get(account_id)
-                        .map_err(ectx!(try ErrorKind::Internal => account_id))?;
-                    if let Some(ref account) = account {
-                        if account.user_id != user.id {
-                            return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                        }
-                    } else {
-                        return Err(ectx!(err ErrorContext::NoAccount, ErrorKind::NotFound => account_id));
+            db_executor.execute(move || {
+                let account = accounts_repo
+                    .get(account_id)
+                    .map_err(ectx!(try ErrorKind::Internal => account_id))?;
+                if let Some(ref account) = account {
+                    if account.user_id != user.id {
+                        return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                     }
-                    transactions_repo
-                        .list_for_account(account_id, offset, limit * MAX_TRANSACTIONS_PER_TRANSACTION_OUT)
-                        .map_err(ectx!(convert => account_id))
-                }).and_then(move |transactions| -> Result<Vec<TransactionOut>, Error> {
-                    group_transactions(&transactions)
-                        .into_iter()
-                        .map(|tx_group| service.convert_transaction(tx_group))
-                        .take(limit as usize)
-                        .collect()
-                })
+                } else {
+                    return Err(ectx!(err ErrorContext::NoAccount, ErrorKind::NotFound => account_id));
+                }
+                let txs = transactions_repo
+                    .list_for_account(account_id, offset, limit * MAX_TRANSACTIONS_PER_TRANSACTION_OUT)
+                    .map_err(ectx!(try convert => account_id))?;
+                group_transactions(&txs)
+                    .into_iter()
+                    .map(|tx_group| service.convert_transaction(tx_group))
+                    .take(limit as usize)
+                    .collect()
+            })
         }))
     }
 }
