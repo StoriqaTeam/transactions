@@ -17,6 +17,8 @@ use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, Pen
 use tokio_core::reactor::Core;
 use utils::log_and_capture_error;
 
+const MAX_TRANSACTIONS_PER_TRANSACTION_OUT: i64 = 3;
+
 #[derive(Clone)]
 pub struct TransactionsServiceImpl<E: DbExecutor> {
     auth_service: Arc<dyn AuthService>,
@@ -46,7 +48,7 @@ pub trait TransactionsService: Send + Sync + 'static {
         &self,
         token: AuthenticationToken,
         input: CreateTransactionInput,
-    ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send>;
+    ) -> Box<Future<Item = TransactionOut, Error = Error> + Send>;
     // fn create_transaction_local(&self, input: CreateTransactionLocal) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     // fn deposit_funds(&self, token: AuthenticationToken, input: DepositFunds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
     // fn withdraw(&self, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
@@ -215,6 +217,48 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         }
     }
 
+    fn create_internal_mono_currency_tx(
+        &self,
+        input: CreateTransactionInput,
+        from_account: Account,
+        to_account: Account,
+        blockchain_tx_id: Option<BlockchainTransactionId>,
+        status: TransactionStatus,
+        gid: TransactionId,
+    ) -> Result<Vec<Transaction>, Error> {
+        if from_account.currency != to_account.currency {
+            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account));
+        }
+        let from_account_id = from_account.id;
+        let from_account_clone = from_account.clone();
+        let balance = self
+            .transactions_repo
+            .get_accounts_balance(input.user_id, &[from_account_clone])
+            .map(|accounts| accounts[0].balance)
+            .map_err(ectx!(try convert => from_account_id))?;
+        if balance >= input.value {
+            let new_transaction = NewTransaction {
+                id: input.id,
+                gid,
+                user_id: input.user_id,
+                dr_account_id: from_account_id,
+                cr_account_id: to_account.id,
+                currency: input.to_currency,
+                value: input.value,
+                status,
+                blockchain_tx_id,
+                // Todo - fees
+                fee: Amount::default(),
+            };
+            self.transactions_repo
+                .create(new_transaction.clone())
+                .map(|tx| vec![tx])
+                .map_err(ectx!(convert => new_transaction))
+        } else {
+            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => from_account, balance, input.value))
+        }
+    }
+
     fn create_external_mono_currency_tx(
         &self,
         user_id: UserId,
@@ -292,48 +336,6 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             }
         }
         Ok(res)
-    }
-
-    fn create_internal_mono_currency_tx(
-        &self,
-        input: CreateTransactionInput,
-        from_account: Account,
-        to_account: Account,
-        blockchain_tx_id: Option<BlockchainTransactionId>,
-        status: TransactionStatus,
-        gid: TransactionId,
-    ) -> Result<Vec<Transaction>, Error> {
-        if from_account.currency != to_account.currency {
-            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account));
-        }
-        let from_account_id = from_account.id;
-        let from_account_clone = from_account.clone();
-        let balance = self
-            .transactions_repo
-            .get_accounts_balance(input.user_id, &[from_account_clone])
-            .map(|accounts| accounts[0].balance)
-            .map_err(ectx!(try convert => from_account_id))?;
-        if balance >= input.value {
-            let new_transaction = NewTransaction {
-                id: input.id,
-                gid,
-                user_id: input.user_id,
-                dr_account_id: from_account_id,
-                cr_account_id: to_account.id,
-                currency: input.to_currency,
-                value: input.value,
-                status,
-                blockchain_tx_id,
-                // Todo - fees
-                fee: Amount::default(),
-            };
-            self.transactions_repo
-                .create(new_transaction.clone())
-                .map(|tx| vec![tx])
-                .map_err(ectx!(convert => new_transaction))
-        } else {
-            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => from_account, balance, input.value))
-        }
     }
 
     fn create_internal_multi_currency_tx(
@@ -518,7 +520,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
     fn convert_transaction(&self, mut transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
         let gid = transactions[0].gid;
         for tx in transactions.iter() {
-            assert_eq!(gid, tx.gid, "Transaction gids doesn't match");
+            assert_eq!(gid, tx.gid, "Transaction gids doesn't match: {:#?}", transactions);
         }
         // internal + withdrawal tx
         if transactions.len() == 1 {
@@ -540,8 +542,44 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             });
         }
         // internal multicurrency tx
-        if transactions.len() == 2 {}
-        unimplemented!()
+        if transactions.len() == 2 {
+            let system_acc_id0 = self.get_system_liquidity_account(transactions[0].currency)?.id;
+            let system_acc_id1 = self.get_system_liquidity_account(transactions[1].currency)?.id;
+            let (from_tx, to_tx) = if transactions[0].cr_account_id == system_acc_id0 {
+                assert_eq!(
+                    transactions[1].dr_account_id, system_acc_id1,
+                    "Inconsistency in exchange currencies: {:#?}",
+                    transactions
+                );
+                (transactions[0], transactions[1])
+            } else if transactions[0].dr_account_id == system_acc_id0 {
+                assert_eq!(
+                    transactions[1].cr_account_id, system_acc_id1,
+                    "Inconsistency in exchange currencies: {:#?}",
+                    transactions
+                );
+                (transactions[1], transactions[0])
+            } else {
+                panic!("Unexpected transactions sequence for multicurrency tx: {:#?}", transactions)
+            };
+            let (from_addrs, _) = self.extract_address_info(from_tx)?;
+            let (_, to_addr) = self.extract_address_info(to_tx)?;
+            return Ok(TransactionOut {
+                id: from_tx.id,
+                from: from_addrs,
+                to: to_addr,
+                from_value: from_tx.value,
+                from_currency: from_tx.currency,
+                to_value: to_tx.value,
+                to_currency: to_tx.currency,
+                fee: Amount::new(0),
+                status: fold_statuses(&[from_tx.status, to_tx.status]),
+                blockchain_tx_id: to_tx.blockchain_tx_id,
+                created_at: from_tx.created_at,
+                updated_at: from_tx.updated_at,
+            });
+        }
+        panic!("Unsupported transactions sequence: {:#?}", transactions)
     }
 
     fn extract_address_info(&self, transaction: Transaction) -> Result<(Vec<TransactionAddressInfo>, TransactionAddressInfo), Error> {
@@ -639,7 +677,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         &self,
         token: AuthenticationToken,
         input: CreateTransactionInput,
-    ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send> {
+    ) -> Box<Future<Item = TransactionOut, Error = Error> + Send> {
         let db_executor = self.db_executor.clone();
         let self_clone = self.clone();
         let self_clone2 = self.clone();
@@ -658,18 +696,16 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             TransactionStatus::Done,
                             input.id,
                         ),
-                        TransactionType::Withdrawal(from_account, to_account_address, currency) => self_clone
-                            .create_external_mono_currency_tx(user.id, input, from_account, to_account_address, currency, input.id),
+                        TransactionType::Withdrawal(from_account, to_account_address, currency) => {
+                            self_clone.create_external_mono_currency_tx(user.id, input, from_account, to_account_address, currency)
+                        }
                         TransactionType::InternalExchange(from, to, exchange_id, rate) => {
                             self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
                         }
                         _ => return Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput => tx_type, input_clone)),
                     });
                     core.run(f)
-                }).and_then(move |txs| {
-                    let fs: Vec<_> = txs.into_iter().map(move |tx| self_clone2.convert_transaction(tx)).collect();
-                    future::join_all(fs)
-                })
+                }).and_then(move |txs| self_clone2.convert_transaction(txs))
         }))
     }
 
@@ -682,24 +718,22 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let db_executor = self.db_executor.clone();
         let service = self.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
-            db_executor
-                .execute(move || {
-                    let transaction = transactions_repo
-                        .get(transaction_id)
+            db_executor.execute(move || {
+                let transaction = transactions_repo
+                    .get(transaction_id)
+                    .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
+                if let Some(ref transaction) = transaction {
+                    if transaction.user_id != user.id {
+                        return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
+                    }
+                    let tx_group = transactions_repo
+                        .get_by_gid(transaction.gid)
                         .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
-                    if let Some(ref transaction) = transaction {
-                        if transaction.user_id != user.id {
-                            return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
-                        }
-                    }
-                    Ok(transaction)
-                }).and_then(move |transaction| {
-                    if let Some(transaction) = transaction {
-                        Either::A(service.convert_transaction(transaction).map(Some))
-                    } else {
-                        Either::B(future::ok(None))
-                    }
-                })
+                    let tx_out = service.convert_transaction(tx_group)?;
+                    return Ok(Some(tx_out));
+                }
+                Ok(None)
+            })
         }))
     }
     fn get_account_balance(
@@ -744,15 +778,14 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                     }
                     transactions_repo
-                        .list_for_user(user_id, offset, limit)
+                        .list_for_user(user_id, offset, limit * MAX_TRANSACTIONS_PER_TRANSACTION_OUT)
                         .map_err(ectx!(convert => user_id, offset, limit))
-                }).and_then(|transactions| {
-                    iter_ok::<_, Error>(transactions).fold(vec![], move |mut transactions, transaction| {
-                        service.convert_transaction(transaction).and_then(|res| {
-                            transactions.push(res);
-                            Ok(transactions) as Result<Vec<TransactionOut>, Error>
-                        })
-                    })
+                }).and_then(move |transactions| -> Result<Vec<TransactionOut>, Error> {
+                    group_transactions(&transactions)
+                        .into_iter()
+                        .map(|tx_group| service.convert_transaction(tx_group))
+                        .take(limit as usize)
+                        .collect()
                 })
         }))
     }
@@ -781,21 +814,18 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         return Err(ectx!(err ErrorContext::NoAccount, ErrorKind::NotFound => account_id));
                     }
                     transactions_repo
-                        .list_for_account(account_id, offset, limit)
+                        .list_for_account(account_id, offset, limit * MAX_TRANSACTIONS_PER_TRANSACTION_OUT)
                         .map_err(ectx!(convert => account_id))
-                }).and_then(|transactions| {
-                    iter_ok::<_, Error>(transactions).fold(vec![], move |mut transactions, transaction| {
-                        service.convert_transaction(transaction).and_then(|res| {
-                            transactions.push(res);
-                            Ok(transactions) as Result<Vec<TransactionOut>, Error>
-                        })
-                    })
+                }).and_then(move |transactions| -> Result<Vec<TransactionOut>, Error> {
+                    group_transactions(&transactions)
+                        .into_iter()
+                        .map(|tx_group| service.convert_transaction(tx_group))
+                        .take(limit as usize)
+                        .collect()
                 })
         }))
     }
 }
-
-const TRANSACTION_ID_RADUIS: u8 = 5;
 
 // group transactions into subgroups of related txs. I.e. group tx itself + fee
 fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
@@ -804,6 +834,15 @@ fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
         res.entry(tx.gid).and_modify(|txs| txs.push(tx.clone())).or_insert(vec![tx.clone()]);
     }
     res.into_iter().map(|(_, txs)| txs).collect()
+}
+
+fn fold_statuses(statuses: &[TransactionStatus]) -> TransactionStatus {
+    statuses.into_iter().fold(TransactionStatus::Done, |acc, elem| {
+        if (acc == TransactionStatus::Pending) || (*elem == TransactionStatus::Pending) {
+            return TransactionStatus::Pending;
+        }
+        acc
+    })
 }
 
 #[cfg(test)]

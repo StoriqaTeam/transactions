@@ -18,6 +18,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewTransaction) -> RepoResult<Transaction>;
     fn get(&self, transaction_id: TransactionId) -> RepoResult<Option<Transaction>>;
     fn update_status(&self, blockchain_tx_id: BlockchainTransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction>;
+    fn get_by_gid(&self, gid: TransactionId) -> RepoResult<Vec<Transaction>>;
     fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>>;
     fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Transaction>;
     fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount>;
@@ -53,6 +54,15 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     let error_kind = ErrorKind::from(&e);
                     ectx!(err e, error_kind => transaction_id_arg)
                 })
+        })
+    }
+
+    fn get_by_gid(&self, gid_: TransactionId) -> RepoResult<Vec<Transaction>> {
+        with_tls_connection(|conn| {
+            transactions.filter(gid.eq(gid_)).get_results(conn).map_err(move |e| {
+                let error_kind = ErrorKind::from(&e);
+                ectx!(err e, error_kind => gid_)
+            })
         })
     }
 

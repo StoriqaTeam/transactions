@@ -162,6 +162,10 @@ impl TransactionsRepo for TransactionsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == transaction_id).nth(0).cloned())
     }
+    fn get_by_gid(&self, gid: TransactionId) -> RepoResult<Vec<Transaction>> {
+        let data = self.data.lock().unwrap();
+        Ok(data.iter().filter(|x| x.gid == gid).cloned().collect())
+    }
     fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>> {
         let data = self.data.lock().unwrap();
         Ok(data
