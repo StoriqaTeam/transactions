@@ -1,0 +1,10 @@
+ALTER TABLE tx_groups
+  DROP COLUMN tx_1,
+  DROP COLUMN tx_2,
+  DROP COLUMN tx_3,
+  DROP COLUMN tx_4,
+  ADD COLUMN base_tx UUID,
+  ADD COLUMN from_tx UUID,
+  ADD COLUMN to_tx UUID,
+  ADD COLUMN fee_tx UUID,
+  ADD COLUMN withdrawal_txs JSONB NOT NULL DEFAULT '[]';

@@ -219,7 +219,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         let from_account_clone = from_account.clone();
         let balance = self
             .transactions_repo
-            .get_accounts_balance(input.user_id, &[from_account_clone])
+            .list_balances_for_accounts(input.user_id, &[from_account_clone])
             .map(|accounts| accounts[0].balance)
             .map_err(ectx!(try convert => from_account_id))?;
         if balance >= input.value {
@@ -713,7 +713,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                     }
                     let tx_group = transactions_repo
-                        .get_by_gid(transaction.gid)
+                        .list_by_gid(transaction.gid)
                         .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
                     let tx_out = service.convert_transaction(tx_group)?;
                     return Ok(Some(tx_out));
@@ -738,7 +738,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                     }
                     transactions_repo
-                        .get_accounts_balance(user.id, &[account])
+                        .list_balances_for_accounts(user.id, &[account])
                         .map(|accounts| accounts[0].clone())
                         .map_err(ectx!(convert => account_id))
                 } else {

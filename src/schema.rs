@@ -81,14 +81,15 @@ table! {
         id -> Uuid,
         kind -> Varchar,
         status -> Varchar,
-        tx_1 -> Nullable<Uuid>,
-        tx_2 -> Nullable<Uuid>,
-        tx_3 -> Nullable<Uuid>,
-        tx_4 -> Nullable<Uuid>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
         user_id -> Uuid,
         blockchain_tx_id -> Nullable<Varchar>,
+        base_tx -> Nullable<Uuid>,
+        from_tx -> Nullable<Uuid>,
+        to_tx -> Nullable<Uuid>,
+        fee_tx -> Nullable<Uuid>,
+        withdrawal_txs -> Jsonb,
     }
 }
 

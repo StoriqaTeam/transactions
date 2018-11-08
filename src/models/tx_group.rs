@@ -10,7 +10,6 @@ use diesel::sql_types::VarChar;
 use uuid::Uuid;
 use validator::Validate;
 
-use super::UserId;
 use super::{BlockchainTransactionId, TransactionId, TransactionStatus, UserId};
 use schema::tx_groups;
 
@@ -96,4 +95,18 @@ pub struct NewTxGroup {
     pub tx_2: Option<TransactionId>,
     pub tx_3: Option<TransactionId>,
     pub tx_4: Option<TransactionId>,
+    pub user_id: UserId,
+    pub blockchain_tx_id: Option<BlockchainTransactionId>,
+}
+
+#[derive(Debug, AsChangeset, Clone, Default)]
+#[table_name = "tx_groups"]
+pub struct UpdateTxGroup {
+    pub status: Option<TransactionStatus>,
+    pub kind: Option<TxGroupKind>,
+    pub tx_1: Option<TransactionId>,
+    pub tx_2: Option<TransactionId>,
+    pub tx_3: Option<TransactionId>,
+    pub tx_4: Option<TransactionId>,
+    pub blockchain_tx_id: Option<BlockchainTransactionId>,
 }

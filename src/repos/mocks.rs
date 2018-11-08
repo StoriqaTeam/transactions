@@ -162,7 +162,7 @@ impl TransactionsRepo for TransactionsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == transaction_id).nth(0).cloned())
     }
-    fn get_by_gid(&self, gid: TransactionId) -> RepoResult<Vec<Transaction>> {
+    fn list_by_gid(&self, gid: TransactionId) -> RepoResult<Vec<Transaction>> {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.gid == gid).cloned().collect())
     }
@@ -198,7 +198,7 @@ impl TransactionsRepo for TransactionsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id).collect())
     }
-    fn get_accounts_balance(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>> {
+    fn list_balances_for_accounts(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>> {
         accounts
             .into_iter()
             .map(|account| {
