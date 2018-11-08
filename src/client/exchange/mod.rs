@@ -115,6 +115,9 @@ impl ExchangeClient for ExchangeClientMock {
         Box::new(
             Ok(Rate {
                 expiration: ::chrono::Utc::now().naive_utc(),
+                created_at: ::chrono::Utc::now().naive_utc(),
+                updated_at: ::chrono::Utc::now().naive_utc(),
+                amount_currency: Default::default(),
                 id: Default::default(),
                 from: Default::default(),
                 to: Default::default(),
