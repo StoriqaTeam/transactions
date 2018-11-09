@@ -72,7 +72,7 @@ impl FeesClient for FeesClientImpl {
         let btc_transaction_size = self.btc_transaction_size;
         Box::new(
             client
-                .exec_query::<BitcoinFeeResponse>(url, Method::POST)
+                .exec_query::<BitcoinFeeResponse>(url, Method::GET)
                 .map(move |resp| resp.to_fees(btc_transaction_size)),
         )
     }
@@ -83,7 +83,7 @@ impl FeesClient for FeesClientImpl {
         let eth_gas_limit = self.eth_gas_limit;
         Box::new(
             client
-                .exec_query::<EthFeeResponse>(url, Method::POST)
+                .exec_query::<EthFeeResponse>(url, Method::GET)
                 .map(move |resp| resp.to_fees(eth_gas_limit)),
         )
     }
@@ -94,7 +94,7 @@ impl FeesClient for FeesClientImpl {
         let stq_gas_limit = self.stq_gas_limit;
         Box::new(
             client
-                .exec_query::<EthFeeResponse>(url, Method::POST)
+                .exec_query::<EthFeeResponse>(url, Method::GET)
                 .map(move |resp| resp.to_fees(stq_gas_limit)),
         )
     }
