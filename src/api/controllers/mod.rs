@@ -11,12 +11,14 @@ use services::{AccountsService, ExchangeService, TransactionsService, UsersServi
 mod accounts;
 mod exchange;
 mod fallback;
+mod fees;
 mod transactions;
 mod users;
 
 pub use self::accounts::*;
 pub use self::exchange::*;
 pub use self::fallback::*;
+pub use self::fees::*;
 pub use self::transactions::*;
 pub use self::users::*;
 

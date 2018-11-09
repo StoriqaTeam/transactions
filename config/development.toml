@@ -43,3 +43,10 @@ exchange_gateway_system_user_token = "bURPpnBOGnBvj8fuAOR+q+cSPAw1Lf6zND06E+r0OY
 [fee_price]
 ethereum = 18000000000
 bitcoin = 4
+
+[fees_options]
+btc_fees_collect_url = "https://bitcoinfees.earn.com/api/v1/fees/recommended"
+eth_fees_collect_url = "https://www.etherchain.org/api/gasPriceOracle"
+btc_transaction_size = 280
+eth_gas_limit = 28000
+stq_gas_limit = 100000

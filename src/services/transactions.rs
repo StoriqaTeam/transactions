@@ -10,6 +10,7 @@ use super::auth::AuthService;
 use super::error::*;
 use client::BlockchainClient;
 use client::ExchangeClient;
+use client::FeesClient;
 use client::KeysClient;
 use models::*;
 use prelude::*;
@@ -30,6 +31,7 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     keys_client: Arc<dyn KeysClient>,
     blockchain_client: Arc<dyn BlockchainClient>,
     exchange_client: Arc<dyn ExchangeClient>,
+    fees_client: Arc<dyn FeesClient>,
     btc_liquidity_cr_account_id: AccountId,
     eth_liquidity_cr_account_id: AccountId,
     stq_liquidity_cr_account_id: AccountId,
@@ -92,6 +94,7 @@ pub trait TransactionsService: Send + Sync + 'static {
     //     fee: Amount,
     // ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
     // fn convert_transaction(&self, transaction: Transaction) -> Box<Future<Item = TransactionOut, Error = Error> + Send>;
+    fn get_fees(&self, get_fees: GetFees) -> Box<Future<Item = Fees, Error = Error> + Send>;
 }
 
 impl<E: DbExecutor> TransactionsServiceImpl<E> {
@@ -105,6 +108,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         keys_client: Arc<dyn KeysClient>,
         blockchain_client: Arc<dyn BlockchainClient>,
         exchange_client: Arc<dyn ExchangeClient>,
+        fees_client: Arc<dyn FeesClient>,
         btc_liquidity_cr_account_id: AccountId,
         eth_liquidity_cr_account_id: AccountId,
         stq_liquidity_cr_account_id: AccountId,
@@ -119,6 +123,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             keys_client,
             blockchain_client,
             exchange_client,
+            fees_client,
             btc_liquidity_cr_account_id,
             eth_liquidity_cr_account_id,
             stq_liquidity_cr_account_id,
@@ -822,6 +827,18 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     .collect()
             })
         }))
+    }
+    fn get_fees(&self, get_fees: GetFees) -> Box<Future<Item = Fees, Error = Error> + Send> {
+        let fees_client = self.fees_client.clone();
+        let currency = get_fees.to_currency;
+        Box::new(
+            match currency {
+                Currency::Btc => fees_client.bitcoin_fees(),
+                Currency::Eth => fees_client.eth_fees(),
+                Currency::Stq => fees_client.stq_fees(),
+            }.map(move |fees| Fees::new(currency, fees))
+            .map_err(ectx!(convert => currency)),
+        )
     }
 }
 

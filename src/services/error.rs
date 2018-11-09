@@ -6,6 +6,7 @@ use validator::ValidationErrors;
 
 use client::blockchain_gateway::ErrorKind as BlockchainClientErrorKind;
 use client::exchange::ErrorKind as ExchangeClientErrorKind;
+use client::fees::ErrorKind as FeesClientErrorKind;
 use client::keys::ErrorKind as KeysClientErrorKind;
 use repos::{Error as ReposError, ErrorKind as ReposErrorKind};
 
@@ -96,6 +97,16 @@ impl From<KeysClientErrorKind> for ErrorKind {
             KeysClientErrorKind::Internal => ErrorKind::Internal,
             KeysClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
             KeysClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
+        }
+    }
+}
+
+impl From<FeesClientErrorKind> for ErrorKind {
+    fn from(err: FeesClientErrorKind) -> Self {
+        match err {
+            FeesClientErrorKind::Internal => ErrorKind::Internal,
+            FeesClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
+            FeesClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
         }
     }
 }
