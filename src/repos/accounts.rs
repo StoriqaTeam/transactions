@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use diesel;
 
 use super::error::*;

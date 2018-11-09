@@ -2,6 +2,7 @@ mod error;
 
 use std::sync::Arc;
 
+use chrono::NaiveDateTime;
 use failure::Fail;
 use futures::prelude::*;
 use hyper::Method;
