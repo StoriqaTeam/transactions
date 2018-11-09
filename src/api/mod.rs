@@ -146,6 +146,7 @@ impl Service for ApiService {
                         config.system.btc_liquidity_account_id,
                         config.system.eth_liquidity_account_id,
                         config.system.stq_liquidity_account_id,
+                        config.fees_options.fee_upside,
                     ));
                     let exchange_service = Arc::new(ExchangeServiceImpl::new(exchange_client));
 
