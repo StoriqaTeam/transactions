@@ -24,7 +24,10 @@ pub mod utils;
 
 use self::controllers::*;
 use self::error::*;
-use client::{BlockchainClient, BlockchainClientImpl, ExchangeClient, ExchangeClientImpl, HttpClientImpl, KeysClient, KeysClientImpl};
+use client::{
+    BlockchainClient, BlockchainClientImpl, ExchangeClient, ExchangeClientImpl, FeesClient, FeesClientImpl, HttpClientImpl, KeysClient,
+    KeysClientImpl,
+};
 use models::*;
 use prelude::*;
 use repos::{
@@ -42,6 +45,7 @@ pub struct ApiService {
     keys_client: Arc<dyn KeysClient>,
     blockchain_client: Arc<dyn BlockchainClient>,
     exchange_client: Arc<dyn ExchangeClient>,
+    fees_client: Arc<dyn FeesClient>,
 }
 
 impl ApiService {
@@ -65,7 +69,8 @@ impl ApiService {
         let client = HttpClientImpl::new(config);
         let keys_client = KeysClientImpl::new(&config, client.clone());
         let blockchain_client = BlockchainClientImpl::new(&config, client.clone());
-        let exchange_client = ExchangeClientImpl::new(&config, client);
+        let exchange_client = ExchangeClientImpl::new(&config, client.clone());
+        let fees_client = FeesClientImpl::new(&config, client);
 
         Ok(ApiService {
             config: config.clone(),
@@ -75,6 +80,7 @@ impl ApiService {
             keys_client: Arc::new(keys_client),
             blockchain_client: Arc::new(blockchain_client),
             exchange_client: Arc::new(exchange_client),
+            fees_client: Arc::new(fees_client),
         })
     }
 }
@@ -92,6 +98,7 @@ impl Service for ApiService {
         let keys_client = self.keys_client.clone();
         let blockchain_client = self.blockchain_client.clone();
         let exchange_client = self.exchange_client.clone();
+        let fees_client = self.fees_client.clone();
         let db_executor = DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone());
         let config = self.config.clone();
         Box::new(
@@ -112,6 +119,7 @@ impl Service for ApiService {
                         POST /v1/transactions => post_transactions,
                         GET /v1/transactions/{transaction_id: TransactionId} => get_transactions,
                         POST /v1/rate => post_rate,
+                        POST /v1/fees => post_fees,
                         _ => not_found,
                     };
 
@@ -134,9 +142,11 @@ impl Service for ApiService {
                         keys_client,
                         blockchain_client,
                         exchange_client.clone(),
+                        fees_client.clone(),
                         config.system.btc_liquidity_account_id,
                         config.system.eth_liquidity_account_id,
                         config.system.stq_liquidity_account_id,
+                        config.fees_options.fee_upside,
                     ));
                     let exchange_service = Arc::new(ExchangeServiceImpl::new(exchange_client));
 
@@ -154,6 +164,19 @@ impl Service for ApiService {
                     debug!("Received request {}", ctx);
 
                     router(ctx, parts.method.into(), parts.uri.path())
+                }).and_then(|resp| {
+                    let (parts, body) = resp.into_parts();
+                    read_body(body)
+                        .map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal))
+                        .map(|body| (parts, body))
+                }).map(|(parts, body)| {
+                    debug!(
+                        "Sent response with status {}, headers: {:#?}, body: {:?}",
+                        parts.status.as_u16(),
+                        parts.headers,
+                        String::from_utf8(body.clone()).ok()
+                    );
+                    Response::from_parts(parts, body.into())
                 }).or_else(|e| match e.kind() {
                     ErrorKind::BadRequest => {
                         log_error(&e);

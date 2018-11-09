@@ -10,6 +10,7 @@ use super::auth::AuthService;
 use super::error::*;
 use client::BlockchainClient;
 use client::ExchangeClient;
+use client::FeesClient;
 use client::KeysClient;
 use models::*;
 use prelude::*;
@@ -30,9 +31,11 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     keys_client: Arc<dyn KeysClient>,
     blockchain_client: Arc<dyn BlockchainClient>,
     exchange_client: Arc<dyn ExchangeClient>,
+    fees_client: Arc<dyn FeesClient>,
     btc_liquidity_cr_account_id: AccountId,
     eth_liquidity_cr_account_id: AccountId,
     stq_liquidity_cr_account_id: AccountId,
+    fee_upside: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +95,7 @@ pub trait TransactionsService: Send + Sync + 'static {
     //     fee: Amount,
     // ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
     // fn convert_transaction(&self, transaction: Transaction) -> Box<Future<Item = TransactionOut, Error = Error> + Send>;
+    fn get_fees(&self, get_fees: GetFees) -> Box<Future<Item = Fees, Error = Error> + Send>;
 }
 
 impl<E: DbExecutor> TransactionsServiceImpl<E> {
@@ -105,9 +109,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         keys_client: Arc<dyn KeysClient>,
         blockchain_client: Arc<dyn BlockchainClient>,
         exchange_client: Arc<dyn ExchangeClient>,
+        fees_client: Arc<dyn FeesClient>,
         btc_liquidity_cr_account_id: AccountId,
         eth_liquidity_cr_account_id: AccountId,
         stq_liquidity_cr_account_id: AccountId,
+        fee_upside: f64,
     ) -> Self {
         Self {
             auth_service,
@@ -119,9 +125,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             keys_client,
             blockchain_client,
             exchange_client,
+            fees_client,
             btc_liquidity_cr_account_id,
             eth_liquidity_cr_account_id,
             stq_liquidity_cr_account_id,
+            fee_upside,
         }
     }
 
@@ -822,6 +830,45 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     .collect()
             })
         }))
+    }
+    fn get_fees(&self, get_fees: GetFees) -> Box<Future<Item = Fees, Error = Error> + Send> {
+        let fees_client = self.fees_client.clone();
+        let exchange_client = self.exchange_client.clone();
+        let to_currency = get_fees.to_currency;
+        let from_currency = get_fees.from_currency;
+        let fee_upside = self.fee_upside;
+        Box::new(
+            match to_currency {
+                Currency::Btc => fees_client.bitcoin_fees(),
+                Currency::Eth => fees_client.eth_fees(),
+                Currency::Stq => fees_client.stq_fees(),
+            }.map_err(ectx!(convert => to_currency))
+            .and_then(move |mut fees| {
+                // if from and to are not equal, than we need to convert one to another
+                if from_currency != to_currency {
+                    let amount = fees.iter().map(|f| f.value).nth(0).unwrap_or_default();
+                    let rate_input = RateInput::new(from_currency, to_currency, amount, to_currency);
+                    let rate_input_clone = rate_input.clone();
+                    Either::A(
+                        exchange_client
+                            .rate(rate_input, Role::System)
+                            .map_err(ectx!(convert => rate_input_clone))
+                            .map(|rate_resp| {
+                                let rate = rate_resp.rate;
+                                fees.iter_mut()
+                                    .for_each(|f| f.value = Amount::new((f.value.raw() as f64 / rate) as u128));
+                                fees
+                            }),
+                    )
+                } else {
+                    Either::B(future::ok(fees))
+                }
+            }).map(move |mut fees| {
+                fees.iter_mut()
+                    .for_each(|f| f.value = Amount::new((f.value.raw() as f64 * fee_upside) as u128));
+                Fees::new(from_currency, fees)
+            }),
+        )
     }
 }
 
