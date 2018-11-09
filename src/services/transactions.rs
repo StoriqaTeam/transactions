@@ -144,7 +144,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => input))?;
 
         match input.to_type {
-            ReceiptType::Account => {
+            RecepientType::Account => {
                 let to_account_id = input
                     .to
                     .clone()
@@ -175,7 +175,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                     Ok(TransactionType::Internal(from_account, to_account))
                 }
             }
-            ReceiptType::Address => {
+            RecepientType::Address => {
                 let to_address = input.to.clone().to_account_address();
                 match self
                     .accounts_repo
@@ -226,49 +226,25 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         }
     }
 
-    fn create_internal_mono_currency_tx(
-        &self,
-        input: CreateTransactionInput,
-        from_account: Account,
-        to_account: Account,
-        blockchain_tx_id: Option<BlockchainTransactionId>,
-        status: TransactionStatus,
-        gid: TransactionId,
-        kind: TransactionKind,
-        group_kind: TransactionGroupKind,
-        related_tx: Option<TransactionId>,
-    ) -> Result<Vec<Transaction>, Error> {
-        if from_account.currency != to_account.currency {
-            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account));
+    fn create_internal_mono_currency_tx(&self, tx: NewTransaction, dr_account: Account, cr_account: Account) -> Result<Transaction, Error> {
+        if dr_account.currency != cr_account.currency {
+            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => tx.clone(), dr_account.clone(), cr_account.clone()));
         }
-        let from_account_id = from_account.id;
-        let from_account_clone = from_account.clone();
+        if (tx.dr_account_id != dr_account.id) || (tx.cr_account_id != cr_account.id) {
+            return Err(
+                ectx!(err ErrorContext::InvalidTransaction, ErrorKind::Internal => tx.clone(), dr_account.clone(), cr_account.clone()),
+            );
+        }
+        let tx_ = tx.clone();
         let balance = self
             .transactions_repo
-            .get_accounts_balance(input.user_id, &[from_account_clone])
+            .get_accounts_balance(tx.user_id, &[dr_account.clone()])
             .map(|accounts| accounts[0].balance)
-            .map_err(ectx!(try convert => from_account_id))?;
-        if balance >= input.value {
-            let new_transaction = NewTransaction {
-                id: input.id,
-                gid,
-                user_id: input.user_id,
-                dr_account_id: from_account_id,
-                cr_account_id: to_account.id,
-                currency: from_account.currency,
-                value: input.value,
-                status,
-                blockchain_tx_id,
-                kind,
-                group_kind,
-                related_tx,
-            };
-            self.transactions_repo
-                .create(new_transaction.clone())
-                .map(|tx| vec![tx])
-                .map_err(ectx!(convert => new_transaction))
+            .map_err(ectx!(try convert => tx.clone()))?;
+        if balance >= tx.value {
+            self.transactions_repo.create(tx.clone()).map_err(ectx!(convert => tx.clone()))
         } else {
-            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => from_account, balance, input.value))
+            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => tx))
         }
     }
 
