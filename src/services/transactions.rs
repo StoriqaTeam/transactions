@@ -210,7 +210,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         to_account: Account,
         blockchain_tx_id: Option<BlockchainTransactionId>,
         status: TransactionStatus,
-        gid: TransactionId,
+        tx_group_id: TransactionId,
     ) -> Result<Vec<Transaction>, Error> {
         if from_account.currency != to_account.currency {
             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account));
@@ -225,7 +225,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         if balance >= input.value {
             let new_transaction = NewTransaction {
                 id: input.id,
-                gid,
+                tx_group_id,
                 user_id: input.user_id,
                 dr_account_id: from_account_id,
                 cr_account_id: to_account.id,
@@ -500,11 +500,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         Ok(tx_id)
     }
 
-    // Input txs should be with len() > 0 and have the same `gid`- this guarantees exactly one TransactionOut
+    // Input txs should be with len() > 0 and have the same `tx_group_id`- this guarantees exactly one TransactionOut
     fn convert_transaction(&self, transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
-        let gid = transactions[0].gid;
+        let tx_group_id = transactions[0].tx_group_id;
         for tx in transactions.iter() {
-            assert_eq!(gid, tx.gid, "Transaction gids doesn't match: {:#?}", transactions);
+            assert_eq!(tx_group_id, tx.tx_group_id, "Transaction gids doesn't match: {:#?}", transactions);
         }
         // internal + withdrawal tx
         if transactions.len() == 1 {
@@ -713,7 +713,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                     }
                     let tx_group = transactions_repo
-                        .list_by_gid(transaction.gid)
+                        .list_by_gid(transaction.tx_group_id)
                         .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
                     let tx_out = service.convert_transaction(tx_group)?;
                     return Ok(Some(tx_out));
@@ -813,7 +813,9 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
 fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
     let mut res: HashMap<TransactionId, Vec<Transaction>> = HashMap::new();
     for tx in transactions.into_iter() {
-        res.entry(tx.gid).and_modify(|txs| txs.push(tx.clone())).or_insert(vec![tx.clone()]);
+        res.entry(tx.tx_group_id)
+            .and_modify(|txs| txs.push(tx.clone()))
+            .or_insert(vec![tx.clone()]);
     }
     res.into_iter().map(|(_, txs)| txs).collect()
 }

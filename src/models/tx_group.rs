@@ -70,19 +70,45 @@ impl ToSql<VarChar, Pg> for TxGroupKind {
     }
 }
 
-#[derive(Debug, Queryable, Clone)]
+/// TxGroup is an entity that will represents transactions interface for the service api.
+/// Underneath TxGroup there are actually several real transactions (database level).
+/// `Base_tx`, `from_tx`, `to_tx`, `fee_tx`, `withdrawas_txs` are filled depending on TxGroup status
+/// and kind:
+///
+/// 1) Deposit
+///    Only base_tx is filled once deposit arrives
+///
+/// 2) Internal
+///    Only base_tx is filled with the actual internal transaction (no fees involved)
+///
+/// 3) InternalMulti
+///    from_tx and to_tx are filled, representing exchange with system accounts
+///
+/// 4) Withdrawal
+///    At first step several transactions are created - a withdrawal acc at dr side of tx
+///    and several different dr accounts, that will be subject to the actual withdrawal
+///    (one account may have not enough funds). The status is set as Pending.
+///
+///    Once txs start to arrive from blockchain we switch status of each tx from Pending to Done and
+///    add fees transactions.
+/// 4) WithdrawalMulti
+///    This basically the same as InternalMulti, but we do a withdrawal from system liquidity account
+
+#[derive(Debug, Queryable, Clone, Identifiable)]
 pub struct TxGroup {
     pub id: TxGroupId,
     pub status: TransactionStatus,
     pub kind: TxGroupKind,
-    pub tx_1: Option<TransactionId>,
-    pub tx_2: Option<TransactionId>,
-    pub tx_3: Option<TransactionId>,
-    pub tx_4: Option<TransactionId>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub user_id: UserId,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
+    pub base_tx: Option<TransactionId>,
+    pub from_tx: Option<TransactionId>,
+    pub to_tx: Option<TransactionId>,
+    pub fee_tx: Option<TransactionId>,
+    // array of ids
+    pub withdrawal_txs: serde_json::Value,
 }
 
 #[derive(Debug, Insertable, Validate, Clone)]
@@ -91,12 +117,13 @@ pub struct NewTxGroup {
     pub id: TxGroupId,
     pub status: TransactionStatus,
     pub kind: TxGroupKind,
-    pub tx_1: Option<TransactionId>,
-    pub tx_2: Option<TransactionId>,
-    pub tx_3: Option<TransactionId>,
-    pub tx_4: Option<TransactionId>,
     pub user_id: UserId,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
+    pub base_tx: Option<TransactionId>,
+    pub from_tx: Option<TransactionId>,
+    pub to_tx: Option<TransactionId>,
+    pub fee_tx: Option<TransactionId>,
+    pub withdrawal_txs: serde_json::Value,
 }
 
 #[derive(Debug, AsChangeset, Clone, Default)]
@@ -104,9 +131,10 @@ pub struct NewTxGroup {
 pub struct UpdateTxGroup {
     pub status: Option<TransactionStatus>,
     pub kind: Option<TxGroupKind>,
-    pub tx_1: Option<TransactionId>,
-    pub tx_2: Option<TransactionId>,
-    pub tx_3: Option<TransactionId>,
-    pub tx_4: Option<TransactionId>,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
+    pub base_tx: Option<TransactionId>,
+    pub from_tx: Option<TransactionId>,
+    pub to_tx: Option<TransactionId>,
+    pub fee_tx: Option<TransactionId>,
+    pub withdrawal_txs: Option<serde_json::Value>,
 }

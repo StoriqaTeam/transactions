@@ -143,7 +143,7 @@ impl TransactionsRepo for TransactionsRepoMock {
         let mut data = self.data.lock().unwrap();
         let res = Transaction {
             id: payload.id,
-            gid: payload.id,
+            tx_group_id: payload.id,
             user_id: payload.user_id,
             dr_account_id: payload.dr_account_id,
             cr_account_id: payload.cr_account_id,
@@ -162,9 +162,9 @@ impl TransactionsRepo for TransactionsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == transaction_id).nth(0).cloned())
     }
-    fn list_by_gid(&self, gid: TransactionId) -> RepoResult<Vec<Transaction>> {
+    fn list_by_gid(&self, tx_group_id: TransactionId) -> RepoResult<Vec<Transaction>> {
         let data = self.data.lock().unwrap();
-        Ok(data.iter().filter(|x| x.gid == gid).cloned().collect())
+        Ok(data.iter().filter(|x| x.tx_group_id == tx_group_id).cloned().collect())
     }
     fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>> {
         let data = self.data.lock().unwrap();

@@ -7,7 +7,8 @@ use validator::Validate;
 use models::*;
 use schema::transactions;
 
-#[derive(Debug, Queryable, Clone)]
+#[derive(Debug, Queryable, Clone, Associations, Identifiable)]
+#[belongs_to(TxGroup, foreign_key = "tx_group_id")]
 pub struct Transaction {
     pub id: TransactionId,
     pub dr_account_id: AccountId,
@@ -16,7 +17,7 @@ pub struct Transaction {
     pub value: Amount,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
-    pub gid: TransactionId,
+    pub tx_group_id: TransactionId,
 }
 
 #[derive(Debug, Queryable, Clone, QueryableByName)]
@@ -32,7 +33,7 @@ impl Default for Transaction {
         let id = TransactionId::generate();
         Self {
             id,
-            gid: id,
+            tx_group_id: id,
             dr_account_id: AccountId::generate(),
             cr_account_id: AccountId::generate(),
             currency: Currency::Stq,
@@ -47,7 +48,7 @@ impl Default for Transaction {
 #[table_name = "transactions"]
 pub struct NewTransaction {
     pub id: TransactionId,
-    pub gid: TransactionId,
+    pub tx_group_id: TransactionId,
     pub dr_account_id: AccountId,
     pub cr_account_id: AccountId,
     pub currency: Currency,
@@ -59,7 +60,7 @@ impl Default for NewTransaction {
         let id = TransactionId::generate();
         Self {
             id,
-            gid: id,
+            tx_group_id: id,
             dr_account_id: AccountId::generate(),
             cr_account_id: AccountId::generate(),
             currency: Currency::Stq,

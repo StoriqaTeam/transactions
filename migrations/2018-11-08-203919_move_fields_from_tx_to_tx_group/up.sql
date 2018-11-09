@@ -6,5 +6,5 @@ ALTER TABLE tx_groups
   ADD COLUMN user_id UUID NOT NULL REFERENCES users,
   ADD COLUMN blockchain_tx_id VARCHAR;
 
-CREATE INDEX tx_groups_blockchain_tx_id ON tx_groups (blockchain_tx_id);
+CREATE INDEX tx_groups_blockchain_tx_id_idx ON tx_groups (blockchain_tx_id);
 

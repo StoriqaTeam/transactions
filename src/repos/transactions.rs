@@ -18,8 +18,9 @@ use schema::tx_groups::dsl as TxGroupsDsl;
 pub trait TransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewTransaction) -> RepoResult<Transaction>;
     fn get(&self, transaction_id: TransactionId) -> RepoResult<Option<Transaction>>;
+    fn list(&self, transaction_ids: &[TransactionId]) -> RepoResult<Vec<Transaction>>;
     fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<AccountWithBalance>>;
-    fn list_by_gid(&self, gid: TransactionId) -> RepoResult<Vec<Transaction>>;
+    fn list_by_tx_group_id(&self, tx_group_id: TransactionId) -> RepoResult<Vec<Transaction>>;
     fn list_balances_for_accounts(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>>;
     fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
 }
@@ -50,6 +51,90 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     let error_kind = ErrorKind::from(&e);
                     ectx!(err e, error_kind => transaction_id_arg)
                 })
+        })
+    }
+
+    fn list(&self, transaction_ids: &[TransactionId]) -> RepoResult<Vec<Transaction>> {
+        with_tls_connection(|conn| {
+            transactions.
+                filter(id.eq(any(transaction_ids)))
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => transaction_ids)
+                })
+        })
+    }
+
+    fn list_by_tx_group_id(&self, tx_group_id_: TransactionId) -> RepoResult<Vec<Transaction>> {
+        with_tls_connection(|conn| {
+            transactions.filter(tx_group_id.eq(tx_group_id_)).get_results(conn).map_err(move |e| {
+                let error_kind = ErrorKind::from(&e);
+                ectx!(err e, error_kind => tx_group_id_)
+            })
+        })
+    }
+
+    fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>> {
+        with_tls_connection(|conn| {
+            transactions
+                .filter(dr_account_id.eq(account_id).or(cr_account_id.eq(account_id)))
+                .order(created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => account_id)
+                })
+        })
+    }
+    fn list_balances_for_accounts(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>> {
+        // assert all accounts in the same workspace with authed user
+        with_tls_connection(|conn| {
+            let ids: Vec<_> = accounts.into_iter().map(|acc| acc.id).collect();
+            let txs = transactions
+                .filter(dr_account_id.eq(any(ids.clone())).or(cr_account_id.eq(any(ids))))
+                .get_results::<Transaction>(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(try err e, error_kind => auth_user_id, accounts)
+                })?;
+            let txs_grouped_initial: HashMap<AccountId, Vec<Transaction>> = accounts.into_iter().map(|acc| (acc.id, vec![])).collect();
+            let txs_grouped: HashMap<AccountId, Vec<Transaction>> = txs.into_iter().fold(txs_grouped_initial, |mut acc, elem| {
+                acc.entry(elem.dr_account_id).and_modify(|txs| txs.push(elem.clone()));
+                acc.entry(elem.cr_account_id).and_modify(|txs| txs.push(elem));
+                acc
+            });
+            accounts
+                .into_iter()
+                .map(|account| {
+                    let plus = txs_grouped
+                        .get(&account.id)
+                        .unwrap()
+                        .into_iter()
+                        .filter(|tx| match account.kind {
+                            AccountKind::Cr => tx.cr_account_id == account.id,
+                            AccountKind::Dr => tx.dr_account_id == account.id,
+                        }).fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
+                        .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                    let minus = txs_grouped
+                        .get(&account.id)
+                        .unwrap()
+                        .into_iter()
+                        .filter(|tx| match account.kind {
+                            AccountKind::Cr => tx.dr_account_id == account.id,
+                            AccountKind::Dr => tx.cr_account_id == account.id,
+                        }).fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
+                        .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                    let balance = plus
+                        .checked_sub(minus)
+                        .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                    Ok(AccountWithBalance {
+                        account: account.clone(),
+                        balance,
+                    })
+                }).collect()
         })
     }
 
@@ -150,77 +235,6 @@ impl TransactionsRepo for TransactionsRepoImpl {
         })
     }
 
-    fn list_by_gid(&self, gid_: TransactionId) -> RepoResult<Vec<Transaction>> {
-        with_tls_connection(|conn| {
-            transactions.filter(gid.eq(gid_)).get_results(conn).map_err(move |e| {
-                let error_kind = ErrorKind::from(&e);
-                ectx!(err e, error_kind => gid_)
-            })
-        })
-    }
-
-    fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>> {
-        with_tls_connection(|conn| {
-            transactions
-                .filter(dr_account_id.eq(account_id).or(cr_account_id.eq(account_id)))
-                .order(created_at.desc())
-                .offset(offset)
-                .limit(limit)
-                .get_results(conn)
-                .map_err(move |e| {
-                    let error_kind = ErrorKind::from(&e);
-                    ectx!(err e, error_kind => account_id)
-                })
-        })
-    }
-    fn list_balances_for_accounts(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>> {
-        // assert all accounts in the same workspace with authed user
-        with_tls_connection(|conn| {
-            let ids: Vec<_> = accounts.into_iter().map(|acc| acc.id).collect();
-            let txs = transactions
-                .filter(dr_account_id.eq(any(ids.clone())).or(cr_account_id.eq(any(ids))))
-                .get_results::<Transaction>(conn)
-                .map_err(move |e| {
-                    let error_kind = ErrorKind::from(&e);
-                    ectx!(try err e, error_kind => auth_user_id, accounts)
-                })?;
-            let txs_grouped_initial: HashMap<AccountId, Vec<Transaction>> = accounts.into_iter().map(|acc| (acc.id, vec![])).collect();
-            let txs_grouped: HashMap<AccountId, Vec<Transaction>> = txs.into_iter().fold(txs_grouped_initial, |mut acc, elem| {
-                acc.entry(elem.dr_account_id).and_modify(|txs| txs.push(elem.clone()));
-                acc.entry(elem.cr_account_id).and_modify(|txs| txs.push(elem));
-                acc
-            });
-            accounts
-                .into_iter()
-                .map(|account| {
-                    let plus = txs_grouped
-                        .get(&account.id)
-                        .unwrap()
-                        .into_iter()
-                        .filter(|tx| match account.kind {
-                            AccountKind::Cr => tx.cr_account_id == account.id,
-                            AccountKind::Dr => tx.dr_account_id == account.id,
-                        }).fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
-                        .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
-                    let minus = txs_grouped
-                        .get(&account.id)
-                        .unwrap()
-                        .into_iter()
-                        .filter(|tx| match account.kind {
-                            AccountKind::Cr => tx.dr_account_id == account.id,
-                            AccountKind::Dr => tx.cr_account_id == account.id,
-                        }).fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
-                        .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
-                    let balance = plus
-                        .checked_sub(minus)
-                        .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
-                    Ok(AccountWithBalance {
-                        account: account.clone(),
-                        balance,
-                    })
-                }).collect()
-        })
-    }
 }
 
 impl TransactionsRepoImpl {
@@ -231,16 +245,15 @@ impl TransactionsRepoImpl {
                 .get_results(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
-                    ectx!(err e, error_kind => account_id)
+                    ectx!(err e, error_kind)
                 })?;
             let tx_ids = groups.into_iter().filter_map(|tx_group| {
                 match tx_group.kind {
-                    // first tx is withdrawal
                     TxGroupKind::Withdrawal => tx_group.tx_1,
                     TxGroupKind::WithdrawalMulti => tx_group.tx_2,
                     _ => None
                 }
-            })map(|tx_group| tx_group.tx_1)
+            }).map(|tx_group| tx_group.tx_1)
         })
     }
 }

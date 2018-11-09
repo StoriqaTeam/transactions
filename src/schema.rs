@@ -72,7 +72,7 @@ table! {
         value -> Numeric,
         created_at -> Timestamp,
         updated_at -> Timestamp,
-        gid -> Uuid,
+        tx_group_id -> Uuid,
     }
 }
 
@@ -104,6 +104,7 @@ table! {
 }
 
 joinable!(accounts -> users (user_id));
+joinable!(transactions -> tx_groups (tx_group_id));
 joinable!(tx_groups -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(

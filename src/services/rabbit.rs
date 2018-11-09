@@ -153,7 +153,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             let tx_id = TransactionId::generate();
             let new_tx = NewTransaction {
                 id: tx_id,
-                gid: tx_id,
+                tx_group_id: tx_id,
                 user_id: to_dr_account.user_id,
                 dr_account_id: to_dr_account.id,
                 cr_account_id: to_cr_account.id,
@@ -177,7 +177,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
 
             let new_fee_tx = NewTransaction {
                 id: fee_tx_hash,
-                gid: tx_id,
+                tx_group_id: tx_id,
                 user_id: to_dr_account.user_id,
                 dr_account_id: fees_account.id,
                 cr_account_id: to_dr_account.id,
