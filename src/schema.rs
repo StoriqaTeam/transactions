@@ -77,6 +77,9 @@ table! {
         updated_at -> Timestamp,
         fee -> Numeric,
         gid -> Uuid,
+        kind -> Varchar,
+        group_kind -> Varchar,
+        related_tx -> Nullable<Uuid>,
     }
 }
 

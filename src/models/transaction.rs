@@ -21,6 +21,9 @@ pub struct Transaction {
     pub updated_at: NaiveDateTime,
     pub fee: Amount,
     pub gid: TransactionId,
+    pub kind: TransactionKind,
+    pub group_kind: TransactionGroupKind,
+    pub related_tx: Option<TransactionId>,
 }
 
 #[derive(Debug, Queryable, Clone, QueryableByName)]
@@ -47,6 +50,9 @@ impl Default for Transaction {
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
             fee: Amount::default(),
+            kind: TransactionKind::Internal,
+            group_kind: TransactionGroupKind::Internal,
+            related_tx: None,
         }
     }
 }
@@ -64,6 +70,9 @@ pub struct NewTransaction {
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
     pub fee: Amount,
+    pub kind: TransactionKind,
+    pub group_kind: TransactionGroupKind,
+    pub related_tx: Option<TransactionId>,
 }
 
 impl Default for NewTransaction {
@@ -80,6 +89,9 @@ impl Default for NewTransaction {
             status: TransactionStatus::Pending,
             blockchain_tx_id: None,
             fee: Amount::default(),
+            kind: TransactionKind::Internal,
+            group_kind: TransactionGroupKind::Internal,
+            related_tx: None,
         }
     }
 }
@@ -288,23 +300,6 @@ pub struct TransactionOut {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
-
-// impl TransactionOut {
-//     pub fn new(transaction: &Transaction, from: Vec<TransactionAddressInfo>, to: TransactionAddressInfo) -> Self {
-//         Self {
-//             id: transaction.id,
-//             from,
-//             to,
-//             currency: transaction.currency,
-//             value: transaction.value,
-//             fee: transaction.fee,
-//             status: transaction.status,
-//             blockchain_tx_id: transaction.blockchain_tx_id.clone(),
-//             created_at: transaction.created_at.clone(),
-//             updated_at: transaction.updated_at.clone(),
-//         }
-//     }
-// }
 
 #[derive(Debug, Serialize, Clone)]
 pub struct TransactionAddressInfo {

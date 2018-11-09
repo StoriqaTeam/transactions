@@ -93,7 +93,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
-    fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount> {
+    fn get_account_balance(&self, account_id: AccountId, kind_: AccountKind) -> RepoResult<Amount> {
         with_tls_connection(|conn| {
             let cr_sum: Option<Amount> = transactions
                 .filter(cr_account_id.eq(account_id))
@@ -117,7 +117,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
             //sum will return null if there are no rows in select statement returned
             let dr_sum = dr_sum.unwrap_or_default();
 
-            match kind {
+            match kind_ {
                 AccountKind::Cr => cr_sum
                     .checked_sub(dr_sum)
                     .ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id)),

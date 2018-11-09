@@ -1,5 +1,3 @@
-use chrono::NaiveDateTime;
-
 use models::*;
 
 #[derive(Debug, Deserialize, Clone)]
