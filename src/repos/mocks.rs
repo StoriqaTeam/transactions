@@ -153,7 +153,9 @@ impl TransactionsRepo for TransactionsRepoMock {
             blockchain_tx_id: payload.blockchain_tx_id,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
-            fee: payload.fee,
+            kind: TransactionKind::Internal,
+            group_kind: TransactionGroupKind::Internal,
+            related_tx: None,
         };
         data.push(res.clone());
         Ok(res)

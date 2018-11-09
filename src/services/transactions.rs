@@ -33,6 +33,9 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     btc_liquidity_cr_account_id: AccountId,
     eth_liquidity_cr_account_id: AccountId,
     stq_liquidity_cr_account_id: AccountId,
+    btc_fees_cr_account_id: AccountId,
+    eth_fees_cr_account_id: AccountId,
+    stq_fees_cr_account_id: AccountId,
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +111,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         btc_liquidity_cr_account_id: AccountId,
         eth_liquidity_cr_account_id: AccountId,
         stq_liquidity_cr_account_id: AccountId,
+        btc_fees_cr_account_id: AccountId,
+        eth_fees_cr_account_id: AccountId,
+        stq_fees_cr_account_id: AccountId,
     ) -> Self {
         Self {
             auth_service,
@@ -122,6 +128,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             btc_liquidity_cr_account_id,
             eth_liquidity_cr_account_id,
             stq_liquidity_cr_account_id,
+            btc_fees_cr_account_id,
+            eth_fees_cr_account_id,
+            stq_fees_cr_account_id,
         }
     }
 
@@ -225,6 +234,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         blockchain_tx_id: Option<BlockchainTransactionId>,
         status: TransactionStatus,
         gid: TransactionId,
+        kind: TransactionKind,
+        group_kind: TransactionGroupKind,
+        related_tx: Option<TransactionId>,
     ) -> Result<Vec<Transaction>, Error> {
         if from_account.currency != to_account.currency {
             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account));
@@ -247,8 +259,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 value: input.value,
                 status,
                 blockchain_tx_id,
-                // Todo - fees
-                fee: Amount::default(),
+                kind,
+                group_kind,
+                related_tx,
             };
             self.transactions_repo
                 .create(new_transaction.clone())
@@ -294,6 +307,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         }
 
         let mut res: Vec<Transaction> = Vec::new();
+        let mut tx_id = input.id.clone();
 
         for AccountWithBalance {
             account: acc,
@@ -312,14 +326,21 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             };
 
             match blockchain_tx_id_res {
-                Ok(tx_id) => {
+                Ok(blockchain_tx_id) => {
+                    let input_next_id = CreateTransactionInput {
+                        id: tx_id,
+                        ..input.clone()
+                    };
                     let txs = self.create_internal_mono_currency_tx(
-                        input.clone(),
+                        input_next_id,
                         from_account.clone(),
                         acc.clone(),
-                        Some(tx_id),
+                        Some(blockchain_tx_id),
                         TransactionStatus::Pending,
                         input.id,
+                        TransactionKind::Withdrawal,
+                        TransactionGroupKind::Withdrawal,
+                        None,
                     )?;
                     res.extend(txs.into_iter());
                 }
@@ -334,7 +355,28 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                     }
                 }
             }
+            tx_id = tx_id.next();
         }
+
+        tx_id = tx_id.next();
+        let system_fees_account = self.get_system_fees_account(currency)?;
+        let input_next_id = CreateTransactionInput {
+            id: tx_id,
+            ..input.clone()
+        };
+        let txs = self.create_internal_mono_currency_tx(
+            input_next_id,
+            from_account.clone(),
+            system_fees_account,
+            None,
+            TransactionStatus::Done,
+            input.id,
+            TransactionKind::Fee,
+            TransactionGroupKind::Withdrawal,
+            None,
+        )?;
+        res.extend(txs.into_iter());
+
         Ok(res)
     }
 
@@ -372,6 +414,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             None,
             TransactionStatus::Done,
             input.id,
+            TransactionKind::MultiFrom,
+            TransactionGroupKind::InternalMulti,
+            None,
         )?;
         result.extend(txs.into_iter());
 
@@ -390,6 +435,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             None,
             TransactionStatus::Done,
             input.id,
+            TransactionKind::MultiTo,
+            TransactionGroupKind::InternalMulti,
+            None,
         )?;
         result.extend(txs.into_iter());
 
@@ -416,6 +464,19 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             Currency::Btc => self.btc_liquidity_cr_account_id,
             Currency::Eth => self.eth_liquidity_cr_account_id,
             Currency::Stq => self.stq_liquidity_cr_account_id,
+        };
+        let acc = self
+            .accounts_repo
+            .get(acc_id)?
+            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
+        Ok(acc)
+    }
+
+    fn get_system_fees_account(&self, currency: Currency) -> Result<Account, Error> {
+        let acc_id = match currency {
+            Currency::Btc => self.btc_fees_cr_account_id,
+            Currency::Eth => self.eth_fees_cr_account_id,
+            Currency::Stq => self.stq_fees_cr_account_id,
         };
         let acc = self
             .accounts_repo
@@ -695,6 +756,9 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             None,
                             TransactionStatus::Done,
                             input.id,
+                            TransactionKind::Internal,
+                            TransactionGroupKind::Internal,
+                            None,
                         ),
                         TransactionType::Withdrawal(from_account, to_account_address, currency) => {
                             self_clone.create_external_mono_currency_tx(user.id, input, from_account, to_account_address, currency)

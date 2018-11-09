@@ -53,6 +53,7 @@ pub enum TransactionKind {
     MultiFrom,
     MultiTo,
     Internal,
+    Deposit,
     Withdrawal,
 }
 
@@ -65,6 +66,7 @@ impl FromSql<VarChar, Pg> for TransactionKind {
             Some(b"multi_to") => Ok(TransactionKind::MultiTo),
             Some(b"internal") => Ok(TransactionKind::Internal),
             Some(b"withdrawal") => Ok(TransactionKind::Withdrawal),
+            Some(b"deposit") => Ok(TransactionKind::Deposit),
             Some(v) => Err(format!(
                 "Unrecognized enum variant: {:?}",
                 String::from_utf8(v.to_vec()).unwrap_or_else(|_| "Non - UTF8 value".to_string())
@@ -83,6 +85,7 @@ impl ToSql<VarChar, Pg> for TransactionKind {
             TransactionKind::MultiFrom => out.write_all(b"multi_from")?,
             TransactionKind::MultiTo => out.write_all(b"multi_to")?,
             TransactionKind::Internal => out.write_all(b"internal")?,
+            TransactionKind::Deposit => out.write_all(b"deposit")?,
             TransactionKind::Withdrawal => out.write_all(b"withdrawal")?,
         };
         Ok(IsNull::No)

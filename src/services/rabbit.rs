@@ -149,7 +149,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 value: to_entry.value,
                 status: TransactionStatus::Done,
                 blockchain_tx_id: Some(blockchain_tx.hash.clone()),
-                fee: blockchain_tx.fee,
+                kind: TransactionKind::Deposit,
+                group_kind: TransactionGroupKind::Deposit,
+                related_tx: None,
             };
             self.transactions_repo.create(new_tx)?;
             self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;

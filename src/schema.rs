@@ -75,7 +75,6 @@ table! {
         blockchain_tx_id -> Nullable<Varchar>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
-        fee -> Numeric,
         gid -> Uuid,
         kind -> Varchar,
         group_kind -> Varchar,
