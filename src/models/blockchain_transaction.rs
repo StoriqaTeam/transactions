@@ -12,7 +12,7 @@ use schema::blockchain_transactions;
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockchainTransactionEntryTo {
-    pub address: AccountAddress,
+    pub address: BlockchainAddress,
     pub value: Amount,
 }
 
@@ -20,7 +20,7 @@ pub struct BlockchainTransactionEntryTo {
 #[serde(rename_all = "camelCase")]
 pub struct BlockchainTransaction {
     pub hash: BlockchainTransactionId,
-    pub from: Vec<AccountAddress>,
+    pub from: Vec<BlockchainAddress>,
     pub to: Vec<BlockchainTransactionEntryTo>,
     pub block_number: u64,
     pub currency: Currency,
@@ -29,9 +29,9 @@ pub struct BlockchainTransaction {
 }
 
 impl BlockchainTransaction {
-    pub fn unify_from_to(&self) -> Result<(HashSet<AccountAddress>, HashMap<AccountAddress, Amount>), RepoError> {
+    pub fn unify_from_to(&self) -> Result<(HashSet<BlockchainAddress>, HashMap<BlockchainAddress, Amount>), RepoError> {
         //getting all from transactions to without repeats
-        let from: HashSet<AccountAddress> = self.from.clone().into_iter().collect();
+        let from: HashSet<BlockchainAddress> = self.from.clone().into_iter().collect();
 
         //getting all to transactions to without repeats
         let mut to = HashMap::new();
@@ -52,7 +52,7 @@ impl BlockchainTransaction {
     }
 
     pub fn normalized(&self) -> Option<BlockchainTransaction> {
-        let from: HashSet<AccountAddress> = self.from.clone().into_iter().collect();
+        let from: HashSet<BlockchainAddress> = self.from.clone().into_iter().collect();
 
         //getting all to transactions to without repeats
         let mut to = HashMap::new();
@@ -185,18 +185,18 @@ mod tests {
             ),
         ];
         for (from, to, from_res, to_res) in cases.into_iter() {
-            let from: Vec<_> = from.into_iter().map(|x| AccountAddress::new(x.to_string())).collect();
-            let from_res: Vec<_> = from_res.into_iter().map(|x| AccountAddress::new(x.to_string())).collect();
+            let from: Vec<_> = from.into_iter().map(|x| BlockchainAddress::new(x.to_string())).collect();
+            let from_res: Vec<_> = from_res.into_iter().map(|x| BlockchainAddress::new(x.to_string())).collect();
             let to: Vec<_> = to
                 .into_iter()
                 .map(|(address, value)| BlockchainTransactionEntryTo {
-                    address: AccountAddress::new(address.to_string()),
+                    address: BlockchainAddress::new(address.to_string()),
                     value: *value,
                 }).collect();
             let to_res: Vec<_> = to_res
                 .into_iter()
                 .map(|(address, value)| BlockchainTransactionEntryTo {
-                    address: AccountAddress::new(address.to_string()),
+                    address: BlockchainAddress::new(address.to_string()),
                     value: *value,
                 }).collect();
 

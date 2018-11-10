@@ -105,7 +105,7 @@ impl AccountsRepo for AccountsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id_arg).collect())
     }
-    fn get_by_address(&self, address_: AccountAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
+    fn get_by_address(&self, address_: BlockchainAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
         let data = self.data.lock().unwrap();
         let u = data
             .iter()
@@ -115,13 +115,13 @@ impl AccountsRepo for AccountsRepoMock {
         Ok(u)
     }
 
-    fn filter_by_address(&self, address_: AccountAddress) -> RepoResult<Vec<Account>> {
+    fn filter_by_address(&self, address_: BlockchainAddress) -> RepoResult<Vec<Account>> {
         let data = self.data.lock().unwrap();
         let u = data.iter().filter(|x| x.address == address_).cloned().collect();
         Ok(u)
     }
 
-    fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
+    fn get_by_addresses(&self, addresses: &[BlockchainAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
         let addresses: HashSet<_> = addresses.iter().collect();
         let data = self.data.lock().unwrap();
         let u = data

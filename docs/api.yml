@@ -567,7 +567,7 @@ components:
             address so that a user couldn't find it by phone)
           oneOf:
             - $ref: '#/components/schemas/AccountId'
-            - $ref: '#/components/schemas/AccountAddress'
+            - $ref: '#/components/schemas/BlockchainAddress'
           discriminator:
             propertyName: toType
           example:
@@ -596,7 +596,7 @@ components:
       type: string
       enum: [pending|done]
       example: done
-    AccountAddress:
+    BlockchainAddress:
       type: string
       description: Either blockchain address or fiat account number (depending on currency)
       example: '0x89595fa59d69d696d9d96'
@@ -641,7 +641,7 @@ components:
         userId:
           $ref: '#/components/schemas/UserId'
         accountAddress:
-          $ref: '#/components/schemas/AccountAddress'
+          $ref: '#/components/schemas/BlockchainAddress'
         name:
           type: string
           description: Short name for the account
@@ -654,7 +654,7 @@ components:
         accountId:
           $ref: '#/components/schemas/AccountId'
         blockchainAddress:
-          $ref: '#/components/schemas/AccountAddress'
+          $ref: '#/components/schemas/BlockchainAddress'
     AccountWithBalance:
       type: object
       required:

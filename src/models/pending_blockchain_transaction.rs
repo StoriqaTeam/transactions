@@ -6,8 +6,8 @@ use schema::pending_blockchain_transactions;
 #[derive(Debug, Queryable, Clone)]
 pub struct PendingBlockchainTransactionDB {
     pub hash: BlockchainTransactionId,
-    pub from_: AccountAddress,
-    pub to_: AccountAddress,
+    pub from_: BlockchainAddress,
+    pub to_: BlockchainAddress,
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,
@@ -32,8 +32,8 @@ impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchai
 #[table_name = "pending_blockchain_transactions"]
 pub struct NewPendingBlockchainTransactionDB {
     pub hash: BlockchainTransactionId,
-    pub from_: AccountAddress,
-    pub to_: AccountAddress,
+    pub from_: BlockchainAddress,
+    pub to_: BlockchainAddress,
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,
@@ -43,8 +43,8 @@ impl Default for NewPendingBlockchainTransactionDB {
     fn default() -> Self {
         Self {
             hash: BlockchainTransactionId::default(),
-            from_: AccountAddress::default(),
-            to_: AccountAddress::default(),
+            from_: BlockchainAddress::default(),
+            to_: BlockchainAddress::default(),
             currency: Currency::Eth,
             value: Amount::default(),
             fee: Amount::default(),

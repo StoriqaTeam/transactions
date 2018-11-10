@@ -16,12 +16,12 @@ impl Recepient {
     pub fn to_account_id(&self) -> Result<AccountId, ()> {
         AccountId::from_str(&self.0).map_err(|_| ())
     }
-    pub fn to_account_address(&self) -> AccountAddress {
-        AccountAddress::new(self.0.clone())
+    pub fn to_account_address(&self) -> BlockchainAddress {
+        BlockchainAddress::new(self.0.clone())
     }
 }
 
 pub enum CrReceiptType {
     Account(Account),
-    Address(AccountAddress),
+    Address(BlockchainAddress),
 }

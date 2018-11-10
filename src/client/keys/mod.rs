@@ -22,7 +22,7 @@ pub trait KeysClient: Send + Sync + 'static {
         &self,
         create_account: CreateAccountAddress,
         role: Role,
-    ) -> Box<Future<Item = AccountAddress, Error = Error> + Send>;
+    ) -> Box<Future<Item = BlockchainAddress, Error = Error> + Send>;
     fn sign_transaction(
         &self,
         create_blockchain_tx: CreateBlockchainTx,
@@ -97,7 +97,7 @@ impl KeysClient for KeysClientImpl {
         &self,
         create_account: CreateAccountAddress,
         role: Role,
-    ) -> Box<Future<Item = AccountAddress, Error = Error> + Send> {
+    ) -> Box<Future<Item = BlockchainAddress, Error = Error> + Send> {
         let client = self.clone();
         let user_id = match role {
             Role::System => self.keys_system_user_id,
@@ -146,8 +146,8 @@ impl KeysClient for KeysClientMock {
         &self,
         _create_account: CreateAccountAddress,
         _role: Role,
-    ) -> Box<Future<Item = AccountAddress, Error = Error> + Send> {
-        Box::new(Ok(AccountAddress::default()).into_future())
+    ) -> Box<Future<Item = BlockchainAddress, Error = Error> + Send> {
+        Box::new(Ok(BlockchainAddress::default()).into_future())
     }
     fn sign_transaction(
         &self,

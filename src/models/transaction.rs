@@ -158,7 +158,7 @@ impl Default for CreateTransactionLocal {
 #[derive(Debug, Clone, Validate)]
 pub struct DepositFunds {
     pub user_id: UserId,
-    pub address: AccountAddress,
+    pub address: BlockchainAddress,
     pub currency: Currency,
     pub value: Amount,
     pub blockchain_tx_id: BlockchainTransactionId,
@@ -168,7 +168,7 @@ impl Default for DepositFunds {
     fn default() -> Self {
         Self {
             user_id: UserId::default(),
-            address: AccountAddress::default(),
+            address: BlockchainAddress::default(),
             currency: Currency::Eth,
             value: Amount::default(),
             blockchain_tx_id: BlockchainTransactionId::default(),
@@ -180,14 +180,14 @@ impl Default for DepositFunds {
 pub struct Withdraw {
     pub user_id: UserId,
     pub dr_account: Account,
-    pub address: AccountAddress,
+    pub address: BlockchainAddress,
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,
 }
 
 impl Withdraw {
-    pub fn new(create: &CreateTransaction, dr_account: Account, address: AccountAddress) -> Self {
+    pub fn new(create: &CreateTransaction, dr_account: Account, address: BlockchainAddress) -> Self {
         Self {
             user_id: create.user_id,
             dr_account,
@@ -204,7 +204,7 @@ impl Default for Withdraw {
         Self {
             user_id: UserId::default(),
             dr_account: Account::default(),
-            address: AccountAddress::default(),
+            address: BlockchainAddress::default(),
             currency: Currency::Eth,
             value: Amount::default(),
             fee: Amount::default(),
@@ -216,8 +216,8 @@ impl Default for Withdraw {
 #[serde(rename_all = "camelCase")]
 pub struct CreateBlockchainTx {
     pub id: TransactionId,
-    pub from: AccountAddress,
-    pub to: AccountAddress,
+    pub from: BlockchainAddress,
+    pub to: BlockchainAddress,
     pub currency: Currency,
     pub value: Amount,
     pub fee_price: Amount,
@@ -229,8 +229,8 @@ impl Default for CreateBlockchainTx {
     fn default() -> Self {
         Self {
             id: TransactionId::generate(),
-            from: AccountAddress::default(),
-            to: AccountAddress::default(),
+            from: BlockchainAddress::default(),
+            to: BlockchainAddress::default(),
             currency: Currency::Eth,
             value: Amount::default(),
             fee_price: Amount::default(),
@@ -242,8 +242,8 @@ impl Default for CreateBlockchainTx {
 
 impl CreateBlockchainTx {
     pub fn new(
-        from: AccountAddress,
-        to: AccountAddress,
+        from: BlockchainAddress,
+        to: BlockchainAddress,
         currency: Currency,
         value: Amount,
         fee_price: Amount,
@@ -300,11 +300,11 @@ pub struct TransactionOut {
 #[derive(Debug, Serialize, Clone)]
 pub struct TransactionAddressInfo {
     pub account_id: Option<AccountId>,
-    pub blockchain_address: AccountAddress,
+    pub blockchain_address: BlockchainAddress,
 }
 
 impl TransactionAddressInfo {
-    pub fn new(account_id: Option<AccountId>, blockchain_address: AccountAddress) -> Self {
+    pub fn new(account_id: Option<AccountId>, blockchain_address: BlockchainAddress) -> Self {
         Self {
             account_id,
             blockchain_address,

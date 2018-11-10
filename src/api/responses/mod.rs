@@ -30,7 +30,7 @@ pub struct AccountsResponse {
     pub id: AccountId,
     pub user_id: UserId,
     pub currency: Currency,
-    pub address: AccountAddress,
+    pub address: BlockchainAddress,
     pub name: Option<String>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
