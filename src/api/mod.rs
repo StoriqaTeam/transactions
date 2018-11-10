@@ -125,6 +125,7 @@ impl Service for ApiService {
                         keys_client.clone(),
                     ));
                     let transactions_service = Arc::new(TransactionsServiceImpl::new(
+                        config,
                         auth_service.clone(),
                         Arc::new(TransactionsRepoImpl),
                         Arc::new(PendingBlockchainTransactionsRepoImpl),
@@ -134,12 +135,6 @@ impl Service for ApiService {
                         keys_client,
                         blockchain_client,
                         exchange_client.clone(),
-                        config.system.btc_liquidity_account_id,
-                        config.system.eth_liquidity_account_id,
-                        config.system.stq_liquidity_account_id,
-                        config.system.btc_fees_account_id,
-                        config.system.eth_fees_account_id,
-                        config.system.stq_fees_account_id,
                     ));
                     let exchange_service = Arc::new(ExchangeServiceImpl::new(exchange_client));
 

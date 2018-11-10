@@ -47,9 +47,6 @@ pub trait TransactionsService: Send + Sync + 'static {
         token: AuthenticationToken,
         input: CreateTransactionInput,
     ) -> Box<Future<Item = TransactionOut, Error = Error> + Send>;
-    // fn create_transaction_local(&self, input: CreateTransactionLocal) -> Box<Future<Item = Transaction, Error = Error> + Send>;
-    // fn deposit_funds(&self, token: AuthenticationToken, input: DepositFunds) -> Box<Future<Item = Transaction, Error = Error> + Send>;
-    // fn withdraw(&self, input: Withdraw) -> Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
     fn get_transaction(
         &self,
         token: AuthenticationToken,
@@ -126,10 +123,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 ectx!(err ErrorContext::InvalidTransaction, ErrorKind::Internal => tx.clone(), dr_account.clone(), cr_account.clone()),
             );
         }
-        let tx_ = tx.clone();
         let balance = self
             .transactions_repo
-            .get_accounts_balance(tx.user_id, &[dr_account.clone()])
+            .get_accounts_balance(tx.user_id, &[dr_account])
             .map(|accounts| accounts[0].balance)
             .map_err(ectx!(try convert => tx.clone()))?;
         if balance >= tx.value {
@@ -139,51 +135,51 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         }
     }
 
-    fn create_internal_mono_currency_tx(&self, tx: NewTransaction, dr_account: Account, cr_account: Account) -> Result<Transaction, Error> {
-        if dr_account.currency != cr_account.currency {
-            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => tx.clone(), dr_account.clone(), cr_account.clone()));
-        }
-        if (tx.dr_account_id != dr_account.id) || (tx.cr_account_id != cr_account.id) {
-            return Err(
-                ectx!(err ErrorContext::InvalidTransaction, ErrorKind::Internal => tx.clone(), dr_account.clone(), cr_account.clone()),
-            );
-        }
-        let tx_ = tx.clone();
-        let balance = self
-            .transactions_repo
-            .get_accounts_balance(tx.user_id, &[dr_account.clone()])
-            .map(|accounts| accounts[0].balance)
-            .map_err(ectx!(try convert => tx.clone()))?;
-        if balance >= tx.value {
-            self.transactions_repo.create(tx.clone()).map_err(ectx!(convert => tx.clone()))
-        } else {
-            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => tx))
-        }
+    fn create_internal_mono_currency_tx(
+        &self,
+        create_tx_input: CreateTransactionInput,
+        dr_account: Account,
+        cr_account: Account,
+    ) -> Result<Transaction, Error> {
+        let tx = NewTransaction {
+            id: create_tx_input.id,
+            gid: create_tx_input.id,
+            user_id: create_tx_input.user_id,
+            dr_account_id: dr_account.id,
+            cr_account_id: cr_account.id,
+            currency: dr_account.currency,
+            value: create_tx_input.value,
+            status: TransactionStatus::Done,
+            blockchain_tx_id: None,
+            kind: TransactionKind::Internal,
+            group_kind: TransactionGroupKind::Internal,
+            related_tx: None,
+        };
+        self.create_base_tx(tx, dr_account, cr_account)
     }
 
     fn create_external_mono_currency_tx(
         &self,
-        user_id: UserId,
         input: CreateTransactionInput,
         from_account: Account,
-        to_account_address: BlockchainAddress,
-        currency: Currency,
+        to_blockchain_address: BlockchainAddress,
+        to_currency: Currency,
     ) -> Result<Vec<Transaction>, Error> {
-        if from_account.currency != currency {
+        if from_account.currency != to_currency {
             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account_address, currency));
         };
 
         let value = input.value;
-        let withdrawal_accs_and_vals = self
+        let withdrawal_accs_with_balance = self
             .transactions_repo
-            .get_with_enough_value(value, currency, user_id)
-            .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, currency, user_id))?;
+            .get_with_enough_value(value, to_currency, input.user_id)
+            .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, to_currency, input.user_id))?;
 
         //double check
         for AccountWithBalance {
             account: acc,
             balance: needed_amount,
-        } in &withdrawal_accs_and_vals
+        } in &withdrawal_accs_with_balance
         {
             let acc_id = acc.id;
             let balance = self
@@ -196,19 +192,19 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         }
 
         let mut res: Vec<Transaction> = Vec::new();
-        let mut tx_id = input.id.clone();
+        let mut current_tx_id = input.id;
 
         for AccountWithBalance {
             account: acc,
             balance: value,
-        } in &withdrawal_accs_and_vals
+        } in &withdrawal_accs_with_balance
         {
-            let to = to_account_address.clone();
+            let to = to_blockchain_address.clone();
             // Todo this fee is ineffective, since keys client take system's fee
             let fee = Amount::new(0);
             // Note - we don't do early exit here, since we need to complete our transaction with previously
             // written transactions
-            let blockchain_tx_id_res = match currency {
+            let blockchain_tx_id_res = match to_currency {
                 Currency::Eth => self
                     .blockchain_service
                     .create_ethereum_tx(acc.address.clone(), to, *value, fee, Currency::Eth),
