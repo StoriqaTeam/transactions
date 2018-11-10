@@ -15,6 +15,7 @@ pub struct Config {
     pub auth: Auth,
     pub fee_price: FeePrice,
     pub system: System,
+    pub fees_options: FeesOptions,
     pub sentry: Option<SentryConfig>,
     pub graylog: Option<GrayLogConfig>,
     pub filelog: Option<FileLogConfig>,
@@ -38,6 +39,16 @@ pub struct Server {
 pub struct FeePrice {
     pub bitcoin: u64,
     pub ethereum: u64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct FeesOptions {
+    pub btc_fees_collect_url: String,
+    pub eth_fees_collect_url: String,
+    pub btc_transaction_size: i32,
+    pub eth_gas_limit: i32,
+    pub stq_gas_limit: i32,
+    pub fee_upside: f64,
 }
 
 #[derive(Debug, Deserialize, Clone)]

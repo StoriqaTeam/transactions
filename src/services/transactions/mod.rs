@@ -29,6 +29,7 @@ const MAX_TRANSACTIONS_PER_TRANSACTION_OUT: i64 = 3;
 
 #[derive(Clone)]
 pub struct TransactionsServiceImpl<E: DbExecutor> {
+    config: Arc<Config>,
     auth_service: Arc<dyn AuthService>,
     blockchain_service: Arc<BlockchainService>,
     classifier_service: Arc<ClassifierService>,
@@ -101,6 +102,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             system_service,
         ));
         Self {
+            config: config.clone(),
             auth_service,
             blockchain_service,
             classifier_service,
@@ -170,6 +172,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         };
 
         let value = input.value;
+        let fee_est = self.blockchain_service.estimate_fee(fee_price: Amount, currency: Currency)
         let withdrawal_accs_with_balance = self
             .transactions_repo
             .get_with_enough_value(value, to_currency, input.user_id)

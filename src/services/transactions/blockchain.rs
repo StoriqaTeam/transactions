@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use super::super::error::*;
-use client::{BlockchainClient, KeysClient};
+use client::{BlockchainClient, ExchangeClient, KeysClient};
+use config::Config;
 use models::*;
 use prelude::*;
 use repos::PendingBlockchainTransactionsRepo;
@@ -23,30 +24,70 @@ pub trait BlockchainService: Send + Sync + 'static {
         fee: Amount,
         currency: Currency,
     ) -> Result<BlockchainTransactionId, Error>;
+    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, currency: Currency) -> Result<Amount, Error>;
 }
 
 #[derive(Clone)]
 pub struct BlockchainServiceImpl {
+    config: Arc<Config>,
     keys_client: Arc<dyn KeysClient>,
     blockchain_client: Arc<dyn BlockchainClient>,
+    exchange_client: Arc<dyn ExchangeClient>,
     pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
 }
 
 impl BlockchainServiceImpl {
     pub fn new(
+        config: Arc<Config>,
         keys_client: Arc<dyn KeysClient>,
         blockchain_client: Arc<dyn BlockchainClient>,
+        exchange_client: Arc<ExchangeClient>,
         pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
     ) -> Self {
         Self {
+            config,
             keys_client,
             blockchain_client,
+            exchange_client,
             pending_blockchain_transactions_repo,
         }
     }
 }
 
 impl BlockchainService for BlockchainServiceImpl {
+    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, currency: Currency) -> Result<Amount, Error> {
+        let base = match currency {
+            Currency::Btc => self.config.fees_options.btc_transaction_size,
+            Currency::Eth => self.config.fees_options.eth_gas_limit,
+            Currency::Stq => self.config.fees_options.stq_gas_limit,
+        };
+        let base = Amount::new(base as u128);
+        let total_blockchain_fee_native_currency = total_fee
+            .checked_div(Amount::new(self.config.fees_options.fee_upside as u128))
+            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+        match currency {
+            Currency::Stq => {
+                let input_rate = RateInput {
+                    id: ExchangeId::generate(),
+                    from: Currency::Stq,
+                    to: Currency::Eth,
+                    amount: total_blockchain_fee_native_currency,
+                    amount_currency: Currency::Stq,
+                };
+                let Rate { rate } = self.exchange_client.rate(input_rate, Role::System)?;
+                let total_eth_fee = total_blockchain_fee_native_currency.convert(Currency::Stq, rate);
+                total_eth_fee
+                    .checked_div(base)
+                    .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal))
+            }
+            Currency::Eth => total_blockchain_fee_native_currency
+                .checked_div(base)
+                .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal)),
+            Currency::Btc => total_blockchain_fee_native_currency
+                .checked_div(base)
+                .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal)),
+        }
+    }
     fn create_bitcoin_tx(
         &self,
         from: BlockchainAddress,

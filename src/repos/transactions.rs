@@ -14,6 +14,13 @@ use prelude::*;
 use schema::accounts::dsl as Accounts;
 use schema::transactions::dsl::*;
 
+// 0.001 BTC
+const MIN_SIGNIFICANT_SATOSHIS: u128 = 100_000;
+// 0.01 ETH
+const MIN_SIGNIFICANT_ETH: u128 = 10_000_000_000_000_000;
+// 100 STQ
+const MIN_SIGNIFICANT_STQ: u128 = 100_000_000_000_000_000_000;
+
 pub trait TransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewTransaction) -> RepoResult<Transaction>;
     fn get(&self, transaction_id: TransactionId) -> RepoResult<Option<Transaction>>;
@@ -25,7 +32,13 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn get_accounts_balance(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
-    fn get_with_enough_value(&self, value: Amount, currency: Currency, user_id: UserId) -> RepoResult<Vec<AccountWithBalance>>;
+    fn get_with_enough_value(
+        &self,
+        value: Amount,
+        currency: Currency,
+        user_id: UserId,
+        fee_per_tx: Amount,
+    ) -> RepoResult<Vec<AccountWithBalance>>;
 }
 
 #[derive(Clone, Default)]
@@ -214,8 +227,23 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 }).collect()
         })
     }
-    fn get_with_enough_value(&self, mut value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<AccountWithBalance>> {
+
+    // Get accounts and balance = how much we should withdraw, net of fees
+    // E.g. if fee is 1 STQ and total balance is 10 STQ, then this function will return
+    // 9 STQ in balance
+    fn get_with_enough_value(
+        &self,
+        mut value_: Amount,
+        currency_: Currency,
+        user_id_: UserId,
+        fee_per_tx: Amount,
+    ) -> RepoResult<Vec<AccountWithBalance>> {
         with_tls_connection(|conn| {
+            let minimum_balance = match currency_ {
+                Currency::Btc => MIN_SIGNIFICANT_SATOSHIS,
+                Currency::Eth => MIN_SIGNIFICANT_ETH,
+                Currency::Stq => MIN_SIGNIFICANT_STQ,
+            };
             // get all dr accounts
             let dr_sum_accounts: Vec<TransactionSum> =
                 sql_query(
@@ -251,10 +279,11 @@ impl TransactionsRepo for TransactionsRepoImpl {
             }
 
             // filtering accounts with empty balance
-            let mut remaining_accounts: HashMap<AccountId, Amount> = dr_sum_accounts.into_iter().filter(|(_, sum)| sum.raw() > 0).collect();
+            let mut remaining_accounts: HashMap<AccountId, Amount> =
+                dr_sum_accounts.into_iter().filter(|(_, sum)| sum.raw() > minimum_balance).collect();
 
             // filtering accounts with pending transactions
-            let pending_accounts: Vec<Transaction> = transactions
+            let pending_transactions: Vec<Transaction> = transactions
                 .filter(user_id.eq(&user_id_))
                 .filter(currency.eq(currency_))
                 .filter(status.eq(TransactionStatus::Pending))
@@ -264,9 +293,9 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     ectx!(try err e, error_kind => value_, currency_, user_id_)
                 })?;
 
-            for acc in pending_accounts {
-                remaining_accounts.remove(&acc.cr_account_id);
-                remaining_accounts.remove(&acc.dr_account_id);
+            for tx in pending_transactions {
+                remaining_accounts.remove(&tx.cr_account_id);
+                remaining_accounts.remove(&tx.dr_account_id);
             }
 
             let res_account_ids: Vec<AccountId> = remaining_accounts.keys().cloned().collect();
@@ -291,19 +320,15 @@ impl TransactionsRepo for TransactionsRepoImpl {
             // calculating accounts to take
             let mut r = vec![];
             for (acc, balance) in res_accounts {
+                let balance = balance.checked_sub(fee_per_tx).unwrap_or(Amount::new(0));
                 if balance >= value_ {
                     r.push(AccountWithBalance {
                         account: acc,
                         balance: value_,
                     });
                 } else {
-                    if let Some(new_balance) = value_.checked_sub(balance) {
-                        value_ = new_balance;
-                        r.push(AccountWithBalance {
-                            account: acc,
-                            balance: value_,
-                        });
-                    }
+                    value_ = value_.checked_sub(balance).expect("Unexpected < 0 value");
+                    r.push(AccountWithBalance { account: acc, balance });
                 }
             }
 
