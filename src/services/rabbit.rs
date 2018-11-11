@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use super::error::*;
+use super::system::{SystemService, SystemServiceImpl};
+use config::Config;
 use models::*;
 use prelude::*;
 use repos::{
@@ -18,11 +20,13 @@ pub struct BlockchainFetcher<E: DbExecutor> {
     blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
     strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
     pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+    system_service: Arc<SystemService>,
     db_executor: E,
 }
 
 impl<E: DbExecutor> BlockchainFetcher<E> {
     pub fn new(
+        config: Arc<Config>,
         transactions_repo: Arc<TransactionsRepo>,
         accounts_repo: Arc<AccountsRepo>,
         seen_hashes_repo: Arc<SeenHashesRepo>,
@@ -31,6 +35,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
         db_executor: E,
     ) -> Self {
+        let system_service = Arc::new(SystemServiceImpl::new(accounts_repo.clone(), config.clone()));
         BlockchainFetcher {
             transactions_repo,
             accounts_repo,
@@ -38,6 +43,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             blockchain_transactions_repo,
             strange_blockchain_transactions_repo,
             pending_blockchain_transactions_repo,
+            system_service,
             db_executor,
         }
     }
@@ -98,10 +104,31 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 self.handle_violation(violation, &blockchain_tx)?;
                 return Ok(());
             }
+            let fees_currency = match blockchain_tx.currency {
+                Currency::Btc => Currency::Btc,
+                Currency::Eth => Currency::Eth,
+                Currency::Stq => Currency::Stq,
+            };
+            let fees_account = self.system_service.get_system_fees_account(fees_currency)?;
             self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
             self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
             self.transactions_repo
                 .update_status(blockchain_tx.hash.clone(), TransactionStatus::Done)?;
+            let fee_tx = NewTransaction {
+                id: TransactionId::generate(),
+                gid: tx.gid,
+                user_id: tx.user_id,
+                dr_account_id: fees_account.id,
+                cr_account_id: tx.cr_account_id, // dr account is in credit of withdrawal tx
+                currency: tx.currency,
+                value: blockchain_tx.fee,
+                status: TransactionStatus::Done,
+                blockchain_tx_id: None,
+                kind: TransactionKind::BlockchainFee,
+                group_kind: tx.group_kind,
+                related_tx: None,
+            };
+            self.transactions_repo.create(fee_tx)?;
             self.seen_hashes_repo.create(NewSeenHashes {
                 hash: blockchain_tx.hash.clone(),
                 block_number: blockchain_tx.block_number as i64,

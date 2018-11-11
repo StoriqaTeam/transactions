@@ -5,6 +5,7 @@ mod exchange;
 #[cfg(test)]
 mod mocks;
 mod rabbit;
+mod system;
 mod transactions;
 mod users;
 

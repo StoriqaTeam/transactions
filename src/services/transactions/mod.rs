@@ -1,7 +1,6 @@
 mod blockchain;
 mod classifier;
 mod converter;
-mod system;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,9 +11,9 @@ use futures::prelude::*;
 use self::blockchain::{BlockchainService, BlockchainServiceImpl, FeeEstimate};
 use self::classifier::{ClassifierService, ClassifierServiceImpl, TransactionType};
 use self::converter::{ConverterService, ConverterServiceImpl};
-use self::system::{SystemService, SystemServiceImpl};
 use super::auth::AuthService;
 use super::error::*;
+use super::system::{SystemService, SystemServiceImpl};
 use client::BlockchainClient;
 use client::ExchangeClient;
 use client::KeysClient;

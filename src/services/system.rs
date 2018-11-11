@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::super::error::*;
+use super::error::*;
 use config::Config;
 use models::*;
 use prelude::*;

@@ -114,6 +114,7 @@ pub fn start_server() {
         let strange_blockchain_transactions_repo = Arc::new(StrangeBlockchainTransactionsRepoImpl);
         let pending_blockchain_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoImpl);
         let fetcher = BlockchainFetcher::new(
+            Arc::new(config_clone.clone()),
             transactions_repo,
             accounts_repo,
             seen_hashes_repo,
