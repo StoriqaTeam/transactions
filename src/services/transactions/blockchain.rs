@@ -29,7 +29,7 @@ pub trait BlockchainService: Send + Sync + 'static {
         fee: Amount,
         currency: Currency,
     ) -> Result<BlockchainTransactionId, Error>;
-    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, currency: Currency) -> Result<FeeEstimate, Error>;
+    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, fee_currency: Currency, fee_estimate_currency: Currency) -> Result<FeeEstimate, Error> {
 }
 
 #[derive(Clone)]
@@ -60,8 +60,8 @@ impl BlockchainServiceImpl {
 }
 
 impl BlockchainService for BlockchainServiceImpl {
-    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, currency: Currency) -> Result<FeeEstimate, Error> {
-        let base = match currency {
+    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, fee_currency: Currency, fee_estimate_currency: Currency) -> Result<FeeEstimate, Error> {
+        let base = match fee_currency {
             Currency::Btc => self.config.fees_options.btc_transaction_size,
             Currency::Eth => self.config.fees_options.eth_gas_limit,
             Currency::Stq => self.config.fees_options.stq_gas_limit,

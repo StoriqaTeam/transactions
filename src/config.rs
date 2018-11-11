@@ -81,6 +81,9 @@ pub struct Rabbit {
 #[derive(Debug, Deserialize, Clone)]
 pub struct System {
     pub system_user_id: UserId,
+    pub btc_transfer_account_id: AccountId,
+    pub eth_transfer_account_id: AccountId,
+    pub stq_transfer_account_id: AccountId,
     pub btc_liquidity_account_id: AccountId,
     pub eth_liquidity_account_id: AccountId,
     pub stq_liquidity_account_id: AccountId,

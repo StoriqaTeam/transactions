@@ -29,6 +29,9 @@ restart_subscription_secs = 30
 
 [system]
 system_user_id = "00000000-0000-4000-8000-010000000000"
+btc_transfer_account_id = "00000000-0000-4000-8000-010000000000"
+eth_transfer_account_id = "00000000-0000-4000-8000-020000000000"
+stq_transfer_account_id = "00000000-0000-4000-8000-030000000000"
 btc_liquidity_account_id = "00000000-0000-4000-8000-0a0000000000"
 eth_liquidity_account_id = "00000000-0000-4000-8000-0b0000000000"
 stq_liquidity_account_id = "00000000-0000-4000-8000-0c0000000000"

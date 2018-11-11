@@ -361,6 +361,22 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         Ok(res)
     }
+
+    fn create_external_multi_currency_tx(
+        &self,
+        input: CreateTransactionInput,
+        from_account: Account,
+        to_blockchain_address: BlockchainAddress,
+        to_currency: Currency,
+        exchange_id: ExchangeId,
+        exchange_rate: f64,
+    ) -> Result<Vec<Transaction>, Error> {
+        let transfer_account = self.system_service.get_system_transfer_account(to_currency)?;
+        let mut res: Vec<Transaction> = Vec::new();
+        let txs = self.create_internal_mono_currency_tx(input.clone(), from_account, transfer_account.clone());
+        let withdrawal_value = txs.iter().find(|tx| tx.kind == TransactionKind::MultiTo).unwrap().value;
+        unimplemented!()
+    }
 }
 
 impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
@@ -378,18 +394,19 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 let mut core = Core::new().unwrap();
                 let tx_type = self_clone.classifier_service.validate_and_classify_transaction(&input)?;
                 let f = future::lazy(|| {
-                    let tx_group = match tx_type {
-                        TransactionType::Internal(from_account, to_account) => self_clone
-                            .create_internal_mono_currency_tx(input, from_account, to_account)
-                            .map(|tx| vec![tx]),
-                        TransactionType::Withdrawal(from_account, to_blockchain_address, currency) => {
-                            self_clone.create_external_mono_currency_tx(input, from_account, to_blockchain_address, currency, None, None)
-                        }
-                        TransactionType::InternalExchange(from, to, exchange_id, rate) => {
-                            self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
-                        }
-                        _ => return Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput => tx_type, input_clone)),
-                    }?;
+                    let tx_group =
+                        match tx_type {
+                            TransactionType::Internal(from_account, to_account) => self_clone
+                                .create_internal_mono_currency_tx(input, from_account, to_account)
+                                .map(|tx| vec![tx]),
+                            TransactionType::Withdrawal(from_account, to_blockchain_address, currency) => self_clone
+                                .create_external_mono_currency_tx(input, from_account, to_blockchain_address, currency, None, None),
+                            TransactionType::InternalExchange(from, to, exchange_id, rate) => {
+                                self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
+                            }
+                            TransactionType::WithdrawalExchange(from, to_blockchain_address, to_currency, exchange_id, rate) => self_clone
+                                .create_external_multi_currency_tx(input, from, to_blockchain_address, to_currency, exchange_id, rate),
+                        }?;
                     self_clone.converter_service.convert_transaction(tx_group)
                 });
                 core.run(f)

@@ -266,6 +266,9 @@ pub fn upsert_system_accounts() {
     let config_clone = config.clone();
 
     let System {
+        btc_transfer_account_id,
+        eth_transfer_account_id,
+        stq_transfer_account_id,
         btc_liquidity_account_id,
         eth_liquidity_account_id,
         stq_liquidity_account_id,
@@ -294,6 +297,9 @@ pub fn upsert_system_accounts() {
         }).and_then(move |user| {
             let keys_client = keys_client.clone();
             let inputs = [
+                (btc_transfer_account_id, user.id, Currency::Btc, "btc_transfer_account"),
+                (eth_transfer_account_id, user.id, Currency::Eth, "eth_transfer_account"),
+                (stq_transfer_account_id, user.id, Currency::Stq, "stq_transfer_account"),
                 (btc_liquidity_account_id, user.id, Currency::Btc, "btc_liquidity_account"),
                 (eth_liquidity_account_id, user.id, Currency::Eth, "eth_liquidity_account"),
                 (stq_liquidity_account_id, user.id, Currency::Stq, "stq_liquidity_account"),
