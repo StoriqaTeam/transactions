@@ -9,8 +9,9 @@ use repos::PendingBlockchainTransactionsRepo;
 use utils::log_and_capture_error;
 
 pub struct FeeEstimate {
-    pub total_fee: Amount,
+    pub gross_fee: Amount,
     pub fee_price: Amount,
+    pub currency: Currency,
 }
 
 pub trait BlockchainService: Send + Sync + 'static {
@@ -29,7 +30,12 @@ pub trait BlockchainService: Send + Sync + 'static {
         fee: Amount,
         currency: Currency,
     ) -> Result<BlockchainTransactionId, Error>;
-    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, fee_currency: Currency, fee_estimate_currency: Currency) -> Result<FeeEstimate, Error> {
+    fn estimate_withdrawal_fee(
+        &self,
+        input_gross_fee: Amount,
+        input_fee_currency: Currency,
+        withdrawal_currency: Currency,
+    ) -> Result<FeeEstimate, Error>;
 }
 
 #[derive(Clone)]
@@ -60,60 +66,56 @@ impl BlockchainServiceImpl {
 }
 
 impl BlockchainService for BlockchainServiceImpl {
-    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, fee_currency: Currency, fee_estimate_currency: Currency) -> Result<FeeEstimate, Error> {
-        let base = match fee_currency {
+    // Note that withdrawal_currency may not equal to FeeEstimate currency. E.g. if
+    // withdrawal_currency = stq, FeeEstimate currency will = eth (since you need eth to withdraw stq)
+    fn estimate_withdrawal_fee(
+        &self,
+        input_gross_fee: Amount,
+        input_fee_currency: Currency,
+        withdrawal_currency: Currency,
+    ) -> Result<FeeEstimate, Error> {
+        let base = match withdrawal_currency {
             Currency::Btc => self.config.fees_options.btc_transaction_size,
             Currency::Eth => self.config.fees_options.eth_gas_limit,
             Currency::Stq => self.config.fees_options.stq_gas_limit,
         };
         let base = Amount::new(base as u128);
-        let total_blockchain_fee_native_currency = total_fee
+        let total_blockchain_fee_native_currency = input_gross_fee
             .checked_div(Amount::new(self.config.fees_options.fee_upside as u128))
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
-        match currency {
-            Currency::Stq => {
-                let input_rate = RateInput {
-                    id: ExchangeId::generate(),
-                    from: Currency::Stq,
-                    to: Currency::Eth,
-                    amount: total_blockchain_fee_native_currency,
-                    amount_currency: Currency::Stq,
-                };
-                // Todo - fix client endpoint
-                let Rate { rate, .. } = self
-                    .exchange_client
-                    .rate(input_rate.clone(), Role::System)
-                    .wait()
-                    .map_err(ectx!(try ErrorKind::Internal => input_rate))?;
-                let total_eth_fee = total_blockchain_fee_native_currency.convert(Currency::Stq, rate);
-                let fee_price = total_eth_fee
-                    .checked_div(base)
-                    .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
-                Ok(FeeEstimate {
-                    total_fee: total_eth_fee,
-                    fee_price,
-                })
-            }
-            Currency::Eth => {
-                let fee_price = total_blockchain_fee_native_currency
-                    .checked_div(base)
-                    .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
-                Ok(FeeEstimate {
-                    total_fee: total_blockchain_fee_native_currency,
-                    fee_price,
-                })
-            }
-            Currency::Btc => {
-                let fee_price = total_blockchain_fee_native_currency
-                    .checked_div(base)
-                    .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
-                Ok(FeeEstimate {
-                    total_fee: total_blockchain_fee_native_currency,
-                    fee_price,
-                })
-            }
-        }
+        let estimate_currency = match withdrawal_currency {
+            Currency::Btc => Currency::Btc,
+            Currency::Eth => Currency::Eth,
+            Currency::Stq => Currency::Eth,
+        };
+        let total_blockchain_fee_esitmate_currency = if input_fee_currency == estimate_currency {
+            total_blockchain_fee_native_currency
+        } else {
+            let input_rate = RateInput {
+                id: ExchangeId::generate(),
+                from: input_fee_currency,
+                to: estimate_currency,
+                amount: total_blockchain_fee_native_currency,
+                amount_currency: input_fee_currency,
+            };
+            // Todo - fix client endpoint
+            let Rate { rate, .. } = self
+                .exchange_client
+                .rate(input_rate.clone(), Role::System)
+                .wait()
+                .map_err(ectx!(try ErrorKind::Internal => input_rate))?;
+            total_blockchain_fee_native_currency.convert(input_fee_currency, rate)
+        };
+        let fee_price = total_blockchain_fee_esitmate_currency
+            .checked_div(base)
+            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+        Ok(FeeEstimate {
+            gross_fee: total_blockchain_fee_esitmate_currency,
+            fee_price,
+            currency: estimate_currency,
+        })
     }
+
     fn create_bitcoin_tx(
         &self,
         from: BlockchainAddress,

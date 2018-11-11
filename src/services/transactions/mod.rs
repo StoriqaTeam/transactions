@@ -171,18 +171,28 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         to_currency: Currency,
         // these group params will be filled with defaults for external mono currency
         // to reuse it in external withdrawal, we put overrides here
+        gid: Option<TransactionId>,
         tx_kind: Option<TransactionKind>,
         tx_group_kind: Option<TransactionGroupKind>,
+        fee_currency: Option<Currency>,
+        // by default the fee is written off from_account. However you can override this
+        // using this param
+        fee_payer_account_id: Option<AccountId>,
     ) -> Result<Vec<Transaction>, Error> {
         if from_account.currency != to_currency {
             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_blockchain_address, to_currency));
         };
 
+        let gid = gid.unwrap_or(input.id);
         let value = input.value;
+        let fee_currency = fee_currency.unwrap_or(from_account.currency);
         let FeeEstimate {
-            total_fee: total_fee_est,
+            gross_fee: total_fee_est,
             fee_price: fee_price_est,
-        } = self.blockchain_service.estimate_withdrawal_fee_price(input.fee, to_currency)?;
+            ..
+        } = self
+            .blockchain_service
+            .estimate_withdrawal_fee(input.fee, fee_currency, to_currency)?;
         let user_id = input.user_id;
         let withdrawal_accs_with_balance = self
             .transactions_repo
@@ -239,7 +249,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 Ok(blockchain_tx_id) => {
                     let new_tx = NewTransaction {
                         id: current_tx_id,
-                        gid: input.id,
+                        gid,
                         user_id: input.user_id,
                         dr_account_id: from_account.id,
                         cr_account_id: acc.id,
@@ -270,11 +280,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         }
         let fee_tx = NewTransaction {
             id: current_tx_id,
-            gid: input.id,
+            gid,
             user_id: input.user_id,
-            dr_account_id: from_account.id,
+            dr_account_id: fee_payer_account_id.unwrap_or(from_account.id),
             cr_account_id: fees_account.id,
-            currency: to_currency,
+            currency: fee_currency,
             value: input.fee,
             status: TransactionStatus::Done,
             blockchain_tx_id: None,
@@ -373,9 +383,37 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
     ) -> Result<Vec<Transaction>, Error> {
         let transfer_account = self.system_service.get_system_transfer_account(to_currency)?;
         let mut res: Vec<Transaction> = Vec::new();
-        let txs = self.create_internal_mono_currency_tx(input.clone(), from_account, transfer_account.clone());
+        let txs = self.create_internal_multi_currency_tx(
+            input.clone(),
+            from_account.clone(),
+            transfer_account.clone(),
+            exchange_id,
+            exchange_rate,
+        )?;
         let withdrawal_value = txs.iter().find(|tx| tx.kind == TransactionKind::MultiTo).unwrap().value;
-        unimplemented!()
+        res.extend(txs.into_iter());
+        let gid = input.id;
+        let id = input.id.next().next(); // create_internal_multi_currency_tx took 2 ids
+        let input = CreateTransactionInput {
+            id,
+            from: transfer_account.id,
+            value: withdrawal_value,
+            value_currency: to_currency,
+            ..input
+        };
+        let txs = self.create_external_mono_currency_tx(
+            input,
+            transfer_account,
+            to_blockchain_address,
+            to_currency,
+            Some(gid),
+            Some(TransactionKind::Withdrawal),
+            Some(TransactionGroupKind::WithdrawalMulti),
+            Some(from_account.currency),
+            Some(from_account.id),
+        )?;
+        res.extend(txs.into_iter());
+        Ok(res)
     }
 }
 
@@ -394,19 +432,29 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                 let mut core = Core::new().unwrap();
                 let tx_type = self_clone.classifier_service.validate_and_classify_transaction(&input)?;
                 let f = future::lazy(|| {
-                    let tx_group =
-                        match tx_type {
-                            TransactionType::Internal(from_account, to_account) => self_clone
-                                .create_internal_mono_currency_tx(input, from_account, to_account)
-                                .map(|tx| vec![tx]),
-                            TransactionType::Withdrawal(from_account, to_blockchain_address, currency) => self_clone
-                                .create_external_mono_currency_tx(input, from_account, to_blockchain_address, currency, None, None),
-                            TransactionType::InternalExchange(from, to, exchange_id, rate) => {
-                                self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
-                            }
-                            TransactionType::WithdrawalExchange(from, to_blockchain_address, to_currency, exchange_id, rate) => self_clone
-                                .create_external_multi_currency_tx(input, from, to_blockchain_address, to_currency, exchange_id, rate),
-                        }?;
+                    let tx_group = match tx_type {
+                        TransactionType::Internal(from_account, to_account) => self_clone
+                            .create_internal_mono_currency_tx(input, from_account, to_account)
+                            .map(|tx| vec![tx]),
+                        TransactionType::Withdrawal(from_account, to_blockchain_address, currency) => self_clone
+                            .create_external_mono_currency_tx(
+                                input,
+                                from_account,
+                                to_blockchain_address,
+                                currency,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                            ),
+                        TransactionType::InternalExchange(from, to, exchange_id, rate) => {
+                            self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
+                        }
+                        TransactionType::WithdrawalExchange(from, to_blockchain_address, to_currency, exchange_id, rate) => {
+                            self_clone.create_external_multi_currency_tx(input, from, to_blockchain_address, to_currency, exchange_id, rate)
+                        }
+                    }?;
                     self_clone.converter_service.convert_transaction(tx_group)
                 });
                 core.run(f)
