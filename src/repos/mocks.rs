@@ -275,7 +275,13 @@ impl TransactionsRepo for TransactionsRepoMock {
         Ok(u.unwrap())
     }
 
-    fn get_with_enough_value(&self, value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<AccountWithBalance>> {
+    fn get_accounts_for_withdrawal(
+        &self,
+        value_: Amount,
+        currency_: Currency,
+        user_id_: UserId,
+        _fee_per_tx: Amount,
+    ) -> RepoResult<Vec<AccountWithBalance>> {
         let data = self.data.lock().unwrap();
         Ok(data
             .clone()

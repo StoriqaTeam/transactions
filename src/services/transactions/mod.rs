@@ -9,7 +9,7 @@ use std::sync::Arc;
 use futures::future;
 use futures::prelude::*;
 
-use self::blockchain::{BlockchainService, BlockchainServiceImpl};
+use self::blockchain::{BlockchainService, BlockchainServiceImpl, FeeEstimate};
 use self::classifier::{ClassifierService, ClassifierServiceImpl, TransactionType};
 use self::converter::{ConverterService, ConverterServiceImpl};
 use self::system::{SystemService, SystemServiceImpl};
@@ -89,8 +89,10 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
     ) -> Self {
         let config = Arc::new(config);
         let blockchain_service = Arc::new(BlockchainServiceImpl::new(
+            config.clone(),
             keys_client,
             blockchain_client,
+            exchange_client.clone(),
             pending_transactions_repo,
         ));
         let classifier_service = Arc::new(ClassifierServiceImpl::new(accounts_repo.clone()));
@@ -166,22 +168,30 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         from_account: Account,
         to_blockchain_address: BlockchainAddress,
         to_currency: Currency,
+        // these group params will be filled with defaults for external mono currency
+        // to reuse it in external withdrawal, we put overrides here
+        tx_kind: Option<TransactionKind>,
+        tx_group_kind: Option<TransactionGroupKind>,
     ) -> Result<Vec<Transaction>, Error> {
         if from_account.currency != to_currency {
-            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_account_address, currency));
+            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_blockchain_address, to_currency));
         };
 
         let value = input.value;
-        let fee_est = self.blockchain_service.estimate_fee(fee_price: Amount, currency: Currency)
+        let FeeEstimate {
+            total_fee: total_fee_est,
+            fee_price: fee_price_est,
+        } = self.blockchain_service.estimate_withdrawal_fee_price(input.fee, to_currency)?;
         let withdrawal_accs_with_balance = self
             .transactions_repo
-            .get_with_enough_value(value, to_currency, input.user_id)
+            .get_accounts_for_withdrawal(value, to_currency, input.user_id, total_fee_est)
             .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, to_currency, input.user_id))?;
 
+        let mut total_value = Amount::new(0);
         //double check
         for AccountWithBalance {
             account: acc,
-            balance: needed_amount,
+            balance: value,
         } in &withdrawal_accs_with_balance
         {
             let acc_id = acc.id;
@@ -189,13 +199,21 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 .transactions_repo
                 .get_account_balance(acc_id, AccountKind::Dr)
                 .map_err(ectx!(try convert => acc_id))?;
-            if balance < *needed_amount {
-                return Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, needed_amount));
+            if balance < *value {
+                return Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, value));
             }
+            total_value = total_value
+                .checked_add(*value)
+                .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+        }
+
+        if total_value != input.value {
+            return Err(ectx!(ErrorContext::InvalidValue, ErrorKind::Internal => input.clone()));
         }
 
         let mut res: Vec<Transaction> = Vec::new();
         let mut current_tx_id = input.id;
+        let fees_account = self.system_service.get_system_fees_account(to_currency)?;
 
         for AccountWithBalance {
             account: acc,
@@ -203,39 +221,39 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         } in &withdrawal_accs_with_balance
         {
             let to = to_blockchain_address.clone();
-            // Todo this fee is ineffective, since keys client take system's fee
-            let fee = Amount::new(0);
-            // Note - we don't do early exit here, since we need to complete our transaction with previously
-            // written transactions
             let blockchain_tx_id_res = match to_currency {
                 Currency::Eth => self
                     .blockchain_service
-                    .create_ethereum_tx(acc.address.clone(), to, *value, fee, Currency::Eth),
+                    .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Eth),
                 Currency::Stq => self
                     .blockchain_service
-                    .create_ethereum_tx(acc.address.clone(), to, *value, fee, Currency::Stq),
-                Currency::Btc => self.blockchain_service.create_bitcoin_tx(acc.address.clone(), to, *value, fee),
+                    .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Stq),
+                Currency::Btc => self
+                    .blockchain_service
+                    .create_bitcoin_tx(acc.address.clone(), to, *value, fee_price_est),
             };
 
             match blockchain_tx_id_res {
                 Ok(blockchain_tx_id) => {
-                    let input_next_id = CreateTransactionInput {
-                        id: tx_id,
-                        ..input.clone()
+                    let new_tx = NewTransaction {
+                        id: current_tx_id,
+                        gid: input.id,
+                        user_id: input.user_id,
+                        dr_account_id: from_account.id,
+                        cr_account_id: acc.id,
+                        currency: to_currency,
+                        value: *value,
+                        status: TransactionStatus::Pending,
+                        blockchain_tx_id: Some(blockchain_tx_id),
+                        kind: tx_kind.unwrap_or(TransactionKind::Withdrawal),
+                        group_kind: tx_group_kind.unwrap_or(TransactionGroupKind::Withdrawal),
+                        related_tx: None,
                     };
-                    let txs = self.create_internal_mono_currency_tx(
-                        input_next_id,
-                        from_account.clone(),
-                        acc.clone(),
-                        Some(blockchain_tx_id),
-                        TransactionStatus::Pending,
-                        input.id,
-                        TransactionKind::Withdrawal,
-                        TransactionGroupKind::Withdrawal,
-                        None,
-                    )?;
-                    res.extend(txs.into_iter());
+                    res.push(self.create_base_tx(new_tx, from_account.clone(), acc.clone())?);
+                    current_tx_id = current_tx_id.next();
                 }
+                // Note - we don't do early exit here, since we need to complete our transaction with previously
+                // written transactions
                 Err(e) => {
                     if res.len() == 0 {
                         // didn't write any transaction to blockchain, so safe to abort
@@ -247,27 +265,22 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                     }
                 }
             }
-            tx_id = tx_id.next();
         }
-
-        tx_id = tx_id.next();
-        let system_fees_account = self.get_system_fees_account(currency)?;
-        let input_next_id = CreateTransactionInput {
-            id: tx_id,
-            ..input.clone()
+        let fee_tx = NewTransaction {
+            id: current_tx_id,
+            gid: input.id,
+            user_id: input.user_id,
+            dr_account_id: from_account.id,
+            cr_account_id: fees_account.id,
+            currency: to_currency,
+            value: input.fee,
+            status: TransactionStatus::Done,
+            blockchain_tx_id: None,
+            kind: TransactionKind::Fee,
+            group_kind: tx_group_kind.unwrap_or(TransactionGroupKind::Withdrawal),
+            related_tx: None,
         };
-        let txs = self.create_internal_mono_currency_tx(
-            input_next_id,
-            from_account.clone(),
-            system_fees_account,
-            None,
-            TransactionStatus::Done,
-            input.id,
-            TransactionKind::Fee,
-            TransactionGroupKind::Withdrawal,
-            None,
-        )?;
-        res.extend(txs.into_iter());
+        res.push(self.create_base_tx(fee_tx, from_account.clone(), fees_account.clone())?);
 
         Ok(res)
     }

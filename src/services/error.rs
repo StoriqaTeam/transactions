@@ -69,6 +69,8 @@ pub enum ErrorContext {
     InvalidUuid,
     #[fail(display = "service error context - operation not yet supproted")]
     NotSupported,
+    #[fail(display = "service error context - invalid value")]
+    InvalidValue,
 }
 
 derive_error_impls!();

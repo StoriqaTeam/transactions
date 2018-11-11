@@ -32,7 +32,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn get_accounts_balance(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
-    fn get_with_enough_value(
+    fn get_accounts_for_withdrawal(
         &self,
         value: Amount,
         currency: Currency,
@@ -231,7 +231,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
     // Get accounts and balance = how much we should withdraw, net of fees
     // E.g. if fee is 1 STQ and total balance is 10 STQ, then this function will return
     // 9 STQ in balance
-    fn get_with_enough_value(
+    fn get_accounts_for_withdrawal(
         &self,
         mut value_: Amount,
         currency_: Currency,
@@ -239,9 +239,18 @@ impl TransactionsRepo for TransactionsRepoImpl {
         fee_per_tx: Amount,
     ) -> RepoResult<Vec<AccountWithBalance>> {
         with_tls_connection(|conn| {
+            let fee_per_tx = match currency_ {
+                // we can drain stq account to 0,
+                Currency::Stq => Amount::new(0),
+                Currency::Eth => fee_per_tx,
+                Currency::Btc => fee_per_tx,
+            };
             let minimum_balance = match currency_ {
                 Currency::Btc => MIN_SIGNIFICANT_SATOSHIS,
                 Currency::Eth => MIN_SIGNIFICANT_ETH,
+                // While we don't incur STQ expenses on STQ withdrawals, we could theoretically
+                // drain STQ accounts up to 0. But it's not worth doing it, if acc balance < MIN_SIGNIFICANT_STQ
+                // i.e. withdrawal will not worth it
                 Currency::Stq => MIN_SIGNIFICANT_STQ,
             };
             // get all dr accounts
@@ -591,7 +600,7 @@ pub mod tests {
     //         trans.value = Amount::new(123);
 
     //         let _ = transactions_repo.create(trans).unwrap();
-    //         let res = accounts_repo.get_with_enough_value(Amount::new(123), Currency::Eth, user.id);
+    //         let res = accounts_repo.get_accounts_for_withdrawal(Amount::new(123), Currency::Eth, user.id);
     //         assert!(res.is_ok());
     //         res
     //     }));

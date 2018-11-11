@@ -8,6 +8,11 @@ use prelude::*;
 use repos::PendingBlockchainTransactionsRepo;
 use utils::log_and_capture_error;
 
+pub struct FeeEstimate {
+    pub total_fee: Amount,
+    pub fee_price: Amount,
+}
+
 pub trait BlockchainService: Send + Sync + 'static {
     fn create_bitcoin_tx(
         &self,
@@ -24,7 +29,7 @@ pub trait BlockchainService: Send + Sync + 'static {
         fee: Amount,
         currency: Currency,
     ) -> Result<BlockchainTransactionId, Error>;
-    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, currency: Currency) -> Result<Amount, Error>;
+    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, currency: Currency) -> Result<FeeEstimate, Error>;
 }
 
 #[derive(Clone)]
@@ -55,7 +60,7 @@ impl BlockchainServiceImpl {
 }
 
 impl BlockchainService for BlockchainServiceImpl {
-    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, currency: Currency) -> Result<Amount, Error> {
+    fn estimate_withdrawal_fee_price(&self, total_fee: Amount, currency: Currency) -> Result<FeeEstimate, Error> {
         let base = match currency {
             Currency::Btc => self.config.fees_options.btc_transaction_size,
             Currency::Eth => self.config.fees_options.eth_gas_limit,
@@ -74,18 +79,39 @@ impl BlockchainService for BlockchainServiceImpl {
                     amount: total_blockchain_fee_native_currency,
                     amount_currency: Currency::Stq,
                 };
-                let Rate { rate } = self.exchange_client.rate(input_rate, Role::System)?;
+                // Todo - fix client endpoint
+                let Rate { rate, .. } = self
+                    .exchange_client
+                    .rate(input_rate, Role::System)
+                    .wait()
+                    .map_err(ectx!(ErrorKind::Internal => input_rate))?;
                 let total_eth_fee = total_blockchain_fee_native_currency.convert(Currency::Stq, rate);
-                total_eth_fee
+                let fee_price = total_eth_fee
                     .checked_div(base)
-                    .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal))
+                    .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                Ok(FeeEstimate {
+                    total_fee: total_eth_fee,
+                    fee_price,
+                })
             }
-            Currency::Eth => total_blockchain_fee_native_currency
-                .checked_div(base)
-                .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal)),
-            Currency::Btc => total_blockchain_fee_native_currency
-                .checked_div(base)
-                .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal)),
+            Currency::Eth => {
+                let fee_price = total_blockchain_fee_native_currency
+                    .checked_div(base)
+                    .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                Ok(FeeEstimate {
+                    total_fee: total_blockchain_fee_native_currency,
+                    fee_price,
+                })
+            }
+            Currency::Btc => {
+                let fee_price = total_blockchain_fee_native_currency
+                    .checked_div(base)
+                    .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                Ok(FeeEstimate {
+                    total_fee: total_blockchain_fee_native_currency,
+                    fee_price,
+                })
+            }
         }
     }
     fn create_bitcoin_tx(

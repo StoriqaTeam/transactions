@@ -258,7 +258,7 @@ pub mod tests {
     //         let mut new_account = NewAccount::default();
     //         new_account.user_id = user.id;
     //         new_account.kind = AccountKind::Dr;
-    //         let res = accounts_repo.get_with_enough_value(Amount::new(123), Currency::Eth, user.id);
+    //         let res = accounts_repo.get_accounts_for_withdrawal(Amount::new(123), Currency::Eth, user.id);
     //         assert!(res.is_ok());
     //         res
     //     }));
