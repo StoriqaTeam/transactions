@@ -82,13 +82,13 @@ impl BlockchainService for BlockchainServiceImpl {
                 // Todo - fix client endpoint
                 let Rate { rate, .. } = self
                     .exchange_client
-                    .rate(input_rate, Role::System)
+                    .rate(input_rate.clone(), Role::System)
                     .wait()
-                    .map_err(ectx!(ErrorKind::Internal => input_rate))?;
+                    .map_err(ectx!(try ErrorKind::Internal => input_rate))?;
                 let total_eth_fee = total_blockchain_fee_native_currency.convert(Currency::Stq, rate);
                 let fee_price = total_eth_fee
                     .checked_div(base)
-                    .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                    .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
                 Ok(FeeEstimate {
                     total_fee: total_eth_fee,
                     fee_price,
@@ -97,7 +97,7 @@ impl BlockchainService for BlockchainServiceImpl {
             Currency::Eth => {
                 let fee_price = total_blockchain_fee_native_currency
                     .checked_div(base)
-                    .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                    .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
                 Ok(FeeEstimate {
                     total_fee: total_blockchain_fee_native_currency,
                     fee_price,
@@ -106,7 +106,7 @@ impl BlockchainService for BlockchainServiceImpl {
             Currency::Btc => {
                 let fee_price = total_blockchain_fee_native_currency
                     .checked_div(base)
-                    .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                    .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
                 Ok(FeeEstimate {
                     total_fee: total_blockchain_fee_native_currency,
                     fee_price,

@@ -93,15 +93,15 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             keys_client,
             blockchain_client,
             exchange_client.clone(),
-            pending_transactions_repo,
+            pending_transactions_repo.clone(),
         ));
         let classifier_service = Arc::new(ClassifierServiceImpl::new(accounts_repo.clone()));
-        let system_service = Arc::new(SystemServiceImpl::new(accounts_repo.clone(), config));
+        let system_service = Arc::new(SystemServiceImpl::new(accounts_repo.clone(), config.clone()));
         let converter_service = Arc::new(ConverterServiceImpl::new(
             accounts_repo.clone(),
             pending_transactions_repo.clone(),
             blockchain_transactions_repo.clone(),
-            system_service,
+            system_service.clone(),
         ));
         Self {
             config: config.clone(),
@@ -127,11 +127,12 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 ectx!(err ErrorContext::InvalidTransaction, ErrorKind::Internal => tx.clone(), dr_account.clone(), cr_account.clone()),
             );
         }
+        let tx_clone = tx.clone();
         let balance = self
             .transactions_repo
             .get_accounts_balance(tx.user_id, &[dr_account])
             .map(|accounts| accounts[0].balance)
-            .map_err(ectx!(try convert => tx.clone()))?;
+            .map_err(ectx!(try convert => tx_clone))?;
         if balance >= tx.value {
             self.transactions_repo.create(tx.clone()).map_err(ectx!(convert => tx.clone()))
         } else {
@@ -182,10 +183,11 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             total_fee: total_fee_est,
             fee_price: fee_price_est,
         } = self.blockchain_service.estimate_withdrawal_fee_price(input.fee, to_currency)?;
+        let user_id = input.user_id;
         let withdrawal_accs_with_balance = self
             .transactions_repo
             .get_accounts_for_withdrawal(value, to_currency, input.user_id, total_fee_est)
-            .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, to_currency, input.user_id))?;
+            .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, to_currency, user_id))?;
 
         let mut total_value = Amount::new(0);
         //double check
@@ -208,7 +210,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         }
 
         if total_value != input.value {
-            return Err(ectx!(ErrorContext::InvalidValue, ErrorKind::Internal => input.clone()));
+            return Err(ectx!(err ErrorContext::InvalidValue, ErrorKind::Internal => input.clone()));
         }
 
         let mut res: Vec<Transaction> = Vec::new();
@@ -300,7 +302,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         } else if to_account.currency == input.value_currency {
             (input.value.convert(to_account.currency, 1.0 / exchange_rate), input.value)
         } else {
-            return Err(ectx!(ErrorContext::InvalidCurrency, ErrorKind::Internal => input, from_account, to_account));
+            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => input, from_account, to_account));
         };
 
         let current_tx_id = input.id;
@@ -321,12 +323,12 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             group_kind: TransactionGroupKind::InternalMulti,
             related_tx: None,
         };
-        res.push(self.create_base_tx(from_tx, from_account, from_counterpart_acc)?);
+        res.push(self.create_base_tx(from_tx, from_account.clone(), from_counterpart_acc)?);
 
         // Moving money from system liquidity account to `to` account
         let current_tx_id = current_tx_id.next();
         let to_counterpart_acc = self.system_service.get_system_liquidity_account(to_account.currency)?;
-        let from_tx = NewTransaction {
+        let to_tx = NewTransaction {
             id: current_tx_id,
             gid: input.id,
             user_id: input.user_id,
@@ -340,7 +342,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             group_kind: TransactionGroupKind::InternalMulti,
             related_tx: None,
         };
-        res.push(self.create_base_tx(from_tx, from_account, from_counterpart_acc)?);
+        res.push(self.create_base_tx(to_tx, to_account.clone(), to_counterpart_acc)?);
 
         let exchange_input = ExchangeInput {
             id: exchange_id,
@@ -374,29 +376,21 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         Box::new(self.auth_service.authenticate(token.clone()).and_then(move |user| {
             db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
                 let mut core = Core::new().unwrap();
-                let tx_type = self_clone.validate_and_classify_transaction(&input)?;
+                let tx_type = self_clone.classifier_service.validate_and_classify_transaction(&input)?;
                 let f = future::lazy(|| {
                     let tx_group = match tx_type {
-                        TransactionType::Internal(from_account, to_account) => self_clone.create_internal_mono_currency_tx(
-                            input.clone(),
-                            from_account,
-                            to_account,
-                            None,
-                            TransactionStatus::Done,
-                            input.id,
-                            TransactionKind::Internal,
-                            TransactionGroupKind::Internal,
-                            None,
-                        ),
-                        TransactionType::Withdrawal(from_account, to_account_address, currency) => {
-                            self_clone.create_external_mono_currency_tx(user.id, input, from_account, to_account_address, currency)
+                        TransactionType::Internal(from_account, to_account) => self_clone
+                            .create_internal_mono_currency_tx(input, from_account, to_account)
+                            .map(|tx| vec![tx]),
+                        TransactionType::Withdrawal(from_account, to_blockchain_address, currency) => {
+                            self_clone.create_external_mono_currency_tx(input, from_account, to_blockchain_address, currency, None, None)
                         }
                         TransactionType::InternalExchange(from, to, exchange_id, rate) => {
                             self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
                         }
                         _ => return Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput => tx_type, input_clone)),
                     }?;
-                    self_clone.convert_transaction(tx_group)
+                    self_clone.converter_service.convert_transaction(tx_group)
                 });
                 core.run(f)
             })
@@ -410,7 +404,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
     ) -> Box<Future<Item = Option<TransactionOut>, Error = Error> + Send> {
         let transactions_repo = self.transactions_repo.clone();
         let db_executor = self.db_executor.clone();
-        let service = self.clone();
+        let self_clone = self.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
             db_executor.execute(move || {
                 let transaction = transactions_repo
@@ -423,7 +417,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     let tx_group = transactions_repo
                         .get_by_gid(transaction.gid)
                         .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
-                    let tx_out = service.convert_transaction(tx_group)?;
+                    let tx_out = self_clone.converter_service.convert_transaction(tx_group)?;
                     return Ok(Some(tx_out));
                 }
                 Ok(None)
@@ -464,7 +458,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
     ) -> Box<Future<Item = Vec<TransactionOut>, Error = Error> + Send> {
         let transactions_repo = self.transactions_repo.clone();
         let db_executor = self.db_executor.clone();
-        let service = self.clone();
+        let self_clone = self.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
             db_executor.execute(move || -> Result<Vec<TransactionOut>, Error> {
                 if user_id != user.id {
@@ -475,7 +469,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     .map_err(ectx!(try convert => user_id, offset, limit))?;
                 group_transactions(&txs)
                     .into_iter()
-                    .map(|tx_group| service.convert_transaction(tx_group))
+                    .map(|tx_group| self_clone.converter_service.convert_transaction(tx_group))
                     .take(limit as usize)
                     .collect()
             })
@@ -492,6 +486,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
         let service = self.clone();
+        let self_clone = self.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
             db_executor.execute(move || {
                 let account = accounts_repo
@@ -509,7 +504,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     .map_err(ectx!(try convert => account_id))?;
                 group_transactions(&txs)
                     .into_iter()
-                    .map(|tx_group| service.convert_transaction(tx_group))
+                    .map(|tx_group| self_clone.converter_service.convert_transaction(tx_group))
                     .take(limit as usize)
                     .collect()
             })
