@@ -293,58 +293,54 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         exchange_id: ExchangeId,
         exchange_rate: f64,
     ) -> Result<Vec<Transaction>, Error> {
-        let mut result: Vec<Transaction> = Vec::new();
+        let mut res: Vec<Transaction> = Vec::new();
 
         let (from_value, to_value) = if from_account.currency == input.value_currency {
             (input.value, input.value.convert(from_account.currency, exchange_rate))
         } else if to_account.currency == input.value_currency {
             (input.value.convert(to_account.currency, 1.0 / exchange_rate), input.value)
         } else {
-            panic!(
-                "Unexpected currency. Input: {:#?}, from_account: {:#?}, to_account: {:#?}",
-                input, from_account, to_account
-            )
+            return Err(ectx!(ErrorContext::InvalidCurrency, ErrorKind::Internal => input, from_account, to_account));
         };
+
+        let current_tx_id = input.id;
 
         // Moving money from `from` account to system liquidity account
-        let from_counterpart_acc = self.get_system_liquidity_account(from_account.currency)?;
-        let from_input = CreateTransactionInput {
+        let from_counterpart_acc = self.system_service.get_system_liquidity_account(from_account.currency)?;
+        let from_tx = NewTransaction {
+            id: current_tx_id,
+            gid: input.id,
+            user_id: input.user_id,
+            dr_account_id: from_account.id,
+            cr_account_id: from_counterpart_acc.id,
+            currency: from_account.currency,
             value: from_value,
-            ..input.clone()
+            status: TransactionStatus::Done,
+            blockchain_tx_id: None,
+            kind: TransactionKind::MultiFrom,
+            group_kind: TransactionGroupKind::InternalMulti,
+            related_tx: None,
         };
-        let txs = self.create_internal_mono_currency_tx(
-            from_input,
-            from_account.clone(),
-            from_counterpart_acc,
-            None,
-            TransactionStatus::Done,
-            input.id,
-            TransactionKind::MultiFrom,
-            TransactionGroupKind::InternalMulti,
-            None,
-        )?;
-        result.extend(txs.into_iter());
+        res.push(self.create_base_tx(from_tx, from_account, from_counterpart_acc)?);
 
         // Moving money from system liquidity account to `to` account
-        let tx_next_id = input.id.next();
-        let to_input = CreateTransactionInput {
-            id: tx_next_id,
+        let current_tx_id = current_tx_id.next();
+        let to_counterpart_acc = self.system_service.get_system_liquidity_account(to_account.currency)?;
+        let from_tx = NewTransaction {
+            id: current_tx_id,
+            gid: input.id,
+            user_id: input.user_id,
+            dr_account_id: to_account.id,
+            cr_account_id: to_counterpart_acc.id,
+            currency: to_account.currency,
             value: to_value,
-            ..input.clone()
+            status: TransactionStatus::Done,
+            blockchain_tx_id: None,
+            kind: TransactionKind::MultiTo,
+            group_kind: TransactionGroupKind::InternalMulti,
+            related_tx: None,
         };
-        let to_counterpart_acc = self.get_system_liquidity_account(to_account.currency)?;
-        let txs = self.create_internal_mono_currency_tx(
-            to_input,
-            to_counterpart_acc,
-            to_account.clone(),
-            None,
-            TransactionStatus::Done,
-            input.id,
-            TransactionKind::MultiTo,
-            TransactionGroupKind::InternalMulti,
-            None,
-        )?;
-        result.extend(txs.into_iter());
+        res.push(self.create_base_tx(from_tx, from_account, from_counterpart_acc)?);
 
         let exchange_input = ExchangeInput {
             id: exchange_id,
@@ -361,7 +357,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             .map_err(ectx!(try convert => exchange_input_clone))
             .wait()?;
 
-        Ok(result)
+        Ok(res)
     }
 }
 
