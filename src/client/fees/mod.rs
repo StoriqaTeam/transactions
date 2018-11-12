@@ -52,6 +52,7 @@ impl FeesClientImpl {
         let cli = self.cli.clone();
         let mut builder = Request::builder();
         builder.uri(url).method(method);
+        builder.header("user-agent", "Mozilla/5.0 (X11; Ubuntu; Linu…) Gecko/20100101 Firefox/63.0");
         builder
             .body(Body::empty())
             .map_err(ectx!(ErrorSource::Hyper, ErrorKind::MalformedInput))
