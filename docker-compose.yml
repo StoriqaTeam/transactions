@@ -18,6 +18,8 @@ services:
       - "RUST_LOG=transactions=debug"
     expose:
       - 8000
+    ports:
+      - 8000:8000
     stdin_open: true
     depends_on:
       - transactions-pg
