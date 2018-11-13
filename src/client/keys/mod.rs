@@ -28,6 +28,7 @@ pub trait KeysClient: Send + Sync + 'static {
         create_blockchain_tx: CreateBlockchainTx,
         role: Role,
     ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send>;
+    fn approve(&self, approve_input: ApproveInput, role: Role) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -115,16 +116,25 @@ impl KeysClient for KeysClientImpl {
                 }),
         )
     }
+    fn approve(&self, approve_input: ApproveInput, role: Role) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
+        let client = self.clone();
+        Box::new(
+            serde_json::to_string(&approve_input)
+                .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => approve_input))
+                .into_future()
+                .and_then(move |body| {
+                    client
+                        .exec_query::<CreateBlockchainTxResponse>("/approve", body, Method::POST, role)
+                        .map(|resp_data| resp_data.raw)
+                }),
+        )
+    }
     fn sign_transaction(
         &self,
         mut create_blockchain_tx: CreateBlockchainTx,
         role: Role,
     ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
         let client = self.clone();
-        create_blockchain_tx.fee_price = match create_blockchain_tx.currency {
-            Currency::Btc => self.bitcoin_fee_price,
-            Currency::Eth | Currency::Stq => self.ethereum_fee_price,
-        };
         Box::new(
             serde_json::to_string(&create_blockchain_tx)
                 .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => create_blockchain_tx))
@@ -148,6 +158,9 @@ impl KeysClient for KeysClientMock {
         _role: Role,
     ) -> Box<Future<Item = BlockchainAddress, Error = Error> + Send> {
         Box::new(Ok(BlockchainAddress::default()).into_future())
+    }
+    fn approve(&self, approve_input: ApproveInput, role: Role) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
+        Box::new(Ok(BlockchainTransactionRaw::default()).into_future())
     }
     fn sign_transaction(
         &self,

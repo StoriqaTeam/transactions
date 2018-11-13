@@ -42,6 +42,8 @@ keys_system_user_id = "0746caa0-7a41-45e2-8c7c-fa76ca5336b7"
 keys_system_user_token = "bURPpnBOGnBvj8fuAOR+q+cSPAw1Lf6zND06E+r0OYo="
 exchange_gateway_system_user_id = "0746caa0-7a41-45e2-8c7c-fa76ca5336b7"
 exchange_gateway_system_user_token = "bURPpnBOGnBvj8fuAOR+q+cSPAw1Lf6zND06E+r0OYo="
+approve_gas_price = 20_000_000_000
+approve_gas_limit = 60_000
 
 [fee_price]
 ethereum = 18000000000

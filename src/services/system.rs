@@ -10,6 +10,7 @@ pub trait SystemService: Send + Sync + 'static {
     fn get_system_transfer_account(&self, currency: Currency) -> Result<Account, Error>;
     fn get_system_liquidity_account(&self, currency: Currency) -> Result<Account, Error>;
     fn get_system_fees_account(&self, currency: Currency) -> Result<Account, Error>;
+    fn get_system_fees_account_dr(&self, currency: Currency) -> Result<Account, Error>;
 }
 
 #[derive(Clone)]
@@ -60,6 +61,20 @@ impl SystemService for SystemServiceImpl {
         let acc = self
             .accounts_repo
             .get(acc_id)?
+            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
+        Ok(acc)
+    }
+
+    fn get_system_fees_account_dr(&self, currency: Currency) -> Result<Account, Error> {
+        let acc_id = match currency {
+            Currency::Btc => self.config.system.btc_fees_account_id,
+            Currency::Eth => self.config.system.eth_fees_account_id,
+            Currency::Stq => self.config.system.stq_fees_account_id,
+        };
+        let dr_acc_id = acc_id.derive_system_dr_id();
+        let acc = self
+            .accounts_repo
+            .get(dr_acc_id)?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
         Ok(acc)
     }

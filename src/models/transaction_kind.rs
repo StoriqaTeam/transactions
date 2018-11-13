@@ -12,6 +12,7 @@ pub enum TransactionGroupKind {
     InternalMulti,
     Withdrawal,
     WithdrawalMulti,
+    Approval,
 }
 
 impl FromSql<VarChar, Pg> for TransactionGroupKind {
@@ -22,6 +23,7 @@ impl FromSql<VarChar, Pg> for TransactionGroupKind {
             Some(b"internal_multi") => Ok(TransactionGroupKind::InternalMulti),
             Some(b"withdrawal") => Ok(TransactionGroupKind::Withdrawal),
             Some(b"withdrawal_multi") => Ok(TransactionGroupKind::WithdrawalMulti),
+            Some(b"approval") => Ok(TransactionGroupKind::Approval),
             Some(v) => Err(format!(
                 "Unrecognized enum variant: {:?}",
                 String::from_utf8(v.to_vec()).unwrap_or_else(|_| "Non - UTF8 value".to_string())
@@ -40,6 +42,7 @@ impl ToSql<VarChar, Pg> for TransactionGroupKind {
             TransactionGroupKind::InternalMulti => out.write_all(b"internal_multi")?,
             TransactionGroupKind::Withdrawal => out.write_all(b"withdrawal")?,
             TransactionGroupKind::WithdrawalMulti => out.write_all(b"withdrawal_multi")?,
+            TransactionGroupKind::Approval => out.write_all(b"approval")?,
         };
         Ok(IsNull::No)
     }
