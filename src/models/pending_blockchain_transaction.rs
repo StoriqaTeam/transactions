@@ -13,6 +13,7 @@ pub struct PendingBlockchainTransactionDB {
     pub fee: Amount,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
 impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchainTransactionDB {
@@ -24,6 +25,7 @@ impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchai
             currency: transaction.0.currency,
             value: transaction.0.value,
             fee: transaction.0.fee_price,
+            erc20_operation_kind: None,
         }
     }
 }
@@ -37,6 +39,7 @@ pub struct NewPendingBlockchainTransactionDB {
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,
+    pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
 impl Default for NewPendingBlockchainTransactionDB {
@@ -48,6 +51,7 @@ impl Default for NewPendingBlockchainTransactionDB {
             currency: Currency::Eth,
             value: Amount::default(),
             fee: Amount::default(),
+            erc20_operation_kind: None,
         }
     }
 }

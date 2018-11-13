@@ -315,6 +315,7 @@ impl PendingBlockchainTransactionsRepo for PendingBlockchainTransactionsRepoMock
             fee: payload.fee,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
+            erc20_operation_kind: None,
         };
         data.push(res.clone());
         Ok(res)
@@ -347,6 +348,7 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoMock {
             confirmations: payload.confirmations,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
+            erc20_operation_kind: None,
         };
         data.push(res.clone());
         Ok(res)

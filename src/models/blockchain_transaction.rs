@@ -1,7 +1,12 @@
 use chrono::NaiveDateTime;
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::str::FromStr;
 
+use diesel::deserialize::{self, FromSql};
+use diesel::pg::Pg;
+use diesel::serialize::{self, IsNull, Output, ToSql};
+use diesel::sql_types::VarChar;
 use serde_json;
 
 use models::*;
@@ -16,6 +21,39 @@ pub struct BlockchainTransactionEntryTo {
     pub value: Amount,
 }
 
+#[derive(Debug, Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Eq, PartialEq, Hash)]
+#[sql_type = "VarChar"]
+#[serde(rename_all = "snake_case")]
+pub enum Erc20OperationKind {
+    Approve,
+    TransferFrom,
+}
+
+impl FromSql<VarChar, Pg> for Erc20OperationKind {
+    fn from_sql(data: Option<&[u8]>) -> deserialize::Result<Self> {
+        match data {
+            Some(b"approve") => Ok(Erc20OperationKind::Approve),
+            Some(b"transfer_from") => Ok(Erc20OperationKind::TransferFrom),
+            Some(v) => Err(format!(
+                "Unrecognized enum variant: {:?}",
+                String::from_utf8(v.to_vec()).unwrap_or_else(|_| "Non - UTF8 value".to_string())
+            ).to_string()
+            .into()),
+            None => Err("Unexpected null for non-null column".into()),
+        }
+    }
+}
+
+impl ToSql<VarChar, Pg> for Erc20OperationKind {
+    fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
+        match self {
+            Erc20OperationKind::Approve => out.write_all(b"approve")?,
+            Erc20OperationKind::TransferFrom => out.write_all(b"transfer_from")?,
+        };
+        Ok(IsNull::No)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockchainTransaction {
@@ -26,6 +64,7 @@ pub struct BlockchainTransaction {
     pub currency: Currency,
     pub fee: Amount,
     pub confirmations: usize,
+    pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
 impl BlockchainTransaction {
@@ -97,6 +136,7 @@ pub struct BlockchainTransactionDB {
     pub updated_at: NaiveDateTime,
     pub from_: serde_json::Value,
     pub to_: serde_json::Value,
+    pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
 impl From<BlockchainTransaction> for NewBlockchainTransactionDB {
@@ -115,6 +155,7 @@ impl From<BlockchainTransaction> for NewBlockchainTransactionDB {
             currency: transaction.currency,
             fee: transaction.fee,
             confirmations: transaction.confirmations as i32,
+            erc20_operation_kind: transaction.erc20_operation_kind,
         }
     }
 }
@@ -129,6 +170,7 @@ impl From<BlockchainTransactionDB> for BlockchainTransaction {
             currency: transaction.currency,
             fee: transaction.fee,
             confirmations: transaction.confirmations as usize,
+            erc20_operation_kind: transaction.erc20_operation_kind,
         }
     }
 }
@@ -143,6 +185,7 @@ pub struct NewBlockchainTransactionDB {
     pub currency: Currency,
     pub fee: Amount,
     pub confirmations: i32,
+    pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
 impl Default for NewBlockchainTransactionDB {
@@ -155,6 +198,7 @@ impl Default for NewBlockchainTransactionDB {
             currency: Currency::Eth,
             fee: Amount::default(),
             confirmations: 0,
+            erc20_operation_kind: None,
         }
     }
 }

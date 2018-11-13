@@ -22,6 +22,7 @@ table! {
         updated_at -> Timestamp,
         from_ -> Jsonb,
         to_ -> Jsonb,
+        erc20_operation_kind -> Nullable<Varchar>,
     }
 }
 
@@ -35,6 +36,7 @@ table! {
         fee -> Numeric,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        erc20_operation_kind -> Nullable<Varchar>,
     }
 }
 
@@ -60,6 +62,7 @@ table! {
         created_at -> Timestamp,
         updated_at -> Timestamp,
         commentary -> Varchar,
+        erc20_operation_kind -> Nullable<Varchar>,
     }
 }
 
