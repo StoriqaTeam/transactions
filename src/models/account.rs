@@ -16,6 +16,7 @@ pub struct Account {
     pub kind: AccountKind,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub erc20_approved: bool,
 }
 
 impl Default for Account {
@@ -29,6 +30,7 @@ impl Default for Account {
             kind: AccountKind::Cr,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
+            erc20_approved: false,
         }
     }
 }

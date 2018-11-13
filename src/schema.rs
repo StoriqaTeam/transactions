@@ -8,6 +8,7 @@ table! {
         kind -> Varchar,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        erc20_approved -> Bool,
     }
 }
 
