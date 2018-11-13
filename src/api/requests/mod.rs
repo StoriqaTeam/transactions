@@ -62,7 +62,10 @@ pub struct PutAccountsRequest {
 
 impl From<PutAccountsRequest> for UpdateAccount {
     fn from(req: PutAccountsRequest) -> Self {
-        Self { name: req.name }
+        Self {
+            name: req.name,
+            erc20_approved: None,
+        }
     }
 }
 

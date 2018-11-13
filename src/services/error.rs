@@ -71,6 +71,8 @@ pub enum ErrorContext {
     NotSupported,
     #[fail(display = "service error context - invalid value")]
     InvalidValue,
+    #[fail(display = "service error context - unexpected blockckhain transaction structure")]
+    InvalidBlockchainTransactionStructure,
 }
 
 derive_error_impls!();

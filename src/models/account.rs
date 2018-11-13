@@ -94,6 +94,7 @@ impl NewAccount {
 pub struct UpdateAccount {
     #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
     pub name: Option<String>,
+    pub erc20_approved: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]

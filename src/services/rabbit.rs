@@ -10,7 +10,12 @@ use repos::{
     StrangeBlockchainTransactionsRepo, TransactionsRepo,
 };
 use serde_json;
-use utils::log_error;
+use utils::{log_and_capture_error, log_error};
+
+// 500 stq
+const STQ_BALANCE_THRESHOLD: u128 = 500_000_000_000_000_000_000;
+// 100 bn of storiqa
+const STQ_ALLOWANCE: u128 = 100_000_000_000_000_000_000_000_000_000;
 
 #[derive(Clone)]
 pub struct BlockchainFetcher<E: DbExecutor> {
@@ -89,6 +94,34 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             return Ok(());
         }
 
+        if let Some(erc20_op) = blockchain_tx.erc20_operation_kind {
+            if erc20_op == Erc20OperationKind::Approve {
+                if blockchain_tx.currency != Currency::Stq {
+                    return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => blockchain_tx));
+                }
+                let to = blockchain_tx
+                    .to
+                    .get(0)
+                    .ok_or(
+                        ectx!(try err ErrorContext::InvalidBlockchainTransactionStructure, ErrorKind::Internal => blockchain_tx.clone()),
+                    )?.address
+                    .clone();
+                if let Some(account) = self.accounts_repo.get_by_address(to, Currency::Stq, AccountKind::Dr)? {
+                    let changeset = UpdateAccount {
+                        erc20_approved: Some(true),
+                        ..Default::default()
+                    };
+                    self.accounts_repo.update(account.id, changeset)?;
+                    self.seen_hashes_repo.create(NewSeenHashes {
+                        hash: blockchain_tx.hash.clone(),
+                        block_number: blockchain_tx.block_number as i64,
+                        currency: blockchain_tx.currency,
+                    })?;
+                    return Ok(());
+                }
+            }
+        }
+
         if let Some(tx) = self.transactions_repo.get_by_blockchain_tx(normalized_tx.hash.clone())? {
             // The tx is already in our db => it was created by us and waiting for confirmation from blockchain => it's withdrawal tx
             let total_tx_value = normalized_tx
@@ -163,7 +196,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 .unwrap();
             let to_cr_account = self
                 .accounts_repo
-                .get_by_address(to_dr_account.address, to_dr_account.currency, AccountKind::Cr)?
+                .get_by_address(to_dr_account.address.clone(), to_dr_account.currency, AccountKind::Cr)?
                 .unwrap();
             let tx_id = TransactionId::generate();
             let new_tx = NewTransaction {
@@ -182,6 +215,20 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             };
             self.transactions_repo.create(new_tx)?;
             self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
+            // approve account if balance has passed threshold
+            if (to_dr_account.currency == Currency::Stq) && !to_dr_account.erc20_approved {
+                let balance = self
+                    .transactions_repo
+                    .get_accounts_balance(to_dr_account.user_id, &[to_dr_account.clone()])?[0]
+                    .balance;
+                if balance >= Amount::new(STQ_BALANCE_THRESHOLD) {
+                    // don't rollback if we failed here, since it's not mission critical to approve ERC-20
+                    let _ = self.send_erc20_approval(&to_dr_account).map_err(|e| {
+                        log_and_capture_error(e);
+                    });
+                }
+            }
+
             self.seen_hashes_repo.create(NewSeenHashes {
                 hash: blockchain_tx.hash.clone(),
                 block_number: blockchain_tx.block_number as i64,
@@ -271,6 +318,10 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         //     return Ok(Some(InvariantViolation::WithdrawalValue));
         // }
         Ok(None)
+    }
+
+    fn send_erc20_approval(&self, account: &Account) -> Result<(), Error> {
+        unimplemented!()
     }
 }
 
