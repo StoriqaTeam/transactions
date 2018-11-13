@@ -39,6 +39,8 @@ pub enum ErrorSource {
     R2D2,
     #[fail(display = "service error source - repos")]
     Repo,
+    #[fail(display = "service error source - rabbit")]
+    Lapin,
 }
 
 #[allow(dead_code)]

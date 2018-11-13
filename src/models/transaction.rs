@@ -176,7 +176,7 @@ impl Default for BitcoinUtxos {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TransactionOut {
     pub id: TransactionId,
     pub from: Vec<TransactionAddressInfo>,
