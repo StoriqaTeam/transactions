@@ -73,6 +73,8 @@ pub enum ErrorContext {
     InvalidValue,
     #[fail(display = "service error context - unexpected blockckhain transaction structure")]
     InvalidBlockchainTransactionStructure,
+    #[fail(display = "service error context - unexpected transaction structure")]
+    InvalidTransactionStructure,
 }
 
 derive_error_impls!();

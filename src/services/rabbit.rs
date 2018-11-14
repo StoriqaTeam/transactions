@@ -121,11 +121,6 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                         ..Default::default()
                     };
                     self.accounts_repo.update(account.id, changeset)?;
-                    // self.seen_hashes_repo.create(NewSeenHashes {
-                    //     hash: blockchain_tx.hash.clone(),
-                    //     block_number: blockchain_tx.block_number as i64,
-                    //     currency: blockchain_tx.currency,
-                    // })?;
                     // proceed to collect fees and update tx statuses
                 }
             }
