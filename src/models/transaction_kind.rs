@@ -58,6 +58,8 @@ pub enum TransactionKind {
     Internal,
     Deposit,
     Withdrawal,
+    ApprovalTransfer,
+    ApprovalCall,
 }
 
 impl FromSql<VarChar, Pg> for TransactionKind {
@@ -70,6 +72,8 @@ impl FromSql<VarChar, Pg> for TransactionKind {
             Some(b"internal") => Ok(TransactionKind::Internal),
             Some(b"withdrawal") => Ok(TransactionKind::Withdrawal),
             Some(b"deposit") => Ok(TransactionKind::Deposit),
+            Some(b"approval_transfer") => Ok(TransactionKind::ApprovalTransfer),
+            Some(b"approval_call") => Ok(TransactionKind::ApprovalCall),
             Some(v) => Err(format!(
                 "Unrecognized enum variant: {:?}",
                 String::from_utf8(v.to_vec()).unwrap_or_else(|_| "Non - UTF8 value".to_string())
@@ -90,6 +94,8 @@ impl ToSql<VarChar, Pg> for TransactionKind {
             TransactionKind::Internal => out.write_all(b"internal")?,
             TransactionKind::Deposit => out.write_all(b"deposit")?,
             TransactionKind::Withdrawal => out.write_all(b"withdrawal")?,
+            TransactionKind::ApprovalCall => out.write_all(b"approval_call")?,
+            TransactionKind::ApprovalTransfer => out.write_all(b"approval_transfer")?,
         };
         Ok(IsNull::No)
     }

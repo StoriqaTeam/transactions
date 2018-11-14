@@ -30,6 +30,20 @@ impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchai
     }
 }
 
+impl From<(ApproveInput, BlockchainTransactionId)> for NewPendingBlockchainTransactionDB {
+    fn from(transaction: (ApproveInput, BlockchainTransactionId)) -> Self {
+        Self {
+            hash: transaction.1,
+            from_: transaction.0.address,
+            to_: transaction.0.approve_address,
+            currency: transaction.0.currency,
+            value: Amount::new(9),
+            fee: transaction.0.fee_price,
+            erc20_operation_kind: Some(Erc20OperationKind::Approve),
+        }
+    }
+}
+
 #[derive(Debug, Insertable, Clone)]
 #[table_name = "pending_blockchain_transactions"]
 pub struct NewPendingBlockchainTransactionDB {

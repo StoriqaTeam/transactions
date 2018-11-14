@@ -121,12 +121,12 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                         ..Default::default()
                     };
                     self.accounts_repo.update(account.id, changeset)?;
-                    self.seen_hashes_repo.create(NewSeenHashes {
-                        hash: blockchain_tx.hash.clone(),
-                        block_number: blockchain_tx.block_number as i64,
-                        currency: blockchain_tx.currency,
-                    })?;
-                    return Ok(());
+                    // self.seen_hashes_repo.create(NewSeenHashes {
+                    //     hash: blockchain_tx.hash.clone(),
+                    //     block_number: blockchain_tx.block_number as i64,
+                    //     currency: blockchain_tx.currency,
+                    // })?;
+                    // proceed to collect fees and update tx statuses
                 }
             }
         }
@@ -383,11 +383,6 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 |e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()),
             )?;
 
-        let approve_tx_id =
-            self.blockchain_client.post_ethereum_transaction(approve_raw_tx).wait().map_err(
-                |e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()),
-            )?;
-
         let eth_tx = NewTransaction {
             id,
             gid: id,
@@ -397,11 +392,24 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             currency: Currency::Eth,
             value,
             status: TransactionStatus::Pending,
-            blockchain_tx_id: Some(eth_tx_id),
-            kind: TransactionKind::Withdrawal,
+            blockchain_tx_id: Some(eth_tx_id.clone()),
+            kind: TransactionKind::ApprovalTransfer,
             group_kind: TransactionGroupKind::Approval,
             related_tx: None,
         };
+        let new_pending_eth = (eth_transfer_blockchain_tx.clone(), eth_tx_id.clone()).into();
+        // Note - we don't rollback here, because the tx is already in blockchain. so after that just silently
+        // fail if we couldn't write a pending tx. Not having pending tx in db doesn't do a lot of harm, we could cure
+        // it later.
+        match self.pending_blockchain_transactions_repo.create(new_pending_eth) {
+            Err(e) => log_and_capture_error(e),
+            _ => (),
+        };
+        let approve_tx_id =
+            self.blockchain_client.post_ethereum_transaction(approve_raw_tx).wait().map_err(
+                |e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()),
+            )?;
+
         let approve_tx = NewTransaction {
             id: next_id,
             gid: next_id,
@@ -412,9 +420,18 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             value,
             status: TransactionStatus::Pending,
             blockchain_tx_id: Some(approve_tx_id),
-            kind: TransactionKind::Withdrawal,
+            kind: TransactionKind::ApprovalCall,
             group_kind: TransactionGroupKind::Approval,
             related_tx: None,
+        };
+
+        let new_pending_approve = (eth_approve_blockchain_tx.clone(), eth_tx_id.clone()).into();
+        // Note - we don't rollback here, because the tx is already in blockchain. so after that just silently
+        // fail if we couldn't write a pending tx. Not having pending tx in db doesn't do a lot of harm, we could cure
+        // it later.
+        match self.pending_blockchain_transactions_repo.create(new_pending_approve) {
+            Err(e) => log_and_capture_error(e),
+            _ => (),
         };
 
         self.transactions_repo.create(eth_tx)?;
