@@ -64,6 +64,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
+#[allow(dead_code)]
 pub enum InvariantViolation {
     #[fail(display = "blockchain transaction invariant violation - unexpected number of addresses")]
     WithdrawalAdressesCount,

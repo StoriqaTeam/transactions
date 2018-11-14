@@ -214,12 +214,3 @@ pub struct TransactionAddressInfo {
     pub account_id: Option<AccountId>,
     pub blockchain_address: BlockchainAddress,
 }
-
-impl TransactionAddressInfo {
-    pub fn new(account_id: Option<AccountId>, blockchain_address: BlockchainAddress) -> Self {
-        Self {
-            account_id,
-            blockchain_address,
-        }
-    }
-}

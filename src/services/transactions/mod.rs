@@ -424,8 +424,6 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
     ) -> Box<Future<Item = TransactionOut, Error = Error> + Send> {
         let db_executor = self.db_executor.clone();
         let self_clone = self.clone();
-        let self_clone2 = self.clone();
-        let input_clone = input.clone();
         Box::new(self.auth_service.authenticate(token.clone()).and_then(move |user| {
             db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
                 let mut core = Core::new().unwrap();
@@ -499,7 +497,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
             db_executor.execute(move || -> Result<AccountWithBalance, Error> {
                 let account = accounts_repo.get(account_id).map_err(ectx!(try convert => account_id))?;
-                if let Some(mut account) = account {
+                if let Some(account) = account {
                     if account.user_id != user.id {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                     }
@@ -549,7 +547,6 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let transactions_repo = self.transactions_repo.clone();
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
-        let service = self.clone();
         let self_clone = self.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
             db_executor.execute(move || {
@@ -583,13 +580,4 @@ fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
         res.entry(tx.gid).and_modify(|txs| txs.push(tx.clone())).or_insert(vec![tx.clone()]);
     }
     res.into_iter().map(|(_, txs)| txs).collect()
-}
-
-fn fold_statuses(statuses: &[TransactionStatus]) -> TransactionStatus {
-    statuses.into_iter().fold(TransactionStatus::Done, |acc, elem| {
-        if (acc == TransactionStatus::Pending) || (*elem == TransactionStatus::Pending) {
-            return TransactionStatus::Pending;
-        }
-        acc
-    })
 }

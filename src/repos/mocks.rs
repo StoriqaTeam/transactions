@@ -1,5 +1,4 @@
-use chrono::NaiveDateTime;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use super::accounts::*;
@@ -200,7 +199,7 @@ impl TransactionsRepo for TransactionsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id).collect())
     }
-    fn get_accounts_balance(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>> {
+    fn get_accounts_balance(&self, _auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>> {
         accounts
             .into_iter()
             .map(|account| {

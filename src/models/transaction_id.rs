@@ -45,7 +45,7 @@ impl TransactionId {
     }
 
     pub fn last_byte(&self) -> u8 {
-        let mut bytes = self.0.as_bytes().to_vec();
+        let bytes = self.0.as_bytes().to_vec();
         let last = bytes.len() - 1;
         bytes[last]
     }

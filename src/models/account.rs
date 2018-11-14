@@ -103,12 +103,6 @@ pub struct AccountWithBalance {
     pub balance: Amount,
 }
 
-impl AccountWithBalance {
-    pub fn new(account: Account, balance: Amount) -> Self {
-        Self { account, balance }
-    }
-}
-
 #[derive(Debug, Clone, Validate)]
 pub struct CreateAccount {
     pub id: AccountId,

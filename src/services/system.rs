@@ -4,7 +4,7 @@ use super::error::*;
 use config::Config;
 use models::*;
 use prelude::*;
-use repos::{AccountsRepo, BlockchainTransactionsRepo, PendingBlockchainTransactionsRepo};
+use repos::AccountsRepo;
 
 pub trait SystemService: Send + Sync + 'static {
     fn get_system_transfer_account(&self, currency: Currency) -> Result<Account, Error>;

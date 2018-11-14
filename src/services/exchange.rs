@@ -21,7 +21,7 @@ impl ExchangeServiceImpl {
 }
 
 impl ExchangeService for ExchangeServiceImpl {
-    fn rate(&self, token: AuthenticationToken, input: RateInput) -> Box<Future<Item = Rate, Error = Error> + Send> {
+    fn rate(&self, _token: AuthenticationToken, input: RateInput) -> Box<Future<Item = Rate, Error = Error> + Send> {
         let input_clone = input.clone();
         Box::new(
             self.exchange_client
