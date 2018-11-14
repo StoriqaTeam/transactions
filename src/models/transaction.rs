@@ -20,6 +20,9 @@ pub struct Transaction {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub gid: TransactionId,
+    pub kind: TransactionKind,
+    pub group_kind: TransactionGroupKind,
+    pub related_tx: Option<TransactionId>,
 }
 
 #[derive(Debug, Queryable, Clone, QueryableByName)]
@@ -45,13 +48,9 @@ impl Default for Transaction {
             blockchain_tx_id: None,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
-<<<<<<< HEAD
-            fee: Amount::default(),
-=======
             kind: TransactionKind::Internal,
             group_kind: TransactionGroupKind::Internal,
             related_tx: None,
->>>>>>> feature/fees2
         }
     }
 }
@@ -68,13 +67,9 @@ pub struct NewTransaction {
     pub value: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
-<<<<<<< HEAD
-    pub fee: Amount,
-=======
     pub kind: TransactionKind,
     pub group_kind: TransactionGroupKind,
     pub related_tx: Option<TransactionId>,
->>>>>>> feature/fees2
 }
 
 impl Default for NewTransaction {

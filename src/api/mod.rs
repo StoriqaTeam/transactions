@@ -143,7 +143,6 @@ impl Service for ApiService {
                         keys_client,
                         blockchain_client,
                         exchange_client.clone(),
-                        fees_client.clone(),
                     ));
                     let exchange_service = Arc::new(ExchangeServiceImpl::new(exchange_client));
 
