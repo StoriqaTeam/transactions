@@ -124,7 +124,7 @@ impl ConverterServiceImpl {
 
     // 4) InternalMulti:
     //   two txs: MultiFrom - Done, MultiTo - Done
-    fn convert_intenal_multi_transaction(&self, transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
+    fn convert_internal_multi_transaction(&self, transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
         if transactions.len() != 2 {
             return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
         }
@@ -236,7 +236,7 @@ impl ConverterServiceImpl {
             .filter(|tx| (tx.kind != TransactionKind::MultiFrom) && (tx.kind != TransactionKind::MultiTo))
             .cloned()
             .collect();
-        let currency_tx_out = self.convert_intenal_multi_transaction(currency_txs)?;
+        let currency_tx_out = self.convert_internal_multi_transaction(currency_txs)?;
         let withdrawal_tx_out = self.convert_external_transaction(withdrawal_txs)?;
         Ok(TransactionOut {
             id: currency_tx_out.id,
@@ -252,94 +252,6 @@ impl ConverterServiceImpl {
             created_at: withdrawal_tx_out.created_at,
             updated_at: withdrawal_tx_out.updated_at,
         })
-    }
-
-    fn extract_address_info(&self, transaction: Transaction) -> Result<(Vec<TransactionAddressInfo>, TransactionAddressInfo), Error> {
-        let accounts_repo = self.accounts_repo.clone();
-        let pending_transactions_repo = self.pending_blockchain_transactions_repo.clone();
-        let blockchain_transactions_repo = self.blockchain_transactions_repo.clone();
-        let transaction_id = transaction.id;
-        let cr_account = accounts_repo
-            .get(transaction.cr_account_id)
-            .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
-        let cr_account_id = transaction.cr_account_id;
-        let cr_account = cr_account.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => cr_account_id))?;
-
-        let dr_account = accounts_repo
-            .get(transaction.dr_account_id)
-            .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
-        let dr_account_id = transaction.dr_account_id;
-        let dr_account = dr_account.ok_or_else(|| ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => dr_account_id))?;
-
-        if cr_account.kind == AccountKind::Cr && dr_account.kind == AccountKind::Cr {
-            let from = TransactionAddressInfo::new(Some(dr_account.id), dr_account.address);
-            let to = TransactionAddressInfo::new(Some(cr_account.id), cr_account.address);
-            Ok((vec![from], to))
-        } else if cr_account.kind == AccountKind::Cr && dr_account.kind == AccountKind::Dr {
-            let hash = transaction
-                .blockchain_tx_id
-                .clone()
-                .ok_or_else(|| ectx!(try err ErrorContext::NoTransaction, ErrorKind::NotFound => transaction_id))?;
-            let to = TransactionAddressInfo::new(Some(cr_account.id), cr_account.address);
-
-            let hash_clone = hash.clone();
-            let hash_clone2 = hash.clone();
-            let hash_clone3 = hash.clone();
-            if let Some(pending_transaction) = pending_transactions_repo
-                .get(hash.clone())
-                .map_err(ectx!(try convert => hash_clone))?
-            {
-                let from = TransactionAddressInfo::new(None, pending_transaction.from_);
-                Ok((vec![from], to))
-            } else if let Some(blockchain_transaction_db) = blockchain_transactions_repo
-                .get(hash.clone())
-                .map_err(ectx!(try convert => hash_clone2))?
-            {
-                let blockchain_transaction: BlockchainTransaction = blockchain_transaction_db.into();
-                let (froms, _) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash))?;
-                let from = froms
-                    .into_iter()
-                    .map(|address| TransactionAddressInfo::new(None, address))
-                    .collect();
-                Ok((from, to))
-            } else {
-                return Err(ectx!(err ErrorContext::NoTransaction, ErrorKind::NotFound => hash_clone3));
-            }
-        } else if cr_account.kind == AccountKind::Dr && dr_account.kind == AccountKind::Cr {
-            let hash = transaction
-                .blockchain_tx_id
-                .clone()
-                .ok_or_else(|| ectx!(try err ErrorContext::NoTransaction, ErrorKind::NotFound => transaction_id))?;
-            let from = TransactionAddressInfo::new(Some(dr_account.id), dr_account.address);
-
-            let hash_clone = hash.clone();
-            let hash_clone2 = hash.clone();
-            let hash_clone3 = hash.clone();
-            if let Some(pending_transaction) = pending_transactions_repo
-                .get(hash.clone())
-                .map_err(ectx!(try convert => hash_clone))?
-            {
-                let to = TransactionAddressInfo::new(None, pending_transaction.to_);
-                Ok((vec![from], to))
-            } else if let Some(blockchain_transaction_db) = blockchain_transactions_repo
-                .get(hash.clone())
-                .map_err(ectx!(try convert => hash_clone2))?
-            {
-                let hash_clone4 = hash.clone();
-                let blockchain_transaction: BlockchainTransaction = blockchain_transaction_db.into();
-                let (_, to_s) = blockchain_transaction.unify_from_to().map_err(ectx!(try convert => hash_clone4))?;
-                let to = to_s
-                    .into_iter()
-                    .map(|(address, _)| TransactionAddressInfo::new(None, address))
-                    .nth(0);
-                let to = to.ok_or_else(|| ectx!(try err ErrorContext::NoTransaction, ErrorKind::NotFound => hash))?;
-                Ok((vec![from], to))
-            } else {
-                return Err(ectx!(err ErrorContext::NoTransaction, ErrorKind::NotFound => hash_clone3));
-            }
-        } else {
-            return Err(ectx!(err ErrorContext::InvalidTransaction, ErrorKind::Internal => transaction_id));
-        }
     }
 }
 
@@ -377,9 +289,9 @@ impl ConverterService for ConverterServiceImpl {
         match group_kind {
             TransactionGroupKind::Deposit => self.convert_deposit_transaction(transactions),
             TransactionGroupKind::Internal => self.convert_internal_transaction(transactions),
-            TransactionGroupKind::InternalMulti => self.convert_deposit_transaction(transactions),
-            TransactionGroupKind::Withdrawal => self.convert_deposit_transaction(transactions),
-            TransactionGroupKind::WithdrawalMulti => self.convert_deposit_transaction(transactions),
+            TransactionGroupKind::InternalMulti => self.convert_internal_multi_transaction(transactions),
+            TransactionGroupKind::Withdrawal => self.convert_external_transaction(transactions),
+            TransactionGroupKind::WithdrawalMulti => self.convert_external_multi_transaction(transactions),
             _ => return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions)),
         }
         // // internal + withdrawal tx
