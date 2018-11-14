@@ -425,6 +425,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let db_executor = self.db_executor.clone();
         let self_clone = self.clone();
         Box::new(self.auth_service.authenticate(token.clone()).and_then(move |user| {
+            let input = CreateTransactionInput { user_id: user.id, ..input };
             db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
                 let mut core = Core::new().unwrap();
                 let tx_type = self_clone.classifier_service.validate_and_classify_transaction(&input)?;
