@@ -11,11 +11,12 @@ pub struct Account {
     pub id: AccountId,
     pub user_id: UserId,
     pub currency: Currency,
-    pub address: AccountAddress,
+    pub address: BlockchainAddress,
     pub name: Option<String>,
     pub kind: AccountKind,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub erc20_approved: bool,
 }
 
 impl Default for Account {
@@ -24,11 +25,12 @@ impl Default for Account {
             id: AccountId::generate(),
             user_id: UserId::generate(),
             currency: Currency::Eth,
-            address: AccountAddress::default(),
+            address: BlockchainAddress::default(),
             name: None,
             kind: AccountKind::Cr,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
+            erc20_approved: false,
         }
     }
 }
@@ -54,7 +56,7 @@ pub struct NewAccount {
     pub user_id: UserId,
     pub currency: Currency,
     #[validate]
-    pub address: AccountAddress,
+    pub address: BlockchainAddress,
     #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
     pub name: Option<String>,
     pub kind: AccountKind,
@@ -67,7 +69,7 @@ impl Default for NewAccount {
             name: None,
             user_id: UserId::generate(),
             currency: Currency::Eth,
-            address: AccountAddress::default(),
+            address: BlockchainAddress::default(),
             kind: AccountKind::Cr,
         }
     }
@@ -92,6 +94,7 @@ impl NewAccount {
 pub struct UpdateAccount {
     #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
     pub name: Option<String>,
+    pub erc20_approved: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -126,8 +129,8 @@ impl Default for CreateAccount {
     }
 }
 
-impl From<(CreateAccount, AccountAddress)> for NewAccount {
-    fn from(create: (CreateAccount, AccountAddress)) -> Self {
+impl From<(CreateAccount, BlockchainAddress)> for NewAccount {
+    fn from(create: (CreateAccount, BlockchainAddress)) -> Self {
         Self {
             id: create.0.id,
             name: Some(create.0.name),

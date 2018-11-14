@@ -10,10 +10,10 @@ use models::*;
 
 #[derive(Deserialize, FromSqlRow, AsExpression, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Debug)]
 #[sql_type = "VarChar"]
-pub struct AccountAddress(String);
-derive_newtype_sql!(account_address, VarChar, AccountAddress, AccountAddress);
+pub struct BlockchainAddress(String);
+derive_newtype_sql!(account_address, VarChar, BlockchainAddress, BlockchainAddress);
 
-impl Validate for AccountAddress {
+impl Validate for BlockchainAddress {
     fn validate(&self) -> Result<(), ValidationErrors> {
         let token_len = self.0.len();
         let mut errors = ValidationErrors::new();
@@ -33,9 +33,9 @@ impl Validate for AccountAddress {
     }
 }
 
-impl AccountAddress {
+impl BlockchainAddress {
     pub fn new(token: String) -> Self {
-        AccountAddress(token)
+        BlockchainAddress(token)
     }
 
     pub fn raw(&self) -> &str {
@@ -43,13 +43,13 @@ impl AccountAddress {
     }
 }
 
-impl Default for AccountAddress {
+impl Default for BlockchainAddress {
     fn default() -> Self {
-        AccountAddress(Uuid::new_v4().to_string())
+        BlockchainAddress(Uuid::new_v4().to_string())
     }
 }
 
-impl Display for AccountAddress {
+impl Display for BlockchainAddress {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(&self.0.to_string())
     }

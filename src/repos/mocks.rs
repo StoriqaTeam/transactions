@@ -105,7 +105,7 @@ impl AccountsRepo for AccountsRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.clone().into_iter().filter(|x| x.user_id == user_id_arg).collect())
     }
-    fn get_by_address(&self, address_: AccountAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
+    fn get_by_address(&self, address_: BlockchainAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
         let data = self.data.lock().unwrap();
         let u = data
             .iter()
@@ -115,13 +115,13 @@ impl AccountsRepo for AccountsRepoMock {
         Ok(u)
     }
 
-    fn filter_by_address(&self, address_: AccountAddress) -> RepoResult<Vec<Account>> {
+    fn filter_by_address(&self, address_: BlockchainAddress) -> RepoResult<Vec<Account>> {
         let data = self.data.lock().unwrap();
         let u = data.iter().filter(|x| x.address == address_).cloned().collect();
         Ok(u)
     }
 
-    fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
+    fn get_by_addresses(&self, addresses: &[BlockchainAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
         let addresses: HashSet<_> = addresses.iter().collect();
         let data = self.data.lock().unwrap();
         let u = data
@@ -153,7 +153,9 @@ impl TransactionsRepo for TransactionsRepoMock {
             blockchain_tx_id: payload.blockchain_tx_id,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
-            fee: payload.fee,
+            kind: TransactionKind::Internal,
+            group_kind: TransactionGroupKind::Internal,
+            related_tx: None,
         };
         data.push(res.clone());
         Ok(res)
@@ -273,7 +275,13 @@ impl TransactionsRepo for TransactionsRepoMock {
         Ok(u.unwrap())
     }
 
-    fn get_with_enough_value(&self, value_: Amount, currency_: Currency, user_id_: UserId) -> RepoResult<Vec<AccountWithBalance>> {
+    fn get_accounts_for_withdrawal(
+        &self,
+        value_: Amount,
+        currency_: Currency,
+        user_id_: UserId,
+        _fee_per_tx: Amount,
+    ) -> RepoResult<Vec<AccountWithBalance>> {
         let data = self.data.lock().unwrap();
         Ok(data
             .clone()
@@ -307,6 +315,7 @@ impl PendingBlockchainTransactionsRepo for PendingBlockchainTransactionsRepoMock
             fee: payload.fee,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
+            erc20_operation_kind: None,
         };
         data.push(res.clone());
         Ok(res)
@@ -339,6 +348,7 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoMock {
             confirmations: payload.confirmations,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
+            erc20_operation_kind: None,
         };
         data.push(res.clone());
         Ok(res)

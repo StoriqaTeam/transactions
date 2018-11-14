@@ -15,9 +15,9 @@ pub trait AccountsRepo: Send + Sync + 'static {
     fn update(&self, account_id: AccountId, payload: UpdateAccount) -> RepoResult<Account>;
     fn delete(&self, account_id: AccountId) -> RepoResult<Account>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Account>>;
-    fn get_by_address(&self, address_: AccountAddress, currency: Currency, kind_: AccountKind) -> RepoResult<Option<Account>>;
-    fn filter_by_address(&self, address_: AccountAddress) -> RepoResult<Vec<Account>>;
-    fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>>;
+    fn get_by_address(&self, address_: BlockchainAddress, currency: Currency, kind_: AccountKind) -> RepoResult<Option<Account>>;
+    fn filter_by_address(&self, address_: BlockchainAddress) -> RepoResult<Vec<Account>>;
+    fn get_by_addresses(&self, addresses: &[BlockchainAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>>;
 }
 
 #[derive(Clone, Default)]
@@ -80,7 +80,7 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
             })
         })
     }
-    fn get_by_address(&self, address_: AccountAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
+    fn get_by_address(&self, address_: BlockchainAddress, currency_: Currency, kind_: AccountKind) -> RepoResult<Option<Account>> {
         with_tls_connection(|conn| {
             accounts
                 .filter(address.eq(address_.clone()))
@@ -95,7 +95,7 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
         })
     }
 
-    fn filter_by_address(&self, address_: AccountAddress) -> RepoResult<Vec<Account>> {
+    fn filter_by_address(&self, address_: BlockchainAddress) -> RepoResult<Vec<Account>> {
         with_tls_connection(|conn| {
             accounts.filter(address.eq(address_.clone())).get_results(conn).map_err(move |e| {
                 let error_kind = ErrorKind::from(&e);
@@ -104,7 +104,7 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
         })
     }
 
-    fn get_by_addresses(&self, addresses: &[AccountAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
+    fn get_by_addresses(&self, addresses: &[BlockchainAddress], currency_: Currency, kind_: AccountKind) -> RepoResult<Vec<Account>> {
         with_tls_connection(|conn| {
             accounts
                 .filter(address.eq_any(addresses))
@@ -260,7 +260,7 @@ pub mod tests {
     //         let mut new_account = NewAccount::default();
     //         new_account.user_id = user.id;
     //         new_account.kind = AccountKind::Dr;
-    //         let res = accounts_repo.get_with_enough_value(Amount::new(123), Currency::Eth, user.id);
+    //         let res = accounts_repo.get_accounts_for_withdrawal(Amount::new(123), Currency::Eth, user.id);
     //         assert!(res.is_ok());
     //         res
     //     }));

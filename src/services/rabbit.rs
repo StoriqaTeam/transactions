@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
 use super::error::*;
+use super::system::{SystemService, SystemServiceImpl};
+use client::{BlockchainClient, KeysClient};
+use config::Config;
 use models::*;
 use prelude::*;
 use repos::{
@@ -8,36 +11,53 @@ use repos::{
     StrangeBlockchainTransactionsRepo, TransactionsRepo,
 };
 use serde_json;
-use utils::log_error;
+use utils::{log_and_capture_error, log_error};
+
+// 500 stq
+const STQ_BALANCE_THRESHOLD: u128 = 500_000_000_000_000_000_000;
+// 100 bn of storiqa
+const STQ_ALLOWANCE: u128 = 100_000_000_000_000_000_000_000_000_000;
 
 #[derive(Clone)]
 pub struct BlockchainFetcher<E: DbExecutor> {
+    config: Arc<Config>,
     transactions_repo: Arc<TransactionsRepo>,
     accounts_repo: Arc<AccountsRepo>,
     seen_hashes_repo: Arc<SeenHashesRepo>,
     blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
     strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
     pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+    system_service: Arc<SystemService>,
+    blockchain_client: Arc<BlockchainClient>,
+    keys_client: Arc<KeysClient>,
     db_executor: E,
 }
 
 impl<E: DbExecutor> BlockchainFetcher<E> {
     pub fn new(
+        config: Arc<Config>,
         transactions_repo: Arc<TransactionsRepo>,
         accounts_repo: Arc<AccountsRepo>,
         seen_hashes_repo: Arc<SeenHashesRepo>,
         blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
         strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
         pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+        blockchain_client: Arc<BlockchainClient>,
+        keys_client: Arc<KeysClient>,
         db_executor: E,
     ) -> Self {
+        let system_service = Arc::new(SystemServiceImpl::new(accounts_repo.clone(), config.clone()));
         BlockchainFetcher {
+            config,
             transactions_repo,
             accounts_repo,
             seen_hashes_repo,
             blockchain_transactions_repo,
             strange_blockchain_transactions_repo,
             pending_blockchain_transactions_repo,
+            system_service,
+            blockchain_client,
+            keys_client,
             db_executor,
         }
     }
@@ -83,6 +103,29 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             return Ok(());
         }
 
+        if let Some(erc20_op) = blockchain_tx.erc20_operation_kind {
+            if erc20_op == Erc20OperationKind::Approve {
+                if blockchain_tx.currency != Currency::Stq {
+                    return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => blockchain_tx));
+                }
+                let to = blockchain_tx
+                    .to
+                    .get(0)
+                    .ok_or(
+                        ectx!(try err ErrorContext::InvalidBlockchainTransactionStructure, ErrorKind::Internal => blockchain_tx.clone()),
+                    )?.address
+                    .clone();
+                if let Some(account) = self.accounts_repo.get_by_address(to, Currency::Stq, AccountKind::Dr)? {
+                    let changeset = UpdateAccount {
+                        erc20_approved: Some(true),
+                        ..Default::default()
+                    };
+                    self.accounts_repo.update(account.id, changeset)?;
+                    // proceed to collect fees and update tx statuses
+                }
+            }
+        }
+
         if let Some(tx) = self.transactions_repo.get_by_blockchain_tx(normalized_tx.hash.clone())? {
             // The tx is already in our db => it was created by us and waiting for confirmation from blockchain => it's withdrawal tx
             let total_tx_value = normalized_tx
@@ -98,10 +141,31 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 self.handle_violation(violation, &blockchain_tx)?;
                 return Ok(());
             }
+            let fees_currency = match blockchain_tx.currency {
+                Currency::Btc => Currency::Btc,
+                Currency::Eth => Currency::Eth,
+                Currency::Stq => Currency::Stq,
+            };
+            let fees_account = self.system_service.get_system_fees_account(fees_currency)?;
             self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
             self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
             self.transactions_repo
                 .update_status(blockchain_tx.hash.clone(), TransactionStatus::Done)?;
+            let fee_tx = NewTransaction {
+                id: TransactionId::generate(),
+                gid: tx.gid,
+                user_id: tx.user_id,
+                dr_account_id: fees_account.id,
+                cr_account_id: tx.cr_account_id, // dr account is in credit of withdrawal tx
+                currency: tx.currency,
+                value: blockchain_tx.fee,
+                status: TransactionStatus::Done,
+                blockchain_tx_id: None,
+                kind: TransactionKind::BlockchainFee,
+                group_kind: tx.group_kind,
+                related_tx: None,
+            };
+            self.transactions_repo.create(fee_tx)?;
             self.seen_hashes_repo.create(NewSeenHashes {
                 hash: blockchain_tx.hash.clone(),
                 block_number: blockchain_tx.block_number as i64,
@@ -136,7 +200,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 .unwrap();
             let to_cr_account = self
                 .accounts_repo
-                .get_by_address(to_dr_account.address, to_dr_account.currency, AccountKind::Cr)?
+                .get_by_address(to_dr_account.address.clone(), to_dr_account.currency, AccountKind::Cr)?
                 .unwrap();
             let tx_id = TransactionId::generate();
             let new_tx = NewTransaction {
@@ -149,10 +213,26 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 value: to_entry.value,
                 status: TransactionStatus::Done,
                 blockchain_tx_id: Some(blockchain_tx.hash.clone()),
-                fee: blockchain_tx.fee,
+                kind: TransactionKind::Deposit,
+                group_kind: TransactionGroupKind::Deposit,
+                related_tx: None,
             };
             self.transactions_repo.create(new_tx)?;
             self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
+            // approve account if balance has passed threshold
+            if (to_dr_account.currency == Currency::Stq) && !to_dr_account.erc20_approved {
+                let balance = self
+                    .transactions_repo
+                    .get_accounts_balance(to_dr_account.user_id, &[to_dr_account.clone()])?[0]
+                    .balance;
+                if balance >= Amount::new(STQ_BALANCE_THRESHOLD) {
+                    // don't rollback if we failed here, since it's not mission critical to approve ERC-20
+                    let _ = self.send_erc20_approval(&to_dr_account).map_err(|e| {
+                        log_and_capture_error(e);
+                    });
+                }
+            }
+
             self.seen_hashes_repo.create(NewSeenHashes {
                 hash: blockchain_tx.hash.clone(),
                 block_number: blockchain_tx.block_number as i64,
@@ -242,6 +322,116 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         //     return Ok(Some(InvariantViolation::WithdrawalValue));
         // }
         Ok(None)
+    }
+
+    fn send_erc20_approval(&self, account: &Account) -> Result<(), Error> {
+        let nonce = self
+            .blockchain_client
+            .get_ethereum_nonce(account.address.clone())
+            .wait()
+            .map_err(ectx!(try ErrorKind::Internal => account.clone()))?;
+        let eth_fees_cr_account = self.system_service.get_system_fees_account(Currency::Eth)?;
+        let eth_fees_dr_account = self.system_service.get_system_fees_account_dr(Currency::Eth)?;
+
+        let id = TransactionId::generate();
+        let next_id = id.next();
+
+        let value = self
+            .config
+            .system
+            .approve_gas_price
+            .checked_mul(self.config.system.approve_gas_limit)
+            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+
+        let eth_transfer_blockchain_tx = CreateBlockchainTx {
+            id,
+            from: eth_fees_dr_account.address.clone(),
+            to: account.address.clone(),
+            currency: Currency::Stq,
+            value,
+            fee_price: self.config.system.approve_gas_price,
+            nonce: Some(nonce),
+            utxos: None,
+        };
+        let eth_approve_blockchain_tx = ApproveInput {
+            id,
+            address: account.address.clone(),
+            approve_address: eth_fees_dr_account.address.clone(),
+            currency: Currency::Stq,
+            value: Amount::new(STQ_ALLOWANCE),
+            fee_price: self.config.system.approve_gas_price,
+            nonce: nonce + 1,
+        };
+
+        // TODO: sign_transaction will use transferFrom, meaning
+        // you have to approve it for self before that.
+        // Need to add ordinary transfer method
+        let (eth_raw_tx, approve_raw_tx) = self
+            .keys_client
+            .sign_transaction(eth_transfer_blockchain_tx.clone(), Role::System)
+            .join(self.keys_client.approve(eth_approve_blockchain_tx.clone(), Role::User))
+            .wait()
+            .map_err(|e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()))?;
+
+        let eth_tx_id =
+            self.blockchain_client.post_ethereum_transaction(eth_raw_tx).wait().map_err(
+                |e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()),
+            )?;
+
+        let eth_tx = NewTransaction {
+            id,
+            gid: id,
+            user_id: account.user_id,
+            dr_account_id: eth_fees_cr_account.id,
+            cr_account_id: eth_fees_dr_account.id,
+            currency: Currency::Eth,
+            value,
+            status: TransactionStatus::Pending,
+            blockchain_tx_id: Some(eth_tx_id.clone()),
+            kind: TransactionKind::ApprovalTransfer,
+            group_kind: TransactionGroupKind::Approval,
+            related_tx: None,
+        };
+        let new_pending_eth = (eth_transfer_blockchain_tx.clone(), eth_tx_id.clone()).into();
+        // Note - we don't rollback here, because the tx is already in blockchain. so after that just silently
+        // fail if we couldn't write a pending tx. Not having pending tx in db doesn't do a lot of harm, we could cure
+        // it later.
+        match self.pending_blockchain_transactions_repo.create(new_pending_eth) {
+            Err(e) => log_and_capture_error(e),
+            _ => (),
+        };
+        let approve_tx_id =
+            self.blockchain_client.post_ethereum_transaction(approve_raw_tx).wait().map_err(
+                |e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()),
+            )?;
+
+        let approve_tx = NewTransaction {
+            id: next_id,
+            gid: next_id,
+            user_id: account.user_id,
+            dr_account_id: eth_fees_cr_account.id,
+            cr_account_id: eth_fees_dr_account.id,
+            currency: Currency::Eth,
+            value,
+            status: TransactionStatus::Pending,
+            blockchain_tx_id: Some(approve_tx_id),
+            kind: TransactionKind::ApprovalCall,
+            group_kind: TransactionGroupKind::Approval,
+            related_tx: None,
+        };
+
+        let new_pending_approve = (eth_approve_blockchain_tx.clone(), eth_tx_id.clone()).into();
+        // Note - we don't rollback here, because the tx is already in blockchain. so after that just silently
+        // fail if we couldn't write a pending tx. Not having pending tx in db doesn't do a lot of harm, we could cure
+        // it later.
+        match self.pending_blockchain_transactions_repo.create(new_pending_approve) {
+            Err(e) => log_and_capture_error(e),
+            _ => (),
+        };
+
+        self.transactions_repo.create(eth_tx)?;
+        self.transactions_repo.create(approve_tx)?;
+        Ok(())
     }
 }
 

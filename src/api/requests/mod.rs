@@ -64,7 +64,10 @@ pub struct PutAccountsRequest {
 
 impl From<PutAccountsRequest> for UpdateAccount {
     fn from(req: PutAccountsRequest) -> Self {
-        Self { name: req.name }
+        Self {
+            name: req.name,
+            erc20_approved: None,
+        }
     }
 }
 
@@ -81,8 +84,8 @@ pub struct PostTransactionsRequest {
     pub id: TransactionId,
     pub user_id: UserId,
     pub from: AccountId,
-    pub to: Receipt,
-    pub to_type: ReceiptType,
+    pub to: Recepient,
+    pub to_type: RecepientType,
     pub to_currency: Currency,
     pub value: Amount,
     pub value_currency: Currency,

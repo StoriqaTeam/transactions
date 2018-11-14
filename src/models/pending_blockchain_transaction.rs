@@ -6,13 +6,14 @@ use schema::pending_blockchain_transactions;
 #[derive(Debug, Queryable, Clone)]
 pub struct PendingBlockchainTransactionDB {
     pub hash: BlockchainTransactionId,
-    pub from_: AccountAddress,
-    pub to_: AccountAddress,
+    pub from_: BlockchainAddress,
+    pub to_: BlockchainAddress,
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
 impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchainTransactionDB {
@@ -24,6 +25,21 @@ impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchai
             currency: transaction.0.currency,
             value: transaction.0.value,
             fee: transaction.0.fee_price,
+            erc20_operation_kind: None,
+        }
+    }
+}
+
+impl From<(ApproveInput, BlockchainTransactionId)> for NewPendingBlockchainTransactionDB {
+    fn from(transaction: (ApproveInput, BlockchainTransactionId)) -> Self {
+        Self {
+            hash: transaction.1,
+            from_: transaction.0.address,
+            to_: transaction.0.approve_address,
+            currency: transaction.0.currency,
+            value: Amount::new(9),
+            fee: transaction.0.fee_price,
+            erc20_operation_kind: Some(Erc20OperationKind::Approve),
         }
     }
 }
@@ -32,22 +48,24 @@ impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchai
 #[table_name = "pending_blockchain_transactions"]
 pub struct NewPendingBlockchainTransactionDB {
     pub hash: BlockchainTransactionId,
-    pub from_: AccountAddress,
-    pub to_: AccountAddress,
+    pub from_: BlockchainAddress,
+    pub to_: BlockchainAddress,
     pub currency: Currency,
     pub value: Amount,
     pub fee: Amount,
+    pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
 impl Default for NewPendingBlockchainTransactionDB {
     fn default() -> Self {
         Self {
             hash: BlockchainTransactionId::default(),
-            from_: AccountAddress::default(),
-            to_: AccountAddress::default(),
+            from_: BlockchainAddress::default(),
+            to_: BlockchainAddress::default(),
             currency: Currency::Eth,
             value: Amount::default(),
             fee: Amount::default(),
+            erc20_operation_kind: None,
         }
     }
 }

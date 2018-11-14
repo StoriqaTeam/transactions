@@ -19,7 +19,6 @@ pub struct Transaction {
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
-    pub fee: Amount,
     pub gid: TransactionId,
 }
 
@@ -46,7 +45,13 @@ impl Default for Transaction {
             blockchain_tx_id: None,
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
+<<<<<<< HEAD
             fee: Amount::default(),
+=======
+            kind: TransactionKind::Internal,
+            group_kind: TransactionGroupKind::Internal,
+            related_tx: None,
+>>>>>>> feature/fees2
         }
     }
 }
@@ -63,7 +68,13 @@ pub struct NewTransaction {
     pub value: Amount,
     pub status: TransactionStatus,
     pub blockchain_tx_id: Option<BlockchainTransactionId>,
+<<<<<<< HEAD
     pub fee: Amount,
+=======
+    pub kind: TransactionKind,
+    pub group_kind: TransactionGroupKind,
+    pub related_tx: Option<TransactionId>,
+>>>>>>> feature/fees2
 }
 
 impl Default for NewTransaction {
@@ -79,7 +90,9 @@ impl Default for NewTransaction {
             value: Amount::default(),
             status: TransactionStatus::Pending,
             blockchain_tx_id: None,
-            fee: Amount::default(),
+            kind: TransactionKind::Internal,
+            group_kind: TransactionGroupKind::Internal,
+            related_tx: None,
         }
     }
 }
@@ -89,8 +102,8 @@ pub struct CreateTransactionInput {
     pub id: TransactionId,
     pub user_id: UserId,
     pub from: AccountId,
-    pub to: Receipt,
-    pub to_type: ReceiptType,
+    pub to: Recepient,
+    pub to_type: RecepientType,
     pub to_currency: Currency,
     pub value: Amount,
     pub value_currency: Currency,
@@ -99,117 +112,12 @@ pub struct CreateTransactionInput {
     pub exchange_rate: Option<f64>,
 }
 
-#[derive(Debug, Clone, Validate)]
-pub struct CreateTransaction {
-    pub user_id: UserId,
-    pub dr_account_id: AccountId,
-    pub to: Receipt,
-    pub to_type: ReceiptType,
-    pub to_currency: Currency,
-    pub value: Amount,
-    pub fee: Amount,
-    pub hold_until: Option<NaiveDateTime>,
-}
-
-#[derive(Debug, Clone, Validate)]
-pub struct CreateTransactionLocal {
-    pub user_id: UserId,
-    pub dr_account: Account,
-    pub cr_account: Account,
-    pub currency: Currency,
-    pub value: Amount,
-    pub hold_until: Option<NaiveDateTime>,
-}
-
-impl CreateTransactionLocal {
-    pub fn new(create: &CreateTransaction, dr_account: Account, cr_account: Account) -> Self {
-        Self {
-            user_id: create.user_id,
-            dr_account,
-            cr_account,
-            currency: create.to_currency,
-            value: create.value,
-            hold_until: create.hold_until,
-        }
-    }
-}
-
-impl Default for CreateTransactionLocal {
-    fn default() -> Self {
-        Self {
-            user_id: UserId::generate(),
-            dr_account: Account::default(),
-            cr_account: Account::default(),
-            currency: Currency::Eth,
-            value: Amount::default(),
-            hold_until: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Validate)]
-pub struct DepositFunds {
-    pub user_id: UserId,
-    pub address: AccountAddress,
-    pub currency: Currency,
-    pub value: Amount,
-    pub blockchain_tx_id: BlockchainTransactionId,
-}
-
-impl Default for DepositFunds {
-    fn default() -> Self {
-        Self {
-            user_id: UserId::default(),
-            address: AccountAddress::default(),
-            currency: Currency::Eth,
-            value: Amount::default(),
-            blockchain_tx_id: BlockchainTransactionId::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Validate)]
-pub struct Withdraw {
-    pub user_id: UserId,
-    pub dr_account: Account,
-    pub address: AccountAddress,
-    pub currency: Currency,
-    pub value: Amount,
-    pub fee: Amount,
-}
-
-impl Withdraw {
-    pub fn new(create: &CreateTransaction, dr_account: Account, address: AccountAddress) -> Self {
-        Self {
-            user_id: create.user_id,
-            dr_account,
-            address,
-            currency: create.to_currency,
-            value: create.value,
-            fee: create.fee,
-        }
-    }
-}
-
-impl Default for Withdraw {
-    fn default() -> Self {
-        Self {
-            user_id: UserId::default(),
-            dr_account: Account::default(),
-            address: AccountAddress::default(),
-            currency: Currency::Eth,
-            value: Amount::default(),
-            fee: Amount::default(),
-        }
-    }
-}
-
 #[derive(Debug, Validate, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateBlockchainTx {
     pub id: TransactionId,
-    pub from: AccountAddress,
-    pub to: AccountAddress,
+    pub from: BlockchainAddress,
+    pub to: BlockchainAddress,
     pub currency: Currency,
     pub value: Amount,
     pub fee_price: Amount,
@@ -221,8 +129,8 @@ impl Default for CreateBlockchainTx {
     fn default() -> Self {
         Self {
             id: TransactionId::generate(),
-            from: AccountAddress::default(),
-            to: AccountAddress::default(),
+            from: BlockchainAddress::default(),
+            to: BlockchainAddress::default(),
             currency: Currency::Eth,
             value: Amount::default(),
             fee_price: Amount::default(),
@@ -234,8 +142,8 @@ impl Default for CreateBlockchainTx {
 
 impl CreateBlockchainTx {
     pub fn new(
-        from: AccountAddress,
-        to: AccountAddress,
+        from: BlockchainAddress,
+        to: BlockchainAddress,
         currency: Currency,
         value: Amount,
         fee_price: Amount,
@@ -309,11 +217,11 @@ pub struct TransactionOut {
 #[derive(Debug, Serialize, Clone)]
 pub struct TransactionAddressInfo {
     pub account_id: Option<AccountId>,
-    pub blockchain_address: AccountAddress,
+    pub blockchain_address: BlockchainAddress,
 }
 
 impl TransactionAddressInfo {
-    pub fn new(account_id: Option<AccountId>, blockchain_address: AccountAddress) -> Self {
+    pub fn new(account_id: Option<AccountId>, blockchain_address: BlockchainAddress) -> Self {
         Self {
             account_id,
             blockchain_address,

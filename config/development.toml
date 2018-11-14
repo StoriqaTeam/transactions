@@ -29,6 +29,9 @@ restart_subscription_secs = 30
 
 [system]
 system_user_id = "00000000-0000-4000-8000-010000000000"
+btc_transfer_account_id = "00000000-0000-4000-8000-010000000000"
+eth_transfer_account_id = "00000000-0000-4000-8000-020000000000"
+stq_transfer_account_id = "00000000-0000-4000-8000-030000000000"
 btc_liquidity_account_id = "00000000-0000-4000-8000-0a0000000000"
 eth_liquidity_account_id = "00000000-0000-4000-8000-0b0000000000"
 stq_liquidity_account_id = "00000000-0000-4000-8000-0c0000000000"
@@ -39,6 +42,8 @@ keys_system_user_id = "0746caa0-7a41-45e2-8c7c-fa76ca5336b7"
 keys_system_user_token = "bURPpnBOGnBvj8fuAOR+q+cSPAw1Lf6zND06E+r0OYo="
 exchange_gateway_system_user_id = "0746caa0-7a41-45e2-8c7c-fa76ca5336b7"
 exchange_gateway_system_user_token = "bURPpnBOGnBvj8fuAOR+q+cSPAw1Lf6zND06E+r0OYo="
+approve_gas_price = 20_000_000_000
+approve_gas_limit = 60_000
 
 [fee_price]
 ethereum = 18000000000
@@ -47,7 +52,8 @@ bitcoin = 4
 [fees_options]
 btc_fees_collect_url = "https://bitcoinfees.earn.com/api/v1/fees/recommended"
 eth_fees_collect_url = "https://www.etherchain.org/api/gasPriceOracle"
-btc_transaction_size = 280
-eth_gas_limit = 28000
-stq_gas_limit = 100000
+btc_transaction_size = 250
+eth_gas_limit = 21000
+stq_gas_limit = 60000
 fee_upside = 2
+

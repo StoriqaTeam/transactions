@@ -17,6 +17,7 @@ pub struct StrangeBlockchainTransactionDB {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub commentary: String,
+    pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
 impl From<(BlockchainTransaction, String)> for NewStrangeBlockchainTransactionDB {
@@ -30,6 +31,7 @@ impl From<(BlockchainTransaction, String)> for NewStrangeBlockchainTransactionDB
             fee: transaction.0.fee,
             confirmations: transaction.0.confirmations as i32,
             commentary: transaction.1,
+            erc20_operation_kind: transaction.0.erc20_operation_kind,
         }
     }
 }
@@ -45,6 +47,7 @@ pub struct NewStrangeBlockchainTransactionDB {
     pub fee: Amount,
     pub confirmations: i32,
     pub commentary: String,
+    pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
 impl Default for NewStrangeBlockchainTransactionDB {
@@ -58,6 +61,7 @@ impl Default for NewStrangeBlockchainTransactionDB {
             fee: Amount::default(),
             confirmations: 0,
             commentary: "comment".to_string(),
+            erc20_operation_kind: None,
         }
     }
 }

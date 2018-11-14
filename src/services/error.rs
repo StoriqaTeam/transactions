@@ -70,6 +70,12 @@ pub enum ErrorContext {
     InvalidUuid,
     #[fail(display = "service error context - operation not yet supproted")]
     NotSupported,
+    #[fail(display = "service error context - invalid value")]
+    InvalidValue,
+    #[fail(display = "service error context - unexpected blockckhain transaction structure")]
+    InvalidBlockchainTransactionStructure,
+    #[fail(display = "service error context - unexpected transaction structure")]
+    InvalidTransactionStructure,
 }
 
 derive_error_impls!();

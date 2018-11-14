@@ -26,8 +26,8 @@ pub trait BlockchainClient: Send + Sync + 'static {
         &self,
         transaction: BlockchainTransactionRaw,
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
-    fn get_bitcoin_utxos(&self, address: AccountAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send>;
-    fn get_ethereum_nonce(&self, address: AccountAddress) -> Box<Future<Item = u64, Error = Error> + Send>;
+    fn get_bitcoin_utxos(&self, address: BlockchainAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send>;
+    fn get_ethereum_nonce(&self, address: BlockchainAddress) -> Box<Future<Item = u64, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -112,11 +112,11 @@ impl BlockchainClient for BlockchainClientImpl {
                 .map(|resp| resp.tx_hash),
         )
     }
-    fn get_bitcoin_utxos(&self, address: AccountAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send> {
+    fn get_bitcoin_utxos(&self, address: BlockchainAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send> {
         let url = format!("/bitcoin/{}/utxos", address);
         Box::new(self.exec_query_get::<Vec<BitcoinUtxos>>(&url))
     }
-    fn get_ethereum_nonce(&self, address: AccountAddress) -> Box<Future<Item = u64, Error = Error> + Send> {
+    fn get_ethereum_nonce(&self, address: BlockchainAddress) -> Box<Future<Item = u64, Error = Error> + Send> {
         let url = format!("/ethereum/{}/nonce", address);
         Box::new(self.exec_query_get::<GetEtheriumNonceResponse>(&url).map(|resp| resp.nonce))
     }
@@ -138,10 +138,10 @@ impl BlockchainClient for BlockchainClientMock {
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         Box::new(Ok(BlockchainTransactionId::default()).into_future())
     }
-    fn get_bitcoin_utxos(&self, _address: AccountAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send> {
+    fn get_bitcoin_utxos(&self, _address: BlockchainAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send> {
         Box::new(Ok(vec![BitcoinUtxos::default()]).into_future())
     }
-    fn get_ethereum_nonce(&self, _address: AccountAddress) -> Box<Future<Item = u64, Error = Error> + Send> {
+    fn get_ethereum_nonce(&self, _address: BlockchainAddress) -> Box<Future<Item = u64, Error = Error> + Send> {
         Box::new(Ok(0).into_future())
     }
 }

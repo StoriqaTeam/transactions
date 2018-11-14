@@ -27,6 +27,12 @@ impl AccountId {
     pub fn generate() -> Self {
         AccountId(Uuid::new_v4())
     }
+
+    pub fn derive_system_dr_id(&self) -> Self {
+        let mut dr_account_id_bytes = self.inner().as_bytes().clone();
+        dr_account_id_bytes[15] = 1;
+        AccountId::new(Uuid::from_bytes(&dr_account_id_bytes).unwrap())
+    }
 }
 
 impl FromStr for AccountId {

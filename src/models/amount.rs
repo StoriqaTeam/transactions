@@ -32,9 +32,19 @@ impl Amount {
         self.0.checked_add(other.0).map(Amount)
     }
 
-    /// Make saubtraction, return None on overflow
+    /// Make subtraction, return None on overflow
     pub fn checked_sub(&self, other: Amount) -> Option<Self> {
         self.0.checked_sub(other.0).map(Amount)
+    }
+
+    /// Make multiplication, return None on overflow
+    pub fn checked_mul(&self, other: Amount) -> Option<Self> {
+        self.0.checked_mul(other.0).map(Amount)
+    }
+
+    /// Make div, return None on overflow
+    pub fn checked_div(&self, other: Amount) -> Option<Self> {
+        self.0.checked_div(other.0).map(Amount)
     }
 
     pub fn new(v: u128) -> Self {

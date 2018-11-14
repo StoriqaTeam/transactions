@@ -77,7 +77,7 @@ use self::repos::{
     ErrorKind as ReposErrorKind, PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl, StrangeBlockchainTransactionsRepoImpl,
     TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
 };
-use client::{KeysClient, KeysClientImpl};
+use client::{BlockchainClientImpl, KeysClient, KeysClientImpl};
 use config::{Config, System};
 use rabbit::{ConnectionHooks, RabbitConnectionManager, TransactionConsumerImpl};
 use rabbit::{ErrorKind, ErrorSource};
@@ -113,13 +113,19 @@ pub fn start_server() {
         let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoImpl);
         let strange_blockchain_transactions_repo = Arc::new(StrangeBlockchainTransactionsRepoImpl);
         let pending_blockchain_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoImpl);
+        let client = HttpClientImpl::new(&config_clone);
+        let blockchain_client = Arc::new(BlockchainClientImpl::new(&config_clone, client.clone()));
+        let keys_client = Arc::new(KeysClientImpl::new(&config_clone, client.clone()));
         let fetcher = BlockchainFetcher::new(
+            Arc::new(config_clone.clone()),
             transactions_repo,
             accounts_repo,
             seen_hashes_repo,
             blockchain_transactions_repo,
             strange_blockchain_transactions_repo,
             pending_blockchain_transactions_repo,
+            blockchain_client,
+            keys_client,
             db_executor,
         );
         debug!("Started creating rabbit connection pool");
@@ -266,6 +272,9 @@ pub fn upsert_system_accounts() {
     let config_clone = config.clone();
 
     let System {
+        btc_transfer_account_id,
+        eth_transfer_account_id,
+        stq_transfer_account_id,
         btc_liquidity_account_id,
         eth_liquidity_account_id,
         stq_liquidity_account_id,
@@ -294,6 +303,9 @@ pub fn upsert_system_accounts() {
         }).and_then(move |user| {
             let keys_client = keys_client.clone();
             let inputs = [
+                (btc_transfer_account_id, user.id, Currency::Btc, "btc_transfer_account"),
+                (eth_transfer_account_id, user.id, Currency::Eth, "eth_transfer_account"),
+                (stq_transfer_account_id, user.id, Currency::Stq, "stq_transfer_account"),
                 (btc_liquidity_account_id, user.id, Currency::Btc, "btc_liquidity_account"),
                 (eth_liquidity_account_id, user.id, Currency::Eth, "eth_liquidity_account"),
                 (stq_liquidity_account_id, user.id, Currency::Stq, "stq_liquidity_account"),
@@ -354,9 +366,7 @@ fn upsert_system_account(
                         name: Some(name.clone()),
                         kind: AccountKind::Cr,
                     };
-                    let mut dr_account_id_bytes = account_id.inner().as_bytes().clone();
-                    dr_account_id_bytes[15] = 1;
-                    let dr_account_id = AccountId::new(Uuid::from_bytes(&dr_account_id_bytes).unwrap());
+                    let dr_account_id = account_id.derive_system_dr_id();
                     let new_dr_account = NewAccount {
                         id: dr_account_id,
                         user_id,

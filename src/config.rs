@@ -42,6 +42,16 @@ pub struct FeePrice {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct FeesOptions {
+    pub btc_fees_collect_url: String,
+    pub eth_fees_collect_url: String,
+    pub btc_transaction_size: i32,
+    pub eth_gas_limit: i32,
+    pub stq_gas_limit: i32,
+    pub fee_upside: f64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Database {
     pub url: String,
 }
@@ -81,6 +91,9 @@ pub struct Rabbit {
 #[derive(Debug, Deserialize, Clone)]
 pub struct System {
     pub system_user_id: UserId,
+    pub btc_transfer_account_id: AccountId,
+    pub eth_transfer_account_id: AccountId,
+    pub stq_transfer_account_id: AccountId,
     pub btc_liquidity_account_id: AccountId,
     pub eth_liquidity_account_id: AccountId,
     pub stq_liquidity_account_id: AccountId,
@@ -91,6 +104,8 @@ pub struct System {
     pub keys_system_user_token: AuthenticationToken,
     pub exchange_gateway_system_user_id: UserId,
     pub exchange_gateway_system_user_token: AuthenticationToken,
+    pub approve_gas_price: Amount,
+    pub approve_gas_limit: Amount,
 }
 
 impl Config {
