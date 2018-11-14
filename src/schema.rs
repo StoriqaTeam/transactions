@@ -80,6 +80,9 @@ table! {
         created_at -> Timestamp,
         updated_at -> Timestamp,
         gid -> Uuid,
+        kind -> Varchar,
+        group_kind -> Varchar,
+        related_tx -> Nullable<Uuid>,
     }
 }
 
