@@ -19,7 +19,7 @@ use tokio_core::reactor::Core;
 
 use super::error::*;
 use config::Config;
-use utils::log_error;
+use utils::{format_error, log_error};
 
 const CONSUMER_PREFETCH_COUNT: u16 = 1000;
 pub type RabbitPool = Pool<RabbitConnectionManager>;
@@ -59,9 +59,9 @@ impl Drop for RabbitHeartbeatHandle {
 #[derive(Debug, Clone)]
 pub struct ConnectionHooks;
 
-impl CustomizeConnection<Channel<TcpStream>, Compat<Error>> for ConnectionHooks {
+impl CustomizeConnection<Channel<TcpStream>, Compat<failure::Error>> for ConnectionHooks {
     #[allow(unused_variables)]
-    fn on_acquire(&self, conn: &mut Channel<TcpStream>) -> Result<(), Compat<Error>> {
+    fn on_acquire(&self, conn: &mut Channel<TcpStream>) -> Result<(), Compat<failure::Error>> {
         trace!("Acquired rabbitmq channel");
         Ok(())
     }
@@ -237,7 +237,7 @@ impl RabbitConnectionManager {
 
 impl ManageConnection for RabbitConnectionManager {
     type Connection = Channel<TcpStream>;
-    type Error = Compat<Error>;
+    type Error = Compat<failure::Error>;
     fn connect(&self) -> Result<Self::Connection, Self::Error> {
         trace!("Creating rabbit channel...");
         self.repair_if_tcp_is_broken();
@@ -246,14 +246,14 @@ impl ManageConnection for RabbitConnectionManager {
             .create_channel()
             .wait()
             .map_err(ectx!(ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))
-            .map_err(|e: Error| e.compat())?;
+            .map_err(|e: failure::Error| e.compat())?;
         let _ = ch
             .basic_qos(BasicQosOptions {
                 prefetch_count: CONSUMER_PREFETCH_COUNT,
                 ..Default::default()
             }).wait()
             .map_err(ectx!(ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))
-            .map_err(|e: Error| e.compat())?;
+            .map_err(|e: failure::Error| e.compat())?;
         trace!("Rabbit channel is created");
         Ok(ch)
     }
@@ -261,14 +261,17 @@ impl ManageConnection for RabbitConnectionManager {
         self.repair_if_tcp_is_broken();
         if self.is_broken_conn() {
             let e: Error = ectx!(err format_err!("Connection is broken"), ErrorKind::Internal);
+            let e: failure::Error = format_err!("{}", format_error(&e));
             return Err(e.compat());
         }
         if self.is_connecting_conn() {
             let e: Error = ectx!(err format_err!("Connection is in process of connecting"), ErrorKind::Internal);
+            let e: failure::Error = format_err!("{}", format_error(&e));
             return Err(e.compat());
         }
         if !conn.is_connected() {
             let e: Error = ectx!(err format_err!("Channel is not connected"), ErrorKind::Internal);
+            let e: failure::Error = format_err!("{}", format_error(&e));
             return Err(e.compat());
         }
         trace!("Channel is ok");
