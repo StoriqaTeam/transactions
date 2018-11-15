@@ -127,6 +127,11 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                         self.accounts_repo.update(account.id, changeset)?;
                         self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
                         self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
+                        self.seen_hashes_repo.create(NewSeenHashes {
+                            hash: blockchain_tx.hash.clone(),
+                            block_number: blockchain_tx.block_number as i64,
+                            currency: blockchain_tx.currency,
+                        })?;
                     }
                     // don't need to collect fees, etc. - see the comment in that send_erc20_approval
                     return Ok(());
