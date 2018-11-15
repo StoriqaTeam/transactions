@@ -105,19 +105,22 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             return Ok(());
         }
 
+        let mut skip_confirmations = false;
         if let Some(erc20_op) = blockchain_tx.erc20_operation_kind {
             if erc20_op == Erc20OperationKind::Approve {
+                // skip confirmations, because the value is very large,
+                // but since it's `approve` operation we don't care
+                skip_confirmations = true;
                 if blockchain_tx.currency != Currency::Stq {
                     return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => blockchain_tx));
                 }
-                let to = blockchain_tx
-                    .to
+                let from = blockchain_tx
+                    .from
                     .get(0)
                     .ok_or(
                         ectx!(try err ErrorContext::InvalidBlockchainTransactionStructure, ErrorKind::Internal => blockchain_tx.clone()),
-                    )?.address
-                    .clone();
-                if let Some(account) = self.accounts_repo.get_by_address(to, Currency::Stq, AccountKind::Dr)? {
+                    )?.clone();
+                if let Some(account) = self.accounts_repo.get_by_address(from, Currency::Stq, AccountKind::Dr)? {
                     let changeset = UpdateAccount {
                         erc20_approved: Some(true),
                         ..Default::default()
@@ -133,15 +136,17 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             let total_tx_value = normalized_tx
                 .value()
                 .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => tx.clone()))?;
-            if required_confirmations(normalized_tx.currency, total_tx_value) > normalized_tx.confirmations as u64 {
-                // skipping tx, waiting for more confirms
-                return Ok(());
-            }
-            if let Some(violation) = self.verify_withdrawal_tx(&tx, &normalized_tx)? {
-                // Here the tx itself is ok, but violates our internal invariants. We just log it here and put it into strange blockchain transactions table
-                // If we instead returned error - it would nack the rabbit message and return it to queue - smth we don't want here
-                self.handle_violation(violation, &blockchain_tx)?;
-                return Ok(());
+            if !skip_confirmations {
+                if required_confirmations(normalized_tx.currency, total_tx_value) > normalized_tx.confirmations as u64 {
+                    // skipping tx, waiting for more confirms
+                    return Ok(());
+                }
+                if let Some(violation) = self.verify_withdrawal_tx(&tx, &normalized_tx)? {
+                    // Here the tx itself is ok, but violates our internal invariants. We just log it here and put it into strange blockchain transactions table
+                    // If we instead returned error - it would nack the rabbit message and return it to queue - smth we don't want here
+                    self.handle_violation(violation, &blockchain_tx)?;
+                    return Ok(());
+                }
             }
             let fees_currency = match blockchain_tx.currency {
                 Currency::Btc => Currency::Btc,
@@ -422,6 +427,8 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                     .post_ethereum_transaction(approve_raw_tx)
                     .map_err(ectx!(ErrorKind::Internal => eth_approve_blockchain_tx_clone))
             }).and_then(move |approve_tx_id| {
+                // logs from blockchain gw erc20 comes with log number in hash
+                let approve_tx_id = BlockchainTransactionId::new(format!("{}:0", approve_tx_id.inner()));
                 let approve_tx = NewTransaction {
                     id: next_id,
                     gid: next_id,
