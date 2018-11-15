@@ -94,8 +94,8 @@ pub struct System {
     pub keys_system_user_token: AuthenticationToken,
     pub exchange_gateway_system_user_id: UserId,
     pub exchange_gateway_system_user_token: AuthenticationToken,
-    pub approve_gas_price: Amount,
-    pub approve_gas_limit: Amount,
+    pub approve_gas_price: u64,
+    pub approve_gas_limit: u64,
 }
 
 impl Config {

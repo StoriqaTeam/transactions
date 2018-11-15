@@ -337,11 +337,8 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let id = TransactionId::generate();
         let next_id = id.next();
 
-        let value = self
-            .config
-            .system
-            .approve_gas_price
-            .checked_mul(self.config.system.approve_gas_limit)
+        let value = Amount::new(self.config.system.approve_gas_price as u128)
+            .checked_mul(Amount::new(self.config.system.approve_gas_limit as u128))
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
 
         let eth_transfer_blockchain_tx = CreateBlockchainTx {
@@ -350,7 +347,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             to: account.address.clone(),
             currency: Currency::Stq,
             value,
-            fee_price: self.config.system.approve_gas_price,
+            fee_price: Amount::new(self.config.system.approve_gas_price as u128),
             nonce: Some(nonce),
             utxos: None,
         };
@@ -360,7 +357,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             approve_address: eth_fees_dr_account.address.clone(),
             currency: Currency::Stq,
             value: Amount::new(STQ_ALLOWANCE),
-            fee_price: self.config.system.approve_gas_price,
+            fee_price: Amount::new(self.config.system.approve_gas_price as u128),
             nonce: nonce + 1,
         };
 
