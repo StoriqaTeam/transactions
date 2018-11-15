@@ -37,7 +37,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
         value: Amount,
         currency: Currency,
         user_id: UserId,
-        fee_per_tx: Amount,
+        total_fee: Amount,
     ) -> RepoResult<Vec<AccountWithBalance>>;
 }
 
@@ -236,14 +236,14 @@ impl TransactionsRepo for TransactionsRepoImpl {
         mut value_: Amount,
         currency_: Currency,
         user_id_: UserId,
-        fee_per_tx: Amount,
+        total_fee: Amount,
     ) -> RepoResult<Vec<AccountWithBalance>> {
         with_tls_connection(|conn| {
-            let fee_per_tx = match currency_ {
+            let total_fee = match currency_ {
                 // we can drain stq account to 0,
                 Currency::Stq => Amount::new(0),
-                Currency::Eth => fee_per_tx,
-                Currency::Btc => fee_per_tx,
+                Currency::Eth => total_fee,
+                Currency::Btc => total_fee,
             };
             let minimum_balance = match currency_ {
                 Currency::Btc => MIN_SIGNIFICANT_SATOSHIS,
@@ -329,12 +329,17 @@ impl TransactionsRepo for TransactionsRepoImpl {
             // calculating accounts to take
             let mut r = vec![];
             for (acc, balance) in res_accounts {
-                let balance = balance.checked_sub(fee_per_tx).unwrap_or(Amount::new(0));
+                // Note - it may seem counter intuitive that we subtract total_fee from each account
+                // rather than from only one. But in reality you will incur the fee on each blockchain
+                // transaction.
+                // Todo need to design an algorithm of how to handle mutiple accounts withdraw.
+                let balance = balance.checked_sub(total_fee).unwrap_or(Amount::new(0));
                 if balance >= value_ {
                     r.push(AccountWithBalance {
                         account: acc,
                         balance: value_,
                     });
+                    break;
                 } else {
                     value_ = value_.checked_sub(balance).expect("Unexpected < 0 value");
                     r.push(AccountWithBalance { account: acc, balance });

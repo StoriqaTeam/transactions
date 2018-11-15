@@ -87,15 +87,17 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         exchange_client: Arc<dyn ExchangeClient>,
     ) -> Self {
         let config = Arc::new(config);
+        let classifier_service = Arc::new(ClassifierServiceImpl::new(accounts_repo.clone()));
+        let system_service = Arc::new(SystemServiceImpl::new(accounts_repo.clone(), config.clone()));
         let blockchain_service = Arc::new(BlockchainServiceImpl::new(
             config.clone(),
             keys_client,
             blockchain_client,
             exchange_client.clone(),
             pending_transactions_repo.clone(),
+            system_service.clone(),
         ));
-        let classifier_service = Arc::new(ClassifierServiceImpl::new(accounts_repo.clone()));
-        let system_service = Arc::new(SystemServiceImpl::new(accounts_repo.clone(), config.clone()));
+
         let converter_service = Arc::new(ConverterServiceImpl::new(
             accounts_repo.clone(),
             pending_transactions_repo.clone(),
@@ -219,7 +221,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         }
 
         if total_value != input.value {
-            return Err(ectx!(err ErrorContext::InvalidValue, ErrorKind::Internal => input.clone()));
+            return Err(ectx!(err ErrorContext::InvalidValue, ErrorKind::Internal => input.clone(), total_value));
         }
 
         let mut res: Vec<Transaction> = Vec::new();
