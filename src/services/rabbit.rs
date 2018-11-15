@@ -119,13 +119,15 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                         ectx!(try err ErrorContext::InvalidBlockchainTransactionStructure, ErrorKind::Internal => blockchain_tx.clone()),
                     )?.clone();
                 if let Some(account) = self.accounts_repo.get_by_address(from, Currency::Stq, AccountKind::Dr)? {
-                    let changeset = UpdateAccount {
-                        erc20_approved: Some(true),
-                        ..Default::default()
-                    };
-                    self.accounts_repo.update(account.id, changeset)?;
-                    self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
-                    self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
+                    if !account.erc20_approved {
+                        let changeset = UpdateAccount {
+                            erc20_approved: Some(true),
+                            ..Default::default()
+                        };
+                        self.accounts_repo.update(account.id, changeset)?;
+                        self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
+                        self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
+                    }
                     // don't need to collect fees, etc. - see the comment in that send_erc20_approval
                     return Ok(());
                 }
