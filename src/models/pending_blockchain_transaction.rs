@@ -37,7 +37,7 @@ impl From<(ApproveInput, BlockchainTransactionId)> for NewPendingBlockchainTrans
             from_: transaction.0.address,
             to_: transaction.0.approve_address,
             currency: transaction.0.currency,
-            value: Amount::new(9),
+            value: transaction.0.value,
             fee: transaction.0.fee_price,
             erc20_operation_kind: Some(Erc20OperationKind::Approve),
         }

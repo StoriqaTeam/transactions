@@ -96,6 +96,7 @@ pub struct System {
     pub exchange_gateway_system_user_token: AuthenticationToken,
     pub approve_gas_price: u64,
     pub approve_gas_limit: u64,
+    pub approve_delay_secs: u64,
 }
 
 impl Config {

@@ -326,13 +326,18 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
     }
 
     fn send_erc20_approval(&self, account: &Account) -> Result<(), Error> {
-        let nonce = self
-            .blockchain_client
-            .get_ethereum_nonce(account.address.clone())
-            .wait()
-            .map_err(ectx!(try ErrorKind::Internal => account.clone()))?;
+        // Todo: ugly and ineffective
+        let mut core = tokio_core::reactor::Core::new().unwrap();
+
         let eth_fees_cr_account = self.system_service.get_system_fees_account(Currency::Eth)?;
         let eth_fees_dr_account = self.system_service.get_system_fees_account_dr(Currency::Eth)?;
+
+        let approve_nonce = core
+            .run(self.blockchain_client.get_ethereum_nonce(account.address.clone()))
+            .map_err(ectx!(try ErrorKind::Internal => account.clone()))?;
+        let eth_fees_account_nonce = core
+            .run(self.blockchain_client.get_ethereum_nonce(eth_fees_dr_account.address.clone()))
+            .map_err(ectx!(try ErrorKind::Internal => account.clone()))?;
 
         let id = TransactionId::generate();
         let next_id = id.next();
@@ -345,36 +350,35 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             id,
             from: eth_fees_dr_account.address.clone(),
             to: account.address.clone(),
-            currency: Currency::Stq,
+            currency: Currency::Eth,
             value,
             fee_price: Amount::new(self.config.system.approve_gas_price as u128),
-            nonce: Some(nonce),
+            nonce: Some(eth_fees_account_nonce),
             utxos: None,
         };
         let eth_approve_blockchain_tx = ApproveInput {
-            id,
+            id: next_id,
             address: account.address.clone(),
             approve_address: eth_fees_dr_account.address.clone(),
             currency: Currency::Stq,
             value: Amount::new(STQ_ALLOWANCE),
             fee_price: Amount::new(self.config.system.approve_gas_price as u128),
-            nonce: nonce + 1,
+            nonce: approve_nonce,
         };
 
         // TODO: sign_transaction will use transferFrom, meaning
         // you have to approve it for self before that.
         // Need to add ordinary transfer method
-        let (eth_raw_tx, approve_raw_tx) = self
-            .keys_client
-            .sign_transaction(eth_transfer_blockchain_tx.clone(), Role::System)
-            .join(self.keys_client.approve(eth_approve_blockchain_tx.clone(), Role::User))
-            .wait()
-            .map_err(|e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()))?;
+        let (eth_raw_tx, approve_raw_tx) = core
+            .run(
+                self.keys_client
+                    .sign_transaction(eth_transfer_blockchain_tx.clone(), Role::System)
+                    .join(self.keys_client.approve(eth_approve_blockchain_tx.clone(), Role::User)),
+            ).map_err(|e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()))?;
 
-        let eth_tx_id =
-            self.blockchain_client.post_ethereum_transaction(eth_raw_tx).wait().map_err(
-                |e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()),
-            )?;
+        let eth_tx_id = core
+            .run(self.blockchain_client.post_ethereum_transaction(eth_raw_tx))
+            .map_err(|e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()))?;
 
         let eth_tx = NewTransaction {
             id,
@@ -398,10 +402,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             Err(e) => log_and_capture_error(e),
             _ => (),
         };
-        let approve_tx_id =
-            self.blockchain_client.post_ethereum_transaction(approve_raw_tx).wait().map_err(
-                |e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()),
-            )?;
+        let approve_tx_id = core
+            .run(self.blockchain_client.post_ethereum_transaction(approve_raw_tx))
+            .map_err(|e| ectx!(try err e, ErrorKind::Internal => eth_transfer_blockchain_tx.clone(), eth_approve_blockchain_tx.clone()))?;
 
         let approve_tx = NewTransaction {
             id: next_id,
@@ -412,13 +415,13 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             currency: Currency::Eth,
             value,
             status: TransactionStatus::Pending,
-            blockchain_tx_id: Some(approve_tx_id),
+            blockchain_tx_id: Some(approve_tx_id.clone()),
             kind: TransactionKind::ApprovalCall,
             group_kind: TransactionGroupKind::Approval,
             related_tx: None,
         };
 
-        let new_pending_approve = (eth_approve_blockchain_tx.clone(), eth_tx_id.clone()).into();
+        let new_pending_approve = (eth_approve_blockchain_tx.clone(), approve_tx_id.clone()).into();
         // Note - we don't rollback here, because the tx is already in blockchain. so after that just silently
         // fail if we couldn't write a pending tx. Not having pending tx in db doesn't do a lot of harm, we could cure
         // it later.
