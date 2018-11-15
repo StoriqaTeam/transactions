@@ -76,6 +76,8 @@ pub enum ErrorContext {
     InvalidBlockchainTransactionStructure,
     #[fail(display = "service error context - unexpected transaction structure")]
     InvalidTransactionStructure,
+    #[fail(display = "service error context - unexpected error in timer")]
+    Timer,
 }
 
 derive_error_impls!();
