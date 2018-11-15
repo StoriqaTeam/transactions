@@ -105,12 +105,10 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             return Ok(());
         }
 
-        let mut skip_confirmations = false;
         if let Some(erc20_op) = blockchain_tx.erc20_operation_kind {
             if erc20_op == Erc20OperationKind::Approve {
                 // skip confirmations, because the value is very large,
                 // but since it's `approve` operation we don't care
-                skip_confirmations = true;
                 if blockchain_tx.currency != Currency::Stq {
                     return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => blockchain_tx));
                 }
@@ -126,7 +124,10 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                         ..Default::default()
                     };
                     self.accounts_repo.update(account.id, changeset)?;
-                    // proceed to collect fees and update tx statuses
+                    self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
+                    self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
+                    // don't need to collect fees, etc. - see the comment in that send_erc20_approval
+                    return Ok(());
                 }
             }
         }
@@ -136,17 +137,15 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             let total_tx_value = normalized_tx
                 .value()
                 .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => tx.clone()))?;
-            if !skip_confirmations {
-                if required_confirmations(normalized_tx.currency, total_tx_value) > normalized_tx.confirmations as u64 {
-                    // skipping tx, waiting for more confirms
-                    return Ok(());
-                }
-                if let Some(violation) = self.verify_withdrawal_tx(&tx, &normalized_tx)? {
-                    // Here the tx itself is ok, but violates our internal invariants. We just log it here and put it into strange blockchain transactions table
-                    // If we instead returned error - it would nack the rabbit message and return it to queue - smth we don't want here
-                    self.handle_violation(violation, &blockchain_tx)?;
-                    return Ok(());
-                }
+            if required_confirmations(normalized_tx.currency, total_tx_value) > normalized_tx.confirmations as u64 {
+                // skipping tx, waiting for more confirms
+                return Ok(());
+            }
+            if let Some(violation) = self.verify_withdrawal_tx(&tx, &normalized_tx)? {
+                // Here the tx itself is ok, but violates our internal invariants. We just log it here and put it into strange blockchain transactions table
+                // If we instead returned error - it would nack the rabbit message and return it to queue - smth we don't want here
+                self.handle_violation(violation, &blockchain_tx)?;
+                return Ok(());
             }
             let fees_currency = match blockchain_tx.currency {
                 Currency::Btc => Currency::Btc,
@@ -397,6 +396,14 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         // next step - we send approve operation after some delay
         // we don't wait for it though, because o/w it will block database
         // connection for 1 min or smth like this.
+
+        // the other tricky thing is we store pending_blockchain_tx for tracking status,
+        // but we don't create transctions. Why? Because we already spent some ether into
+        // non-trackable eth account (having the same address as our in-system stq account).
+        // Therefore we will make approval and spend that fee off-system.
+
+        // So the total fee will be ether transfer (needed for approve call) + fee of this
+        // transfer
         let approve_nonce = core
             .run(self.blockchain_client.get_ethereum_nonce(account.address.clone()))
             .map_err(ectx!(try ErrorKind::Internal => account.clone()))?;
@@ -416,7 +423,6 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let eth_approve_blockchain_tx_clone = eth_approve_blockchain_tx.clone();
         let eth_approve_blockchain_tx_clone2 = eth_approve_blockchain_tx.clone();
         let db_executor = self.db_executor.clone();
-        let user_id = account.user_id;
         let f = self
             .keys_client
             .approve(eth_approve_blockchain_tx.clone(), Role::User)
@@ -429,27 +435,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             }).and_then(move |approve_tx_id| {
                 // logs from blockchain gw erc20 comes with log number in hash
                 let approve_tx_id = BlockchainTransactionId::new(format!("{}:0", approve_tx_id.inner()));
-                let approve_tx = NewTransaction {
-                    id: next_id,
-                    gid: next_id,
-                    user_id,
-                    dr_account_id: eth_fees_cr_account.id,
-                    cr_account_id: eth_fees_dr_account.id,
-                    currency: Currency::Eth,
-                    value,
-                    status: TransactionStatus::Pending,
-                    blockchain_tx_id: Some(approve_tx_id.clone()),
-                    kind: TransactionKind::ApprovalCall,
-                    group_kind: TransactionGroupKind::Approval,
-                    related_tx: None,
-                };
                 let new_pending_approve = (eth_approve_blockchain_tx_clone2, approve_tx_id.clone()).into();
                 db_executor.execute(move || -> Result<(), Error> {
                     match self_clone2.pending_blockchain_transactions_repo.create(new_pending_approve) {
-                        Err(e) => log_and_capture_error(e),
-                        _ => (),
-                    };
-                    match self_clone2.transactions_repo.create(approve_tx) {
                         Err(e) => log_and_capture_error(e),
                         _ => (),
                     };
@@ -461,6 +449,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let f1 = tokio::timer::Delay::new(when)
             .map_err(ectx!(ErrorContext::Timer, ErrorKind::Internal))
             .and_then(move |_| f);
+        // Todo this won't finish if the process crashes
         std::thread::spawn(move || {
             let mut core = tokio_core::reactor::Core::new().unwrap();
             let _ = core.run(f1.map_err(|e| {
