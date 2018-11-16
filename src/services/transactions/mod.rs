@@ -264,7 +264,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 group_kind: tx_group_kind.unwrap_or(TransactionGroupKind::Withdrawal),
                 related_tx: None,
             };
-            res.push(self.create_base_tx(new_tx, from_account.clone(), acc.clone())?);
+            let mut db_tx = self.create_base_tx(new_tx, from_account.clone(), acc.clone())?;
             let to = to_blockchain_address.clone();
             let blockchain_tx_id_res = match to_currency {
                 Currency::Eth => self
@@ -280,11 +280,13 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
             match blockchain_tx_id_res {
                 Ok(blockchain_tx_id) => {
-                    if let Err(e) = self.transactions_repo.update_blockchain_tx(current_tx_id, blockchain_tx_id) {
+                    if let Err(e) = self.transactions_repo.update_blockchain_tx(current_tx_id, blockchain_tx_id.clone()) {
                         // partial write of some transactions, cannot abort, just logging error and break cycle
                         log_and_capture_error(e);
                         break;
                     };
+                    db_tx.blockchain_tx_id = Some(blockchain_tx_id);
+                    res.push(db_tx);
                 }
                 // Note - we don't do early exit here, since we need to complete our transaction with previously
                 // written transactions
@@ -432,36 +434,49 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let db_executor = self.db_executor.clone();
         let self_clone = self.clone();
         let self_clone2 = self.clone();
-        Box::new(self.auth_service.authenticate(token.clone()).and_then(move |user| {
-            let input = CreateTransactionInput { user_id: user.id, ..input };
-            db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
-                let mut core = Core::new().unwrap();
-                let tx_type = self_clone.classifier_service.validate_and_classify_transaction(&input)?;
-                let f = future::lazy(|| {
-                    let tx_group = match tx_type {
-                        TransactionType::Internal(from_account, to_account) => self_clone
-                            .create_internal_mono_currency_tx(input, from_account, to_account)
-                            .map(|tx| vec![tx]),
-                        TransactionType::Withdrawal(from_account, to_blockchain_address, currency) => self_clone
-                            .create_external_mono_currency_tx(
-                                input,
-                                from_account,
-                                to_blockchain_address,
-                                currency,
-                                None,
-                                None,
-                                None,
-                                None,
-                                None,
-                            ),
-                        TransactionType::InternalExchange(from, to, exchange_id, rate) => {
-                            self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
-                        }
-                        TransactionType::WithdrawalExchange(from, to_blockchain_address, to_currency, exchange_id, rate) => {
-                            self_clone.create_external_multi_currency_tx(input, from, to_blockchain_address, to_currency, exchange_id, rate)
-                        }
-                    }?;
-                    Ok(tx_group)
+        Box::new(
+            self.auth_service
+                .authenticate(token.clone())
+                .and_then(move |user| {
+                    let input = CreateTransactionInput { user_id: user.id, ..input };
+                    db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
+                        let mut core = Core::new().unwrap();
+                        let tx_type = self_clone.classifier_service.validate_and_classify_transaction(&input)?;
+                        let f = future::lazy(|| {
+                            let tx_group = match tx_type {
+                                TransactionType::Internal(from_account, to_account) => self_clone
+                                    .create_internal_mono_currency_tx(input, from_account, to_account)
+                                    .map(|tx| vec![tx]),
+                                TransactionType::Withdrawal(from_account, to_blockchain_address, currency) => self_clone
+                                    .create_external_mono_currency_tx(
+                                        input,
+                                        from_account,
+                                        to_blockchain_address,
+                                        currency,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                    ),
+                                TransactionType::InternalExchange(from, to, exchange_id, rate) => {
+                                    self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
+                                }
+                                TransactionType::WithdrawalExchange(from, to_blockchain_address, to_currency, exchange_id, rate) => {
+                                    self_clone.create_external_multi_currency_tx(
+                                        input,
+                                        from,
+                                        to_blockchain_address,
+                                        to_currency,
+                                        exchange_id,
+                                        rate,
+                                    )
+                                }
+                            }?;
+                            Ok(tx_group)
+                        });
+                        core.run(f)
+                    })
                 }).and_then(|tx_group| {
                     // this point we already wrote transactions, incl to blockchain
                     // so if smth fails here, we need not corrupt our data
@@ -469,10 +484,8 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     db_executor.execute_transaction_with_isolation(Isolation::RepeatableRead, move || {
                         self_clone2.converter_service.convert_transaction(tx_group)
                     })
-                });
-                core.run(f)
-            })
-        }))
+                }),
+        )
     }
 
     fn get_transaction(
