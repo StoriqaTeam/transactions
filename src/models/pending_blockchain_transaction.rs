@@ -16,6 +16,24 @@ pub struct PendingBlockchainTransactionDB {
     pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
+impl From<PendingBlockchainTransactionDB> for BlockchainTransaction {
+    fn from(transaction: PendingBlockchainTransactionDB) -> Self {
+        Self {
+            hash: transaction.hash,
+            from: vec![transaction.from_],
+            to: vec![BlockchainTransactionEntryTo {
+                address: transaction.to_,
+                value: transaction.value,
+            }],
+            block_number: 0,
+            currency: transaction.currency,
+            fee: transaction.fee,
+            confirmations: 0 as usize,
+            erc20_operation_kind: transaction.erc20_operation_kind,
+        }
+    }
+}
+
 impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchainTransactionDB {
     fn from(transaction: (CreateBlockchainTx, BlockchainTransactionId)) -> Self {
         Self {

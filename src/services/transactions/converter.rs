@@ -187,11 +187,16 @@ impl ConverterServiceImpl {
             .accounts_repo
             .get(withdrawal_tx.dr_account_id)?
             .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
-        let blockchain_tx = self
+        // Here the problem is it can be in
+        let blockchain_tx: BlockchainTransaction = self
             .blockchain_transactions_repo
-            .get(blockchain_tx_hash)?
-            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
-        let blockchain_tx: BlockchainTransaction = blockchain_tx.into();
+            .get(blockchain_tx_hash.clone())?
+            .map(Into::<BlockchainTransaction>::into)
+            .or(
+                self.pending_blockchain_transactions_repo
+                    .get(blockchain_tx_hash)?
+                    .map(Into::<BlockchainTransaction>::into)
+            ).ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
         let blockchain_tx = blockchain_tx.normalized().unwrap();
         let to_address = blockchain_tx
             .to
