@@ -159,7 +159,17 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 Currency::Eth => Currency::Eth,
                 Currency::Stq => Currency::Eth,
             };
-            let fees_account_dr = self.system_service.get_system_fees_account_dr(fees_currency)?;
+
+            let fees_account_dr = match blockchain_tx.currency {
+                // stq accounts bear eth fees, that are written off from system account
+                Currency::Stq => self.system_service.get_system_fees_account(fees_currency)?,
+                // other accounts make withdrawal from some dr account, which is stored in tx.cr_account_id
+                // and fees will be written off from them
+                _ => self
+                    .accounts_repo
+                    .get(tx.cr_account_id)?
+                    .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => blockchain_tx, fees_currency))?,
+            };
             let fees_account_cr = self.system_service.get_system_fees_account(fees_currency)?;
             self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
             self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
