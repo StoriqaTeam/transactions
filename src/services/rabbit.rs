@@ -157,9 +157,10 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             let fees_currency = match blockchain_tx.currency {
                 Currency::Btc => Currency::Btc,
                 Currency::Eth => Currency::Eth,
-                Currency::Stq => Currency::Stq,
+                Currency::Stq => Currency::Eth,
             };
-            let fees_account = self.system_service.get_system_fees_account(fees_currency)?;
+            let fees_account_dr = self.system_service.get_system_fees_account_dr(fees_currency)?;
+            let fees_account_cr = self.system_service.get_system_fees_account(fees_currency)?;
             self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
             self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
             self.transactions_repo
@@ -168,9 +169,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 id: TransactionId::generate(),
                 gid: tx.gid,
                 user_id: tx.user_id,
-                dr_account_id: fees_account.id,
-                cr_account_id: tx.cr_account_id, // dr account is in credit of withdrawal tx
-                currency: tx.currency,
+                dr_account_id: fees_account_cr.id,
+                cr_account_id: fees_account_dr.id,
+                currency: fees_currency,
                 value: blockchain_tx.fee,
                 status: TransactionStatus::Done,
                 blockchain_tx_id: None,

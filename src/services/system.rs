@@ -61,7 +61,7 @@ impl SystemService for SystemServiceImpl {
         let acc = self
             .accounts_repo
             .get(acc_id)?
-            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
+            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => currency))?;
         Ok(acc)
     }
 
