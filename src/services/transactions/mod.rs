@@ -228,57 +228,6 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         let mut current_tx_id = input.id;
         let fees_account = self.system_service.get_system_fees_account(to_currency)?;
 
-        for AccountWithBalance {
-            account: acc,
-            balance: value,
-        } in &withdrawal_accs_with_balance
-        {
-            let to = to_blockchain_address.clone();
-            let blockchain_tx_id_res = match to_currency {
-                Currency::Eth => self
-                    .blockchain_service
-                    .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Eth),
-                Currency::Stq => self
-                    .blockchain_service
-                    .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Stq),
-                Currency::Btc => self
-                    .blockchain_service
-                    .create_bitcoin_tx(acc.address.clone(), to, *value, fee_price_est),
-            };
-
-            match blockchain_tx_id_res {
-                Ok(blockchain_tx_id) => {
-                    let new_tx = NewTransaction {
-                        id: current_tx_id,
-                        gid,
-                        user_id: input.user_id,
-                        dr_account_id: from_account.id,
-                        cr_account_id: acc.id,
-                        currency: to_currency,
-                        value: *value,
-                        status: TransactionStatus::Pending,
-                        blockchain_tx_id: Some(blockchain_tx_id),
-                        kind: tx_kind.unwrap_or(TransactionKind::Withdrawal),
-                        group_kind: tx_group_kind.unwrap_or(TransactionGroupKind::Withdrawal),
-                        related_tx: None,
-                    };
-                    res.push(self.create_base_tx(new_tx, from_account.clone(), acc.clone())?);
-                    current_tx_id = current_tx_id.next();
-                }
-                // Note - we don't do early exit here, since we need to complete our transaction with previously
-                // written transactions
-                Err(e) => {
-                    if res.len() == 0 {
-                        // didn't write any transaction to blockchain, so safe to abort
-                        return Err(ectx!(err e, ErrorKind::Internal));
-                    } else {
-                        // partial write of some transactions, cannot abort, just logging error and break cycle
-                        log_and_capture_error(e.compat());
-                        break;
-                    }
-                }
-            }
-        }
         let fee_tx = NewTransaction {
             id: current_tx_id,
             gid,
@@ -295,6 +244,62 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         };
         res.push(self.create_base_tx(fee_tx, from_account.clone(), fees_account.clone())?);
 
+        for AccountWithBalance {
+            account: acc,
+            balance: value,
+        } in &withdrawal_accs_with_balance
+        {
+            current_tx_id = current_tx_id.next();
+            let new_tx = NewTransaction {
+                id: current_tx_id,
+                gid,
+                user_id: input.user_id,
+                dr_account_id: from_account.id,
+                cr_account_id: acc.id,
+                currency: to_currency,
+                value: *value,
+                status: TransactionStatus::Pending,
+                blockchain_tx_id: None,
+                kind: tx_kind.unwrap_or(TransactionKind::Withdrawal),
+                group_kind: tx_group_kind.unwrap_or(TransactionGroupKind::Withdrawal),
+                related_tx: None,
+            };
+            res.push(self.create_base_tx(new_tx, from_account.clone(), acc.clone())?);
+            let to = to_blockchain_address.clone();
+            let blockchain_tx_id_res = match to_currency {
+                Currency::Eth => self
+                    .blockchain_service
+                    .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Eth),
+                Currency::Stq => self
+                    .blockchain_service
+                    .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Stq),
+                Currency::Btc => self
+                    .blockchain_service
+                    .create_bitcoin_tx(acc.address.clone(), to, *value, fee_price_est),
+            };
+
+            match blockchain_tx_id_res {
+                Ok(blockchain_tx_id) => {
+                    if let Err(e) = self.transactions_repo.update_blockchain_tx(current_tx_id, blockchain_tx_id) {
+                        // partial write of some transactions, cannot abort, just logging error and break cycle
+                        log_and_capture_error(e);
+                        break;
+                    };
+                }
+                // Note - we don't do early exit here, since we need to complete our transaction with previously
+                // written transactions
+                Err(e) => {
+                    if res.len() <= 2 {
+                        // didn't write any transaction to blockchain, so safe to abort
+                        return Err(ectx!(err e, ErrorKind::Internal));
+                    } else {
+                        // partial write of some transactions, cannot abort, just logging error and break cycle
+                        log_and_capture_error(e);
+                        break;
+                    }
+                }
+            }
+        }
         Ok(res)
     }
 
@@ -426,6 +431,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
     ) -> Box<Future<Item = TransactionOut, Error = Error> + Send> {
         let db_executor = self.db_executor.clone();
         let self_clone = self.clone();
+        let self_clone2 = self.clone();
         Box::new(self.auth_service.authenticate(token.clone()).and_then(move |user| {
             let input = CreateTransactionInput { user_id: user.id, ..input };
             db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
@@ -455,7 +461,14 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             self_clone.create_external_multi_currency_tx(input, from, to_blockchain_address, to_currency, exchange_id, rate)
                         }
                     }?;
-                    self_clone.converter_service.convert_transaction(tx_group)
+                    Ok(tx_group)
+                }).and_then(|tx_group| {
+                    // this point we already wrote transactions, incl to blockchain
+                    // so if smth fails here, we need not corrupt our data
+                    let db_executor = self_clone2.db_executor.clone();
+                    db_executor.execute_transaction_with_isolation(Isolation::RepeatableRead, move || {
+                        self_clone2.converter_service.convert_transaction(tx_group)
+                    })
                 });
                 core.run(f)
             })
