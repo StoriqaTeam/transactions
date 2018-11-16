@@ -41,7 +41,7 @@ pub struct EthFeeResponse {
     pub fastest: f64,
 }
 
-const GWEI_DECIMALS: u128 = 1_000_000u128;
+const GWEI_DECIMALS: u128 = 1_000_000_000u128;
 
 impl EthFeeResponse {
     pub fn to_fees(self, gas_limit: i32) -> Vec<Fee> {
