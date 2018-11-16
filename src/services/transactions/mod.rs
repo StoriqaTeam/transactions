@@ -350,8 +350,8 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             id: current_tx_id,
             gid: input.id,
             user_id: input.user_id,
-            dr_account_id: to_account.id,
-            cr_account_id: to_counterpart_acc.id,
+            dr_account_id: to_counterpart_acc.id,
+            cr_account_id: to_account.id,
             currency: to_account.currency,
             value: to_value,
             status: TransactionStatus::Done,
@@ -360,7 +360,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             group_kind: TransactionGroupKind::InternalMulti,
             related_tx: None,
         };
-        res.push(self.create_base_tx(to_tx, to_account.clone(), to_counterpart_acc)?);
+        res.push(self.create_base_tx(to_tx, to_counterpart_acc, to_account.clone())?);
 
         let exchange_input = ExchangeInput {
             id: exchange_id,
