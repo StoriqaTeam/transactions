@@ -24,8 +24,6 @@ use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, Pen
 use tokio_core::reactor::Core;
 use utils::log_and_capture_error;
 
-const MAX_TRANSACTIONS_PER_TRANSACTION_OUT: i64 = 3;
-
 #[derive(Clone)]
 pub struct TransactionsServiceImpl<E: DbExecutor> {
     config: Arc<Config>,
@@ -556,13 +554,16 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                 }
                 let txs = transactions_repo
-                    .list_for_user(user_id, offset, limit * MAX_TRANSACTIONS_PER_TRANSACTION_OUT)
+                    .list_groups_for_user_skip_approval(user_id, offset, limit)
                     .map_err(ectx!(try convert => user_id, offset, limit))?;
-                group_transactions(&txs)
+                let res: Result<Vec<TransactionOut>, Error> = group_transactions(&txs)
                     .into_iter()
                     .map(|tx_group| self_clone.converter_service.convert_transaction(tx_group))
-                    .take(limit as usize)
-                    .collect()
+                    .collect();
+                let mut res = res?;
+                res.sort_by_key(|tx| tx.created_at);
+                let res: Vec<_> = res.into_iter().rev().collect();
+                Ok(res)
             })
         }))
     }
@@ -590,13 +591,16 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                     return Err(ectx!(err ErrorContext::NoAccount, ErrorKind::NotFound => account_id));
                 }
                 let txs = transactions_repo
-                    .list_for_account(account_id, offset, limit * MAX_TRANSACTIONS_PER_TRANSACTION_OUT)
+                    .list_groups_for_account_skip_approval(account_id, offset, limit)
                     .map_err(ectx!(try convert => account_id))?;
-                group_transactions(&txs)
+                let res: Result<Vec<TransactionOut>, Error> = group_transactions(&txs)
                     .into_iter()
                     .map(|tx_group| self_clone.converter_service.convert_transaction(tx_group))
-                    .take(limit as usize)
-                    .collect()
+                    .collect();
+                let mut res = res?;
+                res.sort_by_key(|tx| tx.created_at);
+                let res: Vec<_> = res.into_iter().rev().collect();
+                Ok(res)
             })
         }))
     }

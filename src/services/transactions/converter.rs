@@ -96,7 +96,7 @@ impl ConverterServiceImpl {
             return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
         }
         let from_account = self.accounts_repo.get(tx.dr_account_id)?.unwrap();
-        let to_account = self.accounts_repo.get(tx.dr_account_id)?.unwrap();
+        let to_account = self.accounts_repo.get(tx.cr_account_id)?.unwrap();
         let from = vec![TransactionAddressInfo {
             account_id: Some(from_account.id),
             blockchain_address: from_account.address,

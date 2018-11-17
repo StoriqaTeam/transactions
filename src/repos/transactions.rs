@@ -4,7 +4,7 @@ use diesel;
 use diesel::dsl::{any, sum};
 use diesel::sql_query;
 use diesel::sql_types::Uuid as SqlUuid;
-use diesel::sql_types::VarChar;
+use diesel::sql_types::{BigInt, Timestamp, VarChar};
 
 use super::error::*;
 use super::executor::with_tls_connection;
@@ -32,6 +32,8 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn get_accounts_balance(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
+    fn list_groups_for_account_skip_approval(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
+    fn list_groups_for_user_skip_approval(&self, user_id: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn get_accounts_for_withdrawal(
         &self,
         value: Amount,
@@ -39,6 +41,14 @@ pub trait TransactionsRepo: Send + Sync + 'static {
         user_id: UserId,
         total_fee: Amount,
     ) -> RepoResult<Vec<AccountWithBalance>>;
+}
+
+#[derive(Debug, Clone, Queryable, QueryableByName)]
+struct GidQuery {
+    #[sql_type = "SqlUuid"]
+    gid: TransactionId,
+    #[sql_type = "Timestamp"]
+    created_at: chrono::NaiveDateTime,
 }
 
 #[derive(Clone, Default)]
@@ -163,6 +173,56 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
+    fn list_groups_for_account_skip_approval(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>> {
+        with_tls_connection(|conn| {
+            let gids: Vec<GidQuery> =
+                sql_query(
+                "SELECT gid, min(created_at) AS created_at FROM transactions WHERE group_kind <> 'approval' AND (cr_account_id = $1 OR dr_account_id = $1) GROUP BY gid ORDER BY created_at DESC OFFSET $2 LIMIT $3")
+                    .bind::<SqlUuid, _>(account_id)
+                    .bind::<BigInt, _>(offset)
+                    .bind::<BigInt, _>(limit)
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
+            let gids: Vec<_> = gids.into_iter().map(|tuple| tuple.gid).collect();
+            transactions
+                .filter(gid.eq(any(gids)))
+                .order(created_at.desc())
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind)
+                })
+        })
+    }
+
+    fn list_groups_for_user_skip_approval(&self, user_id_: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>> {
+        with_tls_connection(|conn| {
+            let gids: Vec<GidQuery> =
+                sql_query(
+                "SELECT gid, min(created_at) AS created_at FROM transactions WHERE group_kind <> 'approval' AND user_id = $1 GROUP BY gid ORDER BY created_at DESC OFFSET $2 LIMIT $3")
+                    .bind::<SqlUuid, _>(user_id_)
+                    .bind::<BigInt, _>(offset)
+                    .bind::<BigInt, _>(limit)
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
+            let gids: Vec<_> = gids.into_iter().map(|tuple| tuple.gid).collect();
+            transactions
+                .filter(gid.eq(any(gids)))
+                .order(created_at.desc())
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind)
+                })
+        })
+    }
+
     fn update_blockchain_tx(
         &self,
         transaction_id_arg: TransactionId,

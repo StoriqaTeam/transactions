@@ -176,6 +176,14 @@ impl TransactionsRepo for TransactionsRepoMock {
             .cloned())
     }
 
+    fn list_groups_for_account_skip_approval(&self, _account_id: AccountId, _offset: i64, _limit: i64) -> RepoResult<Vec<Transaction>> {
+        unimplemented!()
+    }
+
+    fn list_groups_for_user_skip_approval(&self, _user_id: UserId, _offset: i64, _limit: i64) -> RepoResult<Vec<Transaction>> {
+        unimplemented!()
+    }
+
     fn update_status(&self, blockchain_tx_id: BlockchainTransactionId, transaction_status: TransactionStatus) -> RepoResult<Transaction> {
         let mut data = self.data.lock().unwrap();
         let u = data
