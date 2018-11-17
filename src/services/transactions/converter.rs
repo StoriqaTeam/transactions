@@ -79,7 +79,7 @@ impl ConverterServiceImpl {
             to_currency: tx.currency,
             fee: Amount::new(0),
             status: tx.status,
-            blockchain_tx_id: tx.blockchain_tx_id.iter().cloned().collect(),
+            blockchain_tx_ids: tx.blockchain_tx_id.iter().cloned().collect(),
             created_at: tx.created_at,
             updated_at: tx.updated_at,
         })
@@ -116,7 +116,7 @@ impl ConverterServiceImpl {
             to_currency: tx.currency,
             fee: Amount::new(0),
             status: tx.status,
-            blockchain_tx_id: tx.blockchain_tx_id.iter().cloned().collect(),
+            blockchain_tx_ids: tx.blockchain_tx_id.iter().cloned().collect(),
             created_at: tx.created_at,
             updated_at: tx.updated_at,
         })
@@ -158,7 +158,7 @@ impl ConverterServiceImpl {
             to_currency: to_tx.currency,
             fee: Amount::new(0),
             status: TransactionStatus::Done,
-            blockchain_tx_id: vec![],
+            blockchain_tx_ids: vec![],
             created_at: from_tx.created_at,
             updated_at: from_tx.updated_at,
         })
@@ -249,7 +249,7 @@ impl ConverterServiceImpl {
             to_currency: withdrawal_tx.currency,
             fee: fee_tx.value,
             status,
-            blockchain_tx_id: blockchain_tx_ids,
+            blockchain_tx_ids,
             created_at,
             updated_at,
         })
@@ -281,7 +281,7 @@ impl ConverterServiceImpl {
             to_currency: currency_tx_out.to_currency,
             fee: withdrawal_tx_out.fee,
             status: withdrawal_tx_out.status,
-            blockchain_tx_id: withdrawal_tx_out.blockchain_tx_id,
+            blockchain_tx_ids: withdrawal_tx_out.blockchain_tx_ids,
             created_at: withdrawal_tx_out.created_at,
             updated_at: withdrawal_tx_out.updated_at,
         })

@@ -187,7 +187,7 @@ pub struct TransactionOut {
     pub to_currency: Currency,
     pub fee: Amount,
     pub status: TransactionStatus,
-    pub blockchain_tx_id: Vec<BlockchainTransactionId>,
+    pub blockchain_tx_ids: Vec<BlockchainTransactionId>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
