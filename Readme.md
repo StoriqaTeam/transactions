@@ -238,6 +238,5 @@ These invariants must always hold. They must be constantly monitored and if some
 
 Currently eth_fees_account is responsible for managing stq transactions.
 You need to make couple of things:
-1) ERC20 Approve this account to spend it's own fee (current limitation that could be fixed in keystore)
-2) Prefill this account for fees in ether (required for approval of stq accounts)
-3) Write the address of this acccount in keystore config (stq_controller_address = "..."), so that stq withdrawals are made on its behalf
+1) Prefill this account for fees in ether (required for approval of stq accounts)
+2) Write the address of this acccount in keystore config (stq_controller_address = "..."), so that stq withdrawals are made on its behalf
