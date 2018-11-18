@@ -16,6 +16,24 @@ pub struct PendingBlockchainTransactionDB {
     pub erc20_operation_kind: Option<Erc20OperationKind>,
 }
 
+impl From<PendingBlockchainTransactionDB> for BlockchainTransaction {
+    fn from(transaction: PendingBlockchainTransactionDB) -> Self {
+        Self {
+            hash: transaction.hash,
+            from: vec![transaction.from_],
+            to: vec![BlockchainTransactionEntryTo {
+                address: transaction.to_,
+                value: transaction.value,
+            }],
+            block_number: 0,
+            currency: transaction.currency,
+            fee: transaction.fee,
+            confirmations: 0 as usize,
+            erc20_operation_kind: transaction.erc20_operation_kind,
+        }
+    }
+}
+
 impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchainTransactionDB {
     fn from(transaction: (CreateBlockchainTx, BlockchainTransactionId)) -> Self {
         Self {
@@ -37,7 +55,7 @@ impl From<(ApproveInput, BlockchainTransactionId)> for NewPendingBlockchainTrans
             from_: transaction.0.address,
             to_: transaction.0.approve_address,
             currency: transaction.0.currency,
-            value: Amount::new(9),
+            value: transaction.0.value,
             fee: transaction.0.fee_price,
             erc20_operation_kind: Some(Erc20OperationKind::Approve),
         }

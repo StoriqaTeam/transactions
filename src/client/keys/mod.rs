@@ -131,7 +131,7 @@ impl KeysClient for KeysClientImpl {
     }
     fn sign_transaction(
         &self,
-        mut create_blockchain_tx: CreateBlockchainTx,
+        create_blockchain_tx: CreateBlockchainTx,
         role: Role,
     ) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
         let client = self.clone();
@@ -159,7 +159,7 @@ impl KeysClient for KeysClientMock {
     ) -> Box<Future<Item = BlockchainAddress, Error = Error> + Send> {
         Box::new(Ok(BlockchainAddress::default()).into_future())
     }
-    fn approve(&self, approve_input: ApproveInput, role: Role) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
+    fn approve(&self, _approve_input: ApproveInput, _role: Role) -> Box<Future<Item = BlockchainTransactionRaw, Error = Error> + Send> {
         Box::new(Ok(BlockchainTransactionRaw::default()).into_future())
     }
     fn sign_transaction(

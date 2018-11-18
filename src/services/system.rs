@@ -4,7 +4,7 @@ use super::error::*;
 use config::Config;
 use models::*;
 use prelude::*;
-use repos::{AccountsRepo, BlockchainTransactionsRepo, PendingBlockchainTransactionsRepo};
+use repos::AccountsRepo;
 
 pub trait SystemService: Send + Sync + 'static {
     fn get_system_transfer_account(&self, currency: Currency) -> Result<Account, Error>;
@@ -61,7 +61,7 @@ impl SystemService for SystemServiceImpl {
         let acc = self
             .accounts_repo
             .get(acc_id)?
-            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
+            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => currency))?;
         Ok(acc)
     }
 

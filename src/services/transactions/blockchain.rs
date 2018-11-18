@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::super::error::*;
+use super::super::system::SystemService;
 use client::{BlockchainClient, ExchangeClient, KeysClient};
 use config::Config;
 use models::*;
@@ -45,6 +46,7 @@ pub struct BlockchainServiceImpl {
     blockchain_client: Arc<dyn BlockchainClient>,
     exchange_client: Arc<dyn ExchangeClient>,
     pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+    system_service: Arc<SystemService>,
 }
 
 impl BlockchainServiceImpl {
@@ -54,6 +56,7 @@ impl BlockchainServiceImpl {
         blockchain_client: Arc<dyn BlockchainClient>,
         exchange_client: Arc<ExchangeClient>,
         pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+        system_service: Arc<SystemService>,
     ) -> Self {
         Self {
             config,
@@ -61,6 +64,7 @@ impl BlockchainServiceImpl {
             blockchain_client,
             exchange_client,
             pending_blockchain_transactions_repo,
+            system_service,
         }
     }
 }
@@ -169,12 +173,15 @@ impl BlockchainService for BlockchainServiceImpl {
             Currency::Eth => (),
             Currency::Stq => (),
             _ => return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal)),
-        }
-        let from_clone = from.clone();
+        };
+        let tx_initiator = match currency {
+            Currency::Stq => self.system_service.get_system_fees_account(Currency::Eth)?.address,
+            _ => from.clone(),
+        };
         let nonce = self
             .blockchain_client
-            .get_ethereum_nonce(from_clone.clone())
-            .map_err(ectx!(try convert => from_clone))
+            .get_ethereum_nonce(tx_initiator.clone())
+            .map_err(ectx!(try convert => tx_initiator))
             .wait()?;
 
         // creating blockchain transactions array

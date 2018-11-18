@@ -251,7 +251,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         500:
           $ref: '#/components/responses/Internal'
-  '/users/{userId}/accounts/{accountId}/transactions':
+  '/accounts/{accountId}/transactions':
     get:
       summary: Lists all transactions of a user's account
       description: You need to be an admin or a user with `userId` to get this list.
@@ -535,8 +535,10 @@ components:
           $ref: '#/components/schemas/Value'
         status:
           $ref: '#/components/schemas/TransactionStatus'
-        blockchainTxId:
-          $ref: '#/components/schemas/TxHash'
+        blockchainTxIds:
+          type: array
+          items:
+            $ref: '#/components/schemas/TxHash'
         createdAt:
           $ref: '#/components/schemas/Timestamp'
         updatedAt:

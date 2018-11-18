@@ -20,8 +20,3 @@ impl Recepient {
         BlockchainAddress::new(self.0.clone())
     }
 }
-
-pub enum CrReceiptType {
-    Account(Account),
-    Address(BlockchainAddress),
-}

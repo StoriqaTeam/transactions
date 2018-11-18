@@ -67,7 +67,6 @@ use tokio::net::tcp::TcpStream;
 use tokio::prelude::*;
 use tokio::timer::{Delay, Timeout};
 use tokio_core::reactor::Core;
-use uuid::Uuid;
 
 use self::client::HttpClientImpl;
 use self::models::*;

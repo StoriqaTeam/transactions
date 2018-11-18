@@ -1,7 +1,7 @@
 use std::fmt;
 use std::num::ParseFloatError;
 
-use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
+use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 
 use models::*;
 

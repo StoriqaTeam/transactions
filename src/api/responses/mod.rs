@@ -93,7 +93,7 @@ pub struct TransactionsResponse {
     pub to_currency: Currency,
     pub fee: Amount,
     pub status: TransactionStatus,
-    pub blockchain_tx_id: Option<BlockchainTransactionId>,
+    pub blockchain_tx_ids: Vec<BlockchainTransactionId>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -110,7 +110,7 @@ impl From<TransactionOut> for TransactionsResponse {
             to_currency: transaction.to_currency,
             fee: transaction.fee,
             status: transaction.status,
-            blockchain_tx_id: transaction.blockchain_tx_id,
+            blockchain_tx_ids: transaction.blockchain_tx_ids,
             created_at: transaction.created_at,
             updated_at: transaction.updated_at,
         }

@@ -98,7 +98,6 @@ impl Service for ApiService {
         let keys_client = self.keys_client.clone();
         let blockchain_client = self.blockchain_client.clone();
         let exchange_client = self.exchange_client.clone();
-        let fees_client = self.fees_client.clone();
         let db_executor = DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone());
         let config = self.config.clone();
         Box::new(
@@ -143,7 +142,6 @@ impl Service for ApiService {
                         keys_client,
                         blockchain_client,
                         exchange_client.clone(),
-                        fees_client.clone(),
                     ));
                     let exchange_service = Arc::new(ExchangeServiceImpl::new(exchange_client));
 

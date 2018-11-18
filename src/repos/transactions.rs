@@ -4,7 +4,7 @@ use diesel;
 use diesel::dsl::{any, sum};
 use diesel::sql_query;
 use diesel::sql_types::Uuid as SqlUuid;
-use diesel::sql_types::VarChar;
+use diesel::sql_types::{BigInt, Timestamp, VarChar};
 
 use super::error::*;
 use super::executor::with_tls_connection;
@@ -32,13 +32,23 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn get_accounts_balance(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
+    fn list_groups_for_account_skip_approval(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
+    fn list_groups_for_user_skip_approval(&self, user_id: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn get_accounts_for_withdrawal(
         &self,
         value: Amount,
         currency: Currency,
         user_id: UserId,
-        fee_per_tx: Amount,
+        total_fee: Amount,
     ) -> RepoResult<Vec<AccountWithBalance>>;
+}
+
+#[derive(Debug, Clone, Queryable, QueryableByName)]
+struct GidQuery {
+    #[sql_type = "SqlUuid"]
+    gid: TransactionId,
+    #[sql_type = "Timestamp"]
+    created_at: chrono::NaiveDateTime,
 }
 
 #[derive(Clone, Default)]
@@ -106,7 +116,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
-    fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount> {
+    fn get_account_balance(&self, account_id: AccountId, kind_: AccountKind) -> RepoResult<Amount> {
         with_tls_connection(|conn| {
             let cr_sum: Option<Amount> = transactions
                 .filter(cr_account_id.eq(account_id))
@@ -130,7 +140,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
             //sum will return null if there are no rows in select statement returned
             let dr_sum = dr_sum.unwrap_or_default();
 
-            match kind {
+            match kind_ {
                 AccountKind::Cr => cr_sum
                     .checked_sub(dr_sum)
                     .ok_or_else(|| ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id)),
@@ -163,6 +173,56 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })
         })
     }
+    fn list_groups_for_account_skip_approval(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>> {
+        with_tls_connection(|conn| {
+            let gids: Vec<GidQuery> =
+                sql_query(
+                "SELECT gid, min(created_at) AS created_at FROM transactions WHERE group_kind <> 'approval' AND (cr_account_id = $1 OR dr_account_id = $1) GROUP BY gid ORDER BY created_at DESC OFFSET $2 LIMIT $3")
+                    .bind::<SqlUuid, _>(account_id)
+                    .bind::<BigInt, _>(offset)
+                    .bind::<BigInt, _>(limit)
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
+            let gids: Vec<_> = gids.into_iter().map(|tuple| tuple.gid).collect();
+            transactions
+                .filter(gid.eq(any(gids)))
+                .order(created_at.desc())
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind)
+                })
+        })
+    }
+
+    fn list_groups_for_user_skip_approval(&self, user_id_: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>> {
+        with_tls_connection(|conn| {
+            let gids: Vec<GidQuery> =
+                sql_query(
+                "SELECT gid, min(created_at) AS created_at FROM transactions WHERE group_kind <> 'approval' AND user_id = $1 GROUP BY gid ORDER BY created_at DESC OFFSET $2 LIMIT $3")
+                    .bind::<SqlUuid, _>(user_id_)
+                    .bind::<BigInt, _>(offset)
+                    .bind::<BigInt, _>(limit)
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
+            let gids: Vec<_> = gids.into_iter().map(|tuple| tuple.gid).collect();
+            transactions
+                .filter(gid.eq(any(gids)))
+                .order(created_at.desc())
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind)
+                })
+        })
+    }
+
     fn update_blockchain_tx(
         &self,
         transaction_id_arg: TransactionId,
@@ -236,14 +296,14 @@ impl TransactionsRepo for TransactionsRepoImpl {
         mut value_: Amount,
         currency_: Currency,
         user_id_: UserId,
-        fee_per_tx: Amount,
+        total_fee: Amount,
     ) -> RepoResult<Vec<AccountWithBalance>> {
         with_tls_connection(|conn| {
-            let fee_per_tx = match currency_ {
+            let total_fee = match currency_ {
                 // we can drain stq account to 0,
                 Currency::Stq => Amount::new(0),
-                Currency::Eth => fee_per_tx,
-                Currency::Btc => fee_per_tx,
+                Currency::Eth => total_fee,
+                Currency::Btc => total_fee,
             };
             let minimum_balance = match currency_ {
                 Currency::Btc => MIN_SIGNIFICANT_SATOSHIS,
@@ -329,12 +389,17 @@ impl TransactionsRepo for TransactionsRepoImpl {
             // calculating accounts to take
             let mut r = vec![];
             for (acc, balance) in res_accounts {
-                let balance = balance.checked_sub(fee_per_tx).unwrap_or(Amount::new(0));
+                // Note - it may seem counter intuitive that we subtract total_fee from each account
+                // rather than from only one. But in reality you will incur the fee on each blockchain
+                // transaction.
+                // Todo need to design an algorithm of how to handle mutiple accounts withdraw.
+                let balance = balance.checked_sub(total_fee).unwrap_or(Amount::new(0));
                 if balance >= value_ {
                     r.push(AccountWithBalance {
                         account: acc,
                         balance: value_,
                     });
+                    break;
                 } else {
                     value_ = value_.checked_sub(balance).expect("Unexpected < 0 value");
                     r.push(AccountWithBalance { account: acc, balance });
