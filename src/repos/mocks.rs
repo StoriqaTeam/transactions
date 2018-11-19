@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
+use chrono::Duration;
+
 use super::accounts::*;
 use super::blockchain_transactions::*;
 use super::error::*;
@@ -174,6 +176,10 @@ impl TransactionsRepo for TransactionsRepoMock {
             .filter(|x| x.blockchain_tx_id == Some(blockchain_tx_id.clone()))
             .nth(0)
             .cloned())
+    }
+
+    fn get_account_spending(&self, _account_id: AccountId, _kind_: AccountKind, _period: Duration) -> RepoResult<Amount> {
+        unimplemented!()
     }
 
     fn list_groups_for_account_skip_approval(&self, _account_id: AccountId, _offset: i64, _limit: i64) -> RepoResult<Vec<Transaction>> {

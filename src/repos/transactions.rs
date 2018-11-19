@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::{Duration, Utc};
 use diesel;
 use diesel::dsl::{any, sum};
 use diesel::sql_query;
@@ -29,6 +30,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn get_by_blockchain_tx(&self, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Option<Transaction>>;
     fn update_blockchain_tx(&self, transaction_id: TransactionId, blockchain_tx_id: BlockchainTransactionId) -> RepoResult<Transaction>;
     fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount>;
+    fn get_account_spending(&self, account_id: AccountId, kind: AccountKind, period: Duration) -> RepoResult<Amount>;
     fn get_accounts_balance(&self, auth_user_id: UserId, accounts: &[Account]) -> RepoResult<Vec<AccountWithBalance>>;
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
@@ -150,6 +152,27 @@ impl TransactionsRepo for TransactionsRepoImpl {
             }
         })
     }
+    fn get_account_spending(&self, account_id: AccountId, kind_: AccountKind, period: Duration) -> RepoResult<Amount> {
+        with_tls_connection(|conn| {
+            let date = Utc::now().naive_utc() - period;
+            let condition = match kind_ {
+                AccountKind::Dr => kind.eq(AccountKind::Cr),
+                AccountKind::Cr => kind.eq(AccountKind::Dr),
+            };
+            let txs: Vec<Transaction> = transactions
+                .filter(condition)
+                .filter(created_at.ge(date))
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(try err e, error_kind => account_id)
+                })?;
+            txs.into_iter()
+                .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|a| a.checked_add(elem.value)))
+                .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal))
+        })
+    }
+
     fn list_for_user(&self, user_id_arg: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>> {
         with_tls_connection(|conn| {
             let query = transactions.filter(user_id.eq(user_id_arg)).order(id).offset(offset).limit(limit);

@@ -46,6 +46,13 @@ approve_gas_price = 20_000_000_000
 approve_gas_limit = 60_000
 approve_delay_secs = 45
 
+[limits]
+period_secs = 86400
+# this limits are in stq/eth/btc rather than wei/satoshis since there are problems with u128 for config crate
+stq_limit = 125000
+eth_limit = 1
+btc_limit = 0.05
+
 [fee_price]
 ethereum = 18000000000
 bitcoin = 4
