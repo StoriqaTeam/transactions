@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
@@ -79,6 +80,11 @@ impl AccountsRepo for AccountsRepoMock {
         data.push(res.clone());
         Ok(res)
     }
+
+    fn count_by_user(&self) -> RepoResult<HashMap<String, u64>> {
+        unimplemented!()
+    }
+
     fn get(&self, account_id: AccountId) -> RepoResult<Option<Account>> {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == account_id).nth(0).cloned())

@@ -133,7 +133,7 @@ impl Service for ApiService {
                         keys_client.clone(),
                     ));
                     let transactions_service = Arc::new(TransactionsServiceImpl::new(
-                        config,
+                        config.clone(),
                         auth_service.clone(),
                         Arc::new(TransactionsRepoImpl),
                         Arc::new(PendingBlockchainTransactionsRepoImpl),
@@ -141,11 +141,17 @@ impl Service for ApiService {
                         Arc::new(AccountsRepoImpl),
                         db_executor.clone(),
                         keys_client,
-                        blockchain_client,
+                        blockchain_client.clone(),
                         exchange_client.clone(),
                     ));
                     let exchange_service = Arc::new(ExchangeServiceImpl::new(exchange_client));
-                    let metrics_service = Arc::new(MetricsServiceImpl);
+                    let metrics_service = Arc::new(MetricsServiceImpl::new(
+                        Arc::new(config),
+                        Arc::new(AccountsRepoImpl),
+                        Arc::new(TransactionsRepoImpl),
+                        db_executor.clone(),
+                        blockchain_client.clone(),
+                    ));
 
                     let ctx = Context {
                         body,
