@@ -184,6 +184,10 @@ impl TransactionsRepo for TransactionsRepoMock {
             .cloned())
     }
 
+    fn get_blockchain_balances(&self) -> RepoResult<HashMap<(BlockchainAddress, Currency), (Amount, Amount)>> {
+        unimplemented!()
+    }
+
     fn get_account_spending(&self, _account_id: AccountId, _kind_: AccountKind, _period: Duration) -> RepoResult<Amount> {
         unimplemented!()
     }

@@ -10,6 +10,25 @@ pub struct Metrics {
     pub total_blockchain_balance: HashMap<Currency, f64>,
     pub fees_balances: HashMap<Currency, f64>,
     pub liquidity_balances: HashMap<Currency, f64>,
-    pub number_of_negative_balances: u64,
     pub limits: HashMap<Currency, f64>,
+    pub diverging_blockchain_balances: Vec<DivergingBalance>,
+    pub diverging_blockchain_balances_total: HashMap<Currency, f64>,
+    pub negative_balances: Vec<NegativeBalance>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename = "camelCase")]
+pub struct DivergingBalance {
+    address: BlockchainAddress,
+    currency: Currency,
+    transactions_value: Amount,
+    blockchain_value: Amount,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename = "camelCase")]
+pub struct NegativeBalance {
+    address: BlockchainAddress,
+    currency: Currency,
+    value: Amount,
 }
