@@ -66,6 +66,18 @@ pub struct RateInput {
     pub amount_currency: Currency,
 }
 
+impl RateInput {
+    pub fn new(from: Currency, to: Currency, amount: Amount, amount_currency: Currency) -> Self {
+        Self {
+            id: ExchangeId::generate(),
+            from,
+            to,
+            amount,
+            amount_currency,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Rate {

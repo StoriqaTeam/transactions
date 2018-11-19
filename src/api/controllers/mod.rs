@@ -6,7 +6,7 @@ use hyper::{header::HeaderValue, header::AUTHORIZATION, Body, HeaderMap, Method,
 
 use super::error::*;
 use models::*;
-use services::{AccountsService, ExchangeService, TransactionsService, UsersService};
+use services::{AccountsService, ExchangeService, FeesService, TransactionsService, UsersService};
 
 mod accounts;
 mod exchange;
@@ -34,6 +34,7 @@ pub struct Context {
     pub accounts_service: Arc<dyn AccountsService>,
     pub transactions_service: Arc<dyn TransactionsService>,
     pub exchange_service: Arc<dyn ExchangeService>,
+    pub fees_service: Arc<dyn FeesService>,
 }
 
 impl Context {
