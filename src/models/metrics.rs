@@ -6,7 +6,7 @@ use std::collections::HashMap;
 pub struct Metrics {
     pub accounts_count: HashMap<String, u64>,
     pub accounts_count_total: u64,
-    pub total_balance: HashMap<Currency, f64>,
+    pub total_transactions_balance: HashMap<Currency, f64>,
     pub total_blockchain_balance: HashMap<Currency, f64>,
     pub fees_balances: HashMap<Currency, f64>,
     pub liquidity_balances: HashMap<Currency, f64>,
@@ -19,16 +19,16 @@ pub struct Metrics {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename = "camelCase")]
 pub struct DivergingBalance {
-    address: BlockchainAddress,
-    currency: Currency,
-    transactions_value: Amount,
-    blockchain_value: Amount,
+    pub address: BlockchainAddress,
+    pub currency: Currency,
+    pub transactions_value: Amount,
+    pub blockchain_value: Amount,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename = "camelCase")]
 pub struct NegativeBalance {
-    address: BlockchainAddress,
-    currency: Currency,
-    value: Amount,
+    pub address: BlockchainAddress,
+    pub currency: Currency,
+    pub value: Amount,
 }

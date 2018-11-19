@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use client::BlockchainClient;
 use config::Config;
 use models::*;
 use prelude::*;
-use repos::{AccountsRepo, DbExecutor, TransactionsRepo};
+use repos::{AccountsRepo, DbExecutor, Isolation, TransactionsRepo};
 
 use super::error::*;
 
@@ -42,11 +43,16 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
 impl<E: DbExecutor> MetricsService for MetricsServiceImpl<E> {
     fn get_metrics(&self) -> Box<Future<Item = Metrics, Error = Error> + Send> {
         let self_clone = self.clone();
-        Box::new(self.db_executor.execute_transaction(move || {
-            let mut metrics: Metrics = Default::default();
-            self_clone.update_counts(&mut metrics)?;
-            Ok(metrics)
-        }))
+        Box::new(
+            self.db_executor
+                .execute_transaction_with_isolation(Isolation::RepeatableRead, move || {
+                    let mut metrics: Metrics = Default::default();
+                    self_clone.update_counts(&mut metrics)?;
+                    let balances = self_clone.transactions_repo.get_blockchain_balances()?;
+                    let _reduced_balances = self_clone.update_negative_balances_and_reduce(&mut metrics, balances)?;
+                    Ok(metrics)
+                }),
+        )
     }
 }
 
@@ -57,5 +63,28 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
         metrics.accounts_count = counts;
         metrics.accounts_count_total = total;
         Ok(())
+    }
+
+    fn update_negative_balances_and_reduce(
+        &self,
+        metrics: &mut Metrics,
+        balances: HashMap<(BlockchainAddress, Currency), (Amount, Amount)>,
+    ) -> Result<HashMap<(BlockchainAddress, Currency), Amount>, Error> {
+        let mut neg_res: Vec<NegativeBalance> = Vec::new();
+        let mut res: HashMap<(BlockchainAddress, Currency), Amount> = HashMap::new();
+        for key in balances.keys() {
+            let (dr_turnover, cr_turnover) = balances[key];
+            if cr_turnover > dr_turnover {
+                neg_res.push(NegativeBalance {
+                    address: key.0.clone(),
+                    currency: key.1,
+                    value: cr_turnover.checked_sub(dr_turnover).unwrap(),
+                });
+            } else {
+                res.insert(key.clone(), dr_turnover.checked_sub(cr_turnover).unwrap());
+            }
+        }
+        metrics.negative_balances = neg_res;
+        Ok(res)
     }
 }
