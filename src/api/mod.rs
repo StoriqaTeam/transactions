@@ -34,7 +34,7 @@ use repos::{
     AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutorImpl, PendingBlockchainTransactionsRepoImpl, TransactionsRepoImpl,
     UsersRepoImpl,
 };
-use services::{AccountsServiceImpl, AuthServiceImpl, ExchangeServiceImpl, TransactionsServiceImpl, UsersServiceImpl};
+use services::{AccountsServiceImpl, AuthServiceImpl, ExchangeServiceImpl, MetricsServiceImpl, TransactionsServiceImpl, UsersServiceImpl};
 
 #[derive(Clone)]
 pub struct ApiService {
@@ -119,6 +119,7 @@ impl Service for ApiService {
                         GET /v1/transactions/{transaction_id: TransactionId} => get_transactions,
                         POST /v1/rate => post_rate,
                         POST /v1/fees => post_fees,
+                        GET /v1/metrics => get_metrics,
                         _ => not_found,
                     };
 
@@ -144,6 +145,7 @@ impl Service for ApiService {
                         exchange_client.clone(),
                     ));
                     let exchange_service = Arc::new(ExchangeServiceImpl::new(exchange_client));
+                    let metrics_service = Arc::new(MetricsServiceImpl);
 
                     let ctx = Context {
                         body,
@@ -154,6 +156,7 @@ impl Service for ApiService {
                         accounts_service,
                         transactions_service,
                         exchange_service,
+                        metrics_service,
                     };
 
                     debug!("Received request {}", ctx);

@@ -6,12 +6,13 @@ use hyper::{header::HeaderValue, header::AUTHORIZATION, Body, HeaderMap, Method,
 
 use super::error::*;
 use models::*;
-use services::{AccountsService, ExchangeService, TransactionsService, UsersService};
+use services::{AccountsService, ExchangeService, MetricsService, TransactionsService, UsersService};
 
 mod accounts;
 mod exchange;
 mod fallback;
 mod fees;
+mod metrics;
 mod transactions;
 mod users;
 
@@ -19,6 +20,7 @@ pub use self::accounts::*;
 pub use self::exchange::*;
 pub use self::fallback::*;
 pub use self::fees::*;
+pub use self::metrics::*;
 pub use self::transactions::*;
 pub use self::users::*;
 
@@ -34,6 +36,7 @@ pub struct Context {
     pub accounts_service: Arc<dyn AccountsService>,
     pub transactions_service: Arc<dyn TransactionsService>,
     pub exchange_service: Arc<dyn ExchangeService>,
+    pub metrics_service: Arc<dyn MetricsService>,
 }
 
 impl Context {
