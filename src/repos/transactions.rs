@@ -155,18 +155,24 @@ impl TransactionsRepo for TransactionsRepoImpl {
     fn get_account_spending(&self, account_id: AccountId, kind_: AccountKind, period: Duration) -> RepoResult<Amount> {
         with_tls_connection(|conn| {
             let date = Utc::now().naive_utc() - period;
-            let condition = match kind_ {
-                AccountKind::Dr => kind.eq(AccountKind::Cr),
-                AccountKind::Cr => kind.eq(AccountKind::Dr),
+            let txs: Vec<Transaction> = match kind_ {
+                AccountKind::Dr => transactions
+                    .filter(cr_account_id.eq(account_id))
+                    .filter(created_at.ge(date))
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind => account_id)
+                    })?,
+                AccountKind::Cr => transactions
+                    .filter(dr_account_id.eq(account_id))
+                    .filter(created_at.ge(date))
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind => account_id)
+                    })?,
             };
-            let txs: Vec<Transaction> = transactions
-                .filter(condition)
-                .filter(created_at.ge(date))
-                .get_results(conn)
-                .map_err(move |e| {
-                    let error_kind = ErrorKind::from(&e);
-                    ectx!(try err e, error_kind => account_id)
-                })?;
             txs.into_iter()
                 .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|a| a.checked_add(elem.value)))
                 .ok_or(ectx!(err ErrorContext::BalanceOverflow, ErrorKind::Internal))
