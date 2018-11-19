@@ -378,6 +378,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         Ok(res)
     }
 
+    #[allow(dead_code)]
     fn create_external_multi_currency_tx(
         &self,
         input: CreateTransactionInput,
@@ -460,15 +461,18 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                                 TransactionType::InternalExchange(from, to, exchange_id, rate) => {
                                     self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
                                 }
-                                TransactionType::WithdrawalExchange(from, to_blockchain_address, to_currency, exchange_id, rate) => {
-                                    self_clone.create_external_multi_currency_tx(
-                                        input,
-                                        from,
-                                        to_blockchain_address,
-                                        to_currency,
-                                        exchange_id,
-                                        rate,
-                                    )
+                                TransactionType::WithdrawalExchange(_from, _to_blockchain_address, _to_currency, _exchange_id, _rate) => {
+                                    // This function is implemented but not tested. For now we disable it,
+                                    // since we disable this functionality in wallet app.
+                                    // self_clone.create_external_multi_currency_tx(
+                                    //     input,
+                                    //     from,
+                                    //     to_blockchain_address,
+                                    //     to_currency,
+                                    //     exchange_id,
+                                    //     rate,
+                                    // )
+                                    Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput))
                                 }
                             }?;
                             Ok(tx_group)

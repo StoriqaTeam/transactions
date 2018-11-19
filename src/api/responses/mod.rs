@@ -32,6 +32,7 @@ pub struct AccountsResponse {
     pub currency: Currency,
     pub address: BlockchainAddress,
     pub name: Option<String>,
+    pub erc20_approved: bool,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -46,6 +47,7 @@ impl From<Account> for AccountsResponse {
             name: account.name,
             created_at: account.created_at,
             updated_at: account.updated_at,
+            erc20_approved: account.erc20_approved,
         }
     }
 }

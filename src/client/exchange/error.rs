@@ -10,22 +10,22 @@ pub struct Error {
 #[allow(dead_code)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
-    #[fail(display = "key client error - malformed input")]
+    #[fail(display = "exchange client error - malformed input")]
     MalformedInput,
-    #[fail(display = "key client error - unauthorized")]
+    #[fail(display = "exchange client error - unauthorized")]
     Unauthorized,
-    #[fail(display = "key client error - internal error")]
+    #[fail(display = "exchange client error - internal error")]
     Internal,
 }
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorSource {
-    #[fail(display = "key client source - error inside of Hyper library")]
+    #[fail(display = "exchange client source - error inside of Hyper library")]
     Hyper,
-    #[fail(display = "key client source - error parsing bytes to utf8")]
+    #[fail(display = "exchange client source - error parsing bytes to utf8")]
     Utf8,
-    #[fail(display = "key client source - error parsing string to json")]
+    #[fail(display = "exchange client source - error parsing string to json")]
     Json,
 }
 
