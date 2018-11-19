@@ -635,6 +635,7 @@ components:
         - userId
         - accountAddress
         - name
+        - erc20Approved
       properties:
         id:
           $ref: '#/components/schemas/Id'
@@ -648,6 +649,10 @@ components:
           type: string
           description: Short name for the account
           example: My main account
+        erc20Approved:
+          type: boolean
+          description: Approved for withdrawals of erc20 tokens
+          example: true
     AccountInfo:
       type: object
       required:

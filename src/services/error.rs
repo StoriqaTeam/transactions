@@ -78,6 +78,8 @@ pub enum ErrorContext {
     InvalidTransactionStructure,
     #[fail(display = "service error context - unexpected error in timer")]
     Timer,
+    #[fail(display = "service error context - operations limit exceeded")]
+    LimitExceeded,
 }
 
 derive_error_impls!();

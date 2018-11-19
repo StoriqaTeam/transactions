@@ -17,6 +17,7 @@ pub struct Config {
     pub system: System,
     pub fees_options: FeesOptions,
     pub sentry: Option<SentryConfig>,
+    pub limits: Limits,
     pub graylog: Option<GrayLogConfig>,
     pub filelog: Option<FileLogConfig>,
 }
@@ -97,6 +98,14 @@ pub struct System {
     pub approve_gas_price: u64,
     pub approve_gas_limit: u64,
     pub approve_delay_secs: u64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Limits {
+    pub period_secs: u64,
+    pub stq_limit: f64,
+    pub eth_limit: f64,
+    pub btc_limit: f64,
 }
 
 impl Config {
