@@ -73,14 +73,14 @@ impl ClassifierService for ClassifierServiceImpl {
 
         let spending = spending
             .checked_add(from_value)
-            .ok_or(ectx!(ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
         let limit = match from_account.currency {
             Currency::Btc => self.btc_satoshi_limit,
             Currency::Eth => self.eth_wei_limit,
             Currency::Stq => self.stq_wei_limit,
         };
         if spending > limit {
-            return Err(ectx!(ErrorContext::LimitExceeded, ErrorKind::MalformedInput));
+            return Err(ectx!(err ErrorContext::LimitExceeded, ErrorKind::MalformedInput));
         }
         match input.to_type {
             RecepientType::Account => {
