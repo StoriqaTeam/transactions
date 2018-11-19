@@ -132,7 +132,13 @@ impl Service for ApiService {
                         db_executor.clone(),
                         keys_client.clone(),
                     ));
-                    let fees_service = Arc::new(FeesServiceImpl::new(&config, exchange_client.clone(), fees_client));
+                    let fees_service = Arc::new(FeesServiceImpl::new(
+                        &config,
+                        Arc::new(AccountsRepoImpl),
+                        db_executor.clone(),
+                        exchange_client.clone(),
+                        fees_client,
+                    ));
                     let transactions_service = Arc::new(TransactionsServiceImpl::new(
                         config,
                         auth_service.clone(),
