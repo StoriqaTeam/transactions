@@ -102,10 +102,10 @@ pub struct System {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Limits {
-    period_secs: u64,
-    stq_limit: f64,
-    eth_limit: f64,
-    btc_limit: f64,
+    pub period_secs: u64,
+    pub stq_limit: f64,
+    pub eth_limit: f64,
+    pub btc_limit: f64,
 }
 
 impl Config {
