@@ -16,6 +16,12 @@ impl Default for Fees {
     }
 }
 
+impl Fees {
+    pub fn new(currency: Currency, fees: Vec<Fee>) -> Self {
+        Self { currency, fees }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Fee {
