@@ -16,7 +16,13 @@ impl Default for Fees {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl Fees {
+    pub fn new(currency: Currency, fees: Vec<Fee>) -> Self {
+        Self { currency, fees }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Fee {
     pub value: Amount,
@@ -26,15 +32,15 @@ pub struct Fee {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetFees {
-    pub from_currency: Currency,
-    pub to_currency: Currency,
+    pub currency: Currency,
+    pub account_address: BlockchainAddress,
 }
 
 impl Default for GetFees {
     fn default() -> Self {
         Self {
-            from_currency: Currency::Eth,
-            to_currency: Currency::Btc,
+            currency: Currency::Btc,
+            account_address: BlockchainAddress::default(),
         }
     }
 }

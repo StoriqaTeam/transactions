@@ -34,7 +34,10 @@ use repos::{
     AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutorImpl, PendingBlockchainTransactionsRepoImpl, TransactionsRepoImpl,
     UsersRepoImpl,
 };
-use services::{AccountsServiceImpl, AuthServiceImpl, ExchangeServiceImpl, MetricsServiceImpl, TransactionsServiceImpl, UsersServiceImpl};
+use services::{
+    AccountsServiceImpl, AuthServiceImpl, ExchangeServiceImpl, FeesServiceImpl, MetricsServiceImpl, TransactionsServiceImpl,
+    UsersServiceImpl,
+};
 
 #[derive(Clone)]
 pub struct ApiService {
@@ -98,6 +101,7 @@ impl Service for ApiService {
         let keys_client = self.keys_client.clone();
         let blockchain_client = self.blockchain_client.clone();
         let exchange_client = self.exchange_client.clone();
+        let fees_client = self.fees_client.clone();
         let db_executor = DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone());
         let config = self.config.clone();
         Box::new(
@@ -132,6 +136,13 @@ impl Service for ApiService {
                         db_executor.clone(),
                         keys_client.clone(),
                     ));
+                    let fees_service = Arc::new(FeesServiceImpl::new(
+                        &config,
+                        Arc::new(AccountsRepoImpl),
+                        db_executor.clone(),
+                        exchange_client.clone(),
+                        fees_client,
+                    ));
                     let transactions_service = Arc::new(TransactionsServiceImpl::new(
                         config.clone(),
                         auth_service.clone(),
@@ -163,6 +174,7 @@ impl Service for ApiService {
                         transactions_service,
                         exchange_service,
                         metrics_service,
+                        fees_service,
                     };
 
                     debug!("Received request {}", ctx);

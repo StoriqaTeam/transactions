@@ -146,15 +146,15 @@ pub struct GetUsersTransactionsParams {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PostFeesRequest {
-    pub from_currency: Currency,
-    pub to_currency: Currency,
+    pub currency: Currency,
+    pub account_address: BlockchainAddress,
 }
 
 impl From<PostFeesRequest> for GetFees {
     fn from(req: PostFeesRequest) -> Self {
         Self {
-            from_currency: req.from_currency,
-            to_currency: req.to_currency,
+            currency: req.currency,
+            account_address: req.account_address,
         }
     }
 }
