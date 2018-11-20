@@ -9,6 +9,8 @@ use repos::{AccountsRepo, DbExecutor, Isolation, TransactionsRepo};
 
 use super::error::*;
 
+const BLOCKCHAIN_BALANCES_CONCURRENCY: usize = 20;
+
 pub trait MetricsService: Send + Sync + 'static {
     fn get_metrics(&self) -> Box<Future<Item = Metrics, Error = Error> + Send>;
 }
@@ -64,6 +66,30 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
         metrics.accounts_count_total = total;
         Ok(())
     }
+
+    fn fetch_blockchain_balances(
+        &self,
+        balances: &HashMap<(BlockchainAddress, Currency), Amount>,
+    ) -> impl Future<Item = HashMap<(BlockchainAddress, Currency), Amount>, Error = Error> {
+        let self_ = self.clone();
+        let keys: Vec<_> = balances.keys().cloned().collect();
+        let stream = futures::stream::iter_ok(keys)
+            .map(move |(address, currency)| {
+                let address_ = address.clone();
+                let address_2 = address.clone();
+                self_
+                    .blockchain_client
+                    .get_balance(address.clone(), currency)
+                    .map(move |value| ((address_, currency), value))
+                    .map_err(ectx!(ErrorKind::Internal => address_2))
+            }).buffered(BLOCKCHAIN_BALANCES_CONCURRENCY);
+        stream.collect().map(|vec| {
+            let res: HashMap<(BlockchainAddress, Currency), Amount> = vec.into_iter().collect();
+            res
+        })
+    }
+
+    fn update_fees_balances(&self, metrics: &mut Metrics, balances: &HashMap<(BlockchainAddress, Currency), Amount>) {}
 
     fn update_negative_balances_and_reduce(
         &self,

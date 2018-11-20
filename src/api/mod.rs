@@ -135,7 +135,7 @@ impl Service for ApiService {
                     let transactions_service = Arc::new(TransactionsServiceImpl::new(
                         config.clone(),
                         auth_service.clone(),
-                        Arc::new(TransactionsRepoImpl),
+                        Arc::new(TransactionsRepoImpl::new(config.system.system_user_id)),
                         Arc::new(PendingBlockchainTransactionsRepoImpl),
                         Arc::new(BlockchainTransactionsRepoImpl),
                         Arc::new(AccountsRepoImpl),
@@ -146,9 +146,9 @@ impl Service for ApiService {
                     ));
                     let exchange_service = Arc::new(ExchangeServiceImpl::new(exchange_client));
                     let metrics_service = Arc::new(MetricsServiceImpl::new(
-                        Arc::new(config),
+                        Arc::new(config.clone()),
                         Arc::new(AccountsRepoImpl),
-                        Arc::new(TransactionsRepoImpl),
+                        Arc::new(TransactionsRepoImpl::new(config.system.system_user_id)),
                         db_executor.clone(),
                         blockchain_client.clone(),
                     ));

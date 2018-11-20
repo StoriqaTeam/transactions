@@ -28,6 +28,7 @@ pub trait BlockchainClient: Send + Sync + 'static {
     ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
     fn get_bitcoin_utxos(&self, address: BlockchainAddress) -> Box<Future<Item = Vec<BitcoinUtxos>, Error = Error> + Send>;
     fn get_ethereum_nonce(&self, address: BlockchainAddress) -> Box<Future<Item = u64, Error = Error> + Send>;
+    fn get_balance(&self, address: BlockchainAddress, currency: Currency) -> Box<Future<Item = Amount, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -87,6 +88,14 @@ impl BlockchainClientImpl {
 }
 
 impl BlockchainClient for BlockchainClientImpl {
+    fn get_balance(&self, address: BlockchainAddress, currency: Currency) -> Box<Future<Item = Amount, Error = Error> + Send> {
+        let url = match currency {
+            Currency::Btc => format!("/bitcoin/{}/balance", address),
+            Currency::Eth => format!("/ethereum/{}/balance", address),
+            Currency::Stq => format!("/storiqa/{}/balance", address),
+        };
+        Box::new(self.exec_query_get::<GetBalanceResponse>(&url).map(|resp| resp.balance))
+    }
     fn post_ethereum_transaction(
         &self,
         raw: BlockchainTransactionRaw,
@@ -126,6 +135,9 @@ impl BlockchainClient for BlockchainClientImpl {
 pub struct BlockchainClientMock;
 
 impl BlockchainClient for BlockchainClientMock {
+    fn get_balance(&self, address: BlockchainAddress, currency: Currency) -> Box<Future<Item = Amount, Error = Error> + Send> {
+        unimplemented!()
+    }
     fn post_ethereum_transaction(
         &self,
         _post_transaction: BlockchainTransactionRaw,
