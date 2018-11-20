@@ -53,6 +53,7 @@ impl<E: DbExecutor> MetricsService for MetricsServiceImpl<E> {
                     let balances = self_clone.transactions_repo.get_blockchain_balances()?;
                     let _reduced_balances = self_clone.update_negative_balances_and_reduce(&mut metrics, balances)?;
                     self_clone.update_fees_and_liquidity_balances(&mut metrics);
+                    self_clone.update_limits(&mut metrics);
                     Ok(metrics)
                 }),
         )
@@ -153,6 +154,14 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
                 Ok(0.0)
             }
         }
+    }
+
+    fn update_limits(&self, metrics: &mut Metrics) {
+        let mut limits: HashMap<Currency, f64> = HashMap::new();
+        limits.insert(Currency::Btc, self.config.limits.btc_limit);
+        limits.insert(Currency::Eth, self.config.limits.eth_limit);
+        limits.insert(Currency::Stq, self.config.limits.stq_limit);
+        metrics.limits = limits;
     }
 
     fn update_negative_balances_and_reduce(
