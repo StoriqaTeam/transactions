@@ -80,8 +80,6 @@ pub enum ErrorContext {
     Timer,
     #[fail(display = "service error context - operations limit exceeded")]
     LimitExceeded,
-    #[fail(display = "service error context - account currency and asked currency are different")]
-    CurrencyNotEqual,
 }
 
 derive_error_impls!();

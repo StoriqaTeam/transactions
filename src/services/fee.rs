@@ -84,7 +84,7 @@ impl<E: DbExecutor> FeesService for FeesServiceImpl<E> {
                                     error.add_param("message".into(), &"account currency differs from fee asked".to_string());
                                     error.add_param("details".into(), &"no details".to_string());
                                     errors.add("account", error);
-                                    Err(ectx!(err ErrorContext::CurrencyNotEqual, ErrorKind::InvalidInput(errors) => accs, currency))
+                                    Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::InvalidInput(errors) => accs, currency))
                                 }
                             }
                         })
