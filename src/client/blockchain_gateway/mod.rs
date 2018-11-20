@@ -135,7 +135,7 @@ impl BlockchainClient for BlockchainClientImpl {
 pub struct BlockchainClientMock;
 
 impl BlockchainClient for BlockchainClientMock {
-    fn get_balance(&self, address: BlockchainAddress, currency: Currency) -> Box<Future<Item = Amount, Error = Error> + Send> {
+    fn get_balance(&self, _address: BlockchainAddress, _currency: Currency) -> Box<Future<Item = Amount, Error = Error> + Send> {
         unimplemented!()
     }
     fn post_ethereum_transaction(
