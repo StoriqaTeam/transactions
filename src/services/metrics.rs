@@ -51,9 +51,10 @@ impl<E: DbExecutor> MetricsService for MetricsServiceImpl<E> {
                     let mut metrics: Metrics = Default::default();
                     self_clone.update_counts(&mut metrics)?;
                     let balances = self_clone.transactions_repo.get_blockchain_balances()?;
-                    let _reduced_balances = self_clone.update_negative_balances_and_reduce(&mut metrics, balances)?;
+                    let reduced_balances = self_clone.update_negative_balances_and_reduce(&mut metrics, balances)?;
                     self_clone.update_fees_and_liquidity_balances(&mut metrics);
                     self_clone.update_limits(&mut metrics);
+                    self_clone.update_total_payments_system_balances(&mut metrics, &reduced_balances);
                     Ok(metrics)
                 }),
         )
@@ -73,6 +74,20 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
         metrics.accounts_count = counts;
         metrics.accounts_count_total = total;
         Ok(())
+    }
+
+    fn update_total_payments_system_balances(&self, metrics: &mut Metrics, balances: &HashMap<(BlockchainAddress, Currency), Amount>) {
+        let mut res: HashMap<Currency, f64> = HashMap::new();
+        for currency in [Currency::Btc, Currency::Stq, Currency::Eth].into_iter() {
+            res.insert(*currency, 0.0);
+        }
+        for ((_, currency), value) in balances.iter() {
+            res.entry(*currency)
+                .and_modify(|balance| {
+                    *balance += value.to_super_unit(*currency);
+                }).or_insert(0.0);
+        }
+        metrics.total_payments_system_balances = res;
     }
 
     fn fetch_blockchain_balances(

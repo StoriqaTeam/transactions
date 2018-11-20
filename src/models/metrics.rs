@@ -6,7 +6,7 @@ use std::collections::HashMap;
 pub struct Metrics {
     pub accounts_count: HashMap<String, u64>,
     pub accounts_count_total: u64,
-    pub total_transactions_balance: HashMap<Currency, f64>,
+    pub total_payments_system_balances: HashMap<Currency, f64>,
     pub total_blockchain_balance: HashMap<Currency, f64>,
     pub fees_balances: HashMap<Currency, f64>,
     pub liquidity_balances: HashMap<Currency, f64>,
