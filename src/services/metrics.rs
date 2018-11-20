@@ -52,10 +52,17 @@ impl<E: DbExecutor> MetricsService for MetricsServiceImpl<E> {
                     self_clone.update_counts(&mut metrics)?;
                     let balances = self_clone.transactions_repo.get_blockchain_balances()?;
                     let _reduced_balances = self_clone.update_negative_balances_and_reduce(&mut metrics, balances)?;
+                    self_clone.update_fees_and_liquidity_balances(&mut metrics);
                     Ok(metrics)
                 }),
         )
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SystemAccountKind {
+    Liquidity,
+    Fee,
 }
 
 impl<E: DbExecutor> MetricsServiceImpl<E> {
@@ -89,7 +96,64 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
         })
     }
 
-    fn update_fees_balances(&self, metrics: &mut Metrics, balances: &HashMap<(BlockchainAddress, Currency), Amount>) {}
+    fn update_fees_and_liquidity_balances(&self, metrics: &mut Metrics) -> Result<(), Error> {
+        let balances = self.transactions_repo.get_system_balances()?;
+        let mut liquidity_balances: HashMap<Currency, f64> = HashMap::new();
+        let mut fees_balances: HashMap<Currency, f64> = HashMap::new();
+        for currency in [Currency::Btc, Currency::Stq, Currency::Eth].into_iter() {
+            liquidity_balances.insert(
+                *currency,
+                self.extract_balance(SystemAccountKind::Liquidity, *currency, metrics, &balances)?,
+            );
+            fees_balances.insert(
+                *currency,
+                self.extract_balance(SystemAccountKind::Fee, *currency, metrics, &balances)?,
+            );
+        }
+        metrics.fees_balances = fees_balances;
+        metrics.liquidity_balances = liquidity_balances;
+        Ok(())
+    }
+
+    fn extract_balance(
+        &self,
+        kind: SystemAccountKind,
+        currency: Currency,
+        metrics: &mut Metrics,
+        balances: &HashMap<AccountId, (Amount, Amount)>,
+    ) -> Result<f64, Error> {
+        let account_id = match (kind, currency) {
+            (SystemAccountKind::Fee, Currency::Btc) => self.config.system.btc_fees_account_id,
+            (SystemAccountKind::Fee, Currency::Eth) => self.config.system.eth_fees_account_id,
+            (SystemAccountKind::Fee, Currency::Stq) => self.config.system.stq_fees_account_id,
+            (SystemAccountKind::Liquidity, Currency::Btc) => self.config.system.btc_liquidity_account_id,
+            (SystemAccountKind::Liquidity, Currency::Eth) => self.config.system.eth_liquidity_account_id,
+            (SystemAccountKind::Liquidity, Currency::Stq) => self.config.system.stq_liquidity_account_id,
+        };
+        let balance_pair = balances.get(&account_id).cloned().unwrap_or((Amount::new(0), Amount::new(0)));
+        match balance_pair.0.checked_sub(balance_pair.1) {
+            Some(balance) => Ok(balance.to_super_unit(currency)),
+            None => {
+                let account = self
+                    .accounts_repo
+                    .get(account_id)?
+                    .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
+                if metrics
+                    .negative_balances
+                    .iter()
+                    .find(|neg_balance| (neg_balance.address == account.address) && (neg_balance.currency == account.currency))
+                    .is_none()
+                {
+                    metrics.negative_balances.push(NegativeBalance {
+                        address: account.address,
+                        currency: account.currency,
+                        value: balance_pair.1.checked_sub(balance_pair.0).unwrap(),
+                    });
+                }
+                Ok(0.0)
+            }
+        }
+    }
 
     fn update_negative_balances_and_reduce(
         &self,
