@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
@@ -79,6 +80,11 @@ impl AccountsRepo for AccountsRepoMock {
         data.push(res.clone());
         Ok(res)
     }
+
+    fn count_by_user(&self) -> RepoResult<HashMap<String, u64>> {
+        unimplemented!()
+    }
+
     fn get(&self, account_id: AccountId) -> RepoResult<Option<Account>> {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == account_id).nth(0).cloned())
@@ -176,6 +182,14 @@ impl TransactionsRepo for TransactionsRepoMock {
             .filter(|x| x.blockchain_tx_id == Some(blockchain_tx_id.clone()))
             .nth(0)
             .cloned())
+    }
+
+    fn get_system_balances(&self) -> RepoResult<HashMap<AccountId, (Amount, Amount)>> {
+        unimplemented!()
+    }
+
+    fn get_blockchain_balances(&self) -> RepoResult<HashMap<(BlockchainAddress, Currency), (Amount, Amount)>> {
+        unimplemented!()
     }
 
     fn get_account_spending(&self, _account_id: AccountId, _kind_: AccountKind, _period: Duration) -> RepoResult<Amount> {

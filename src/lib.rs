@@ -106,7 +106,7 @@ pub fn start_server() {
         let db_pool = create_db_pool(&config_clone);
         let cpu_pool = CpuPool::new(config_clone.rabbit.thread_pool_size);
         let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
-        let transactions_repo = Arc::new(TransactionsRepoImpl);
+        let transactions_repo = Arc::new(TransactionsRepoImpl::new(config_clone.system.system_user_id));
         let accounts_repo = Arc::new(AccountsRepoImpl);
         let seen_hashes_repo = Arc::new(SeenHashesRepoImpl);
         let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoImpl);

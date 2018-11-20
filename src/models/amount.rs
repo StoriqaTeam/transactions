@@ -66,6 +66,25 @@ impl Amount {
         let converted: f64 = (amount as f64) * rate;
         Amount::new((converted as u128) * divisor)
     }
+
+    pub fn to_super_unit(&self, current_currency: Currency) -> f64 {
+        let divisor_u128 = match current_currency {
+            Currency::Btc => SATOSHIS_IN_BTC - MAX_SATOSHIS_PRECISION,
+            Currency::Eth => WEI_IN_ETH - MAX_WEI_PRECISION,
+            Currency::Stq => WEI_IN_ETH - MAX_WEI_PRECISION,
+        };
+        let divisor_f64 = match current_currency {
+            Currency::Btc => MAX_SATOSHIS_PRECISION,
+            Currency::Eth => MAX_WEI_PRECISION,
+            Currency::Stq => MAX_WEI_PRECISION,
+        };
+
+        let divisor_u128 = 10u128.pow(divisor_u128);
+        let divisor_f64 = 10u128.pow(divisor_f64) as f64;
+        let amount: u128 = self.0 / divisor_u128;
+        let converted: f64 = (amount as f64) / divisor_f64;
+        converted
+    }
 }
 
 impl<'a> From<&'a Amount> for PgNumeric {
@@ -223,6 +242,31 @@ mod tests {
         ];
         for (amount, currency, rate, lower, upper) in cases.into_iter() {
             let converted = Amount::new(*amount).convert(*currency, *rate).raw();
+            assert!(
+                (converted > *lower) && (converted < *upper),
+                "original: {}, converted: {}, lower: {}, upper: {}",
+                amount,
+                converted,
+                lower,
+                upper
+            );
+        }
+    }
+
+    #[test]
+    fn test_to_super_unit() {
+        let cases = [
+            // 0.1 ETH
+            (100_000_000_000_000_000, Currency::Eth, 0.099999, 0.100001),
+            // 1 STQ
+            (1_000_000_000_000_000_000, Currency::Stq, 0.999999, 1.000001),
+            // 0.01 BTC
+            (1_000_000, Currency::Btc, 0.00999999, 0.01000001),
+            // 0.001 BTC
+            (100_000, Currency::Btc, 0.00099999, 0.00100001),
+        ];
+        for (amount, currency, lower, upper) in cases.into_iter() {
+            let converted = Amount::new(*amount).to_super_unit(*currency);
             assert!(
                 (converted > *lower) && (converted < *upper),
                 "original: {}, converted: {}, lower: {}, upper: {}",

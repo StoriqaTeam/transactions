@@ -5,7 +5,7 @@ use diesel;
 use diesel::dsl::{any, sum};
 use diesel::sql_query;
 use diesel::sql_types::Uuid as SqlUuid;
-use diesel::sql_types::{BigInt, Timestamp, VarChar};
+use diesel::sql_types::{BigInt, Numeric, Timestamp, VarChar};
 
 use super::error::*;
 use super::executor::with_tls_connection;
@@ -36,6 +36,8 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn list_for_account(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_groups_for_account_skip_approval(&self, account_id: AccountId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn list_groups_for_user_skip_approval(&self, user_id: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
+    fn get_system_balances(&self) -> RepoResult<HashMap<AccountId, (Amount, Amount)>>;
+    fn get_blockchain_balances(&self) -> RepoResult<HashMap<(BlockchainAddress, Currency), (Amount, Amount)>>;
     fn get_accounts_for_withdrawal(
         &self,
         value: Amount,
@@ -53,8 +55,34 @@ struct GidQuery {
     created_at: chrono::NaiveDateTime,
 }
 
+#[derive(Debug, Clone, Queryable, QueryableByName)]
+struct BalanceQuery {
+    #[sql_type = "VarChar"]
+    address: BlockchainAddress,
+    #[sql_type = "VarChar"]
+    currency: Currency,
+    #[sql_type = "Numeric"]
+    sum: Amount,
+}
+
+#[derive(Debug, Clone, Queryable, QueryableByName)]
+struct SystemBalanceQuery {
+    #[sql_type = "SqlUuid"]
+    id: AccountId,
+    #[sql_type = "Numeric"]
+    sum: Amount,
+}
+
 #[derive(Clone, Default)]
-pub struct TransactionsRepoImpl;
+pub struct TransactionsRepoImpl {
+    system_user_id: UserId,
+}
+
+impl TransactionsRepoImpl {
+    pub fn new(system_user_id: UserId) -> Self {
+        TransactionsRepoImpl { system_user_id }
+    }
+}
 
 impl TransactionsRepo for TransactionsRepoImpl {
     fn create(&self, payload: NewTransaction) -> RepoResult<Transaction> {
@@ -66,6 +94,91 @@ impl TransactionsRepo for TransactionsRepoImpl {
                     let error_kind = ErrorKind::from(&e);
                     ectx!(err e, error_kind => payload)
                 })
+        })
+    }
+
+    // SELECT cr_account_id as id, SUM(value) FROM transactions JOIN accounts ON transactions.cr_account_id = accounts.id WHERE accounts.user_id = '00000000-0000-4000-8000-010000000000' AND accounts.kind = 'cr' GROUP BY cr_account_id;
+    // SELECT dr_account_id as id, SUM(value) FROM transactions JOIN accounts ON transactions.dr_account_id = accounts.id WHERE accounts.user_id = '00000000-0000-4000-8000-010000000000' AND accounts.kind = 'cr' GROUP BY dr_account_id;
+
+    fn get_system_balances(&self) -> RepoResult<HashMap<AccountId, (Amount, Amount)>> {
+        with_tls_connection(|conn| {
+            let dr_turnovers: Vec<SystemBalanceQuery> =
+                sql_query(
+                "SELECT dr_account_id as id, SUM(value) FROM transactions JOIN accounts ON transactions.dr_account_id = accounts.id WHERE accounts.user_id = $1 AND accounts.kind = 'cr' GROUP BY dr_account_id;")
+                    .bind::<SqlUuid, _>(self.system_user_id)
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
+            let mut dr_turnovers: HashMap<_, _> = dr_turnovers
+                .into_iter()
+                .map(|balance_query| (balance_query.id, balance_query.sum))
+                .collect();
+            let cr_turnovers: Vec<SystemBalanceQuery> =
+                sql_query(
+                "SELECT cr_account_id as id, SUM(value) FROM transactions JOIN accounts ON transactions.cr_account_id = accounts.id WHERE accounts.user_id = $1 AND accounts.kind = 'cr' GROUP BY cr_account_id;")
+                    .bind::<SqlUuid, _>(self.system_user_id)
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
+            let cr_turnovers: HashMap<_, _> = cr_turnovers
+                .into_iter()
+                .map(|balance_query| (balance_query.id, balance_query.sum))
+                .collect();
+            let mut res: HashMap<AccountId, (Amount, Amount)> = HashMap::new();
+            for key in cr_turnovers.keys() {
+                let cr_value = cr_turnovers[key];
+                let dr_value = dr_turnovers.get(key).cloned().unwrap_or(Amount::new(0));
+                res.insert(key.clone(), (cr_value, dr_value));
+                dr_turnovers.remove(key);
+            }
+            for key in dr_turnovers.keys() {
+                res.insert(key.clone(), (Amount::new(0), dr_turnovers[key]));
+            }
+            Ok(res)
+        })
+    }
+
+    fn get_blockchain_balances(&self) -> RepoResult<HashMap<(BlockchainAddress, Currency), (Amount, Amount)>> {
+        with_tls_connection(|conn| {
+            let dr_turnovers: Vec<BalanceQuery> =
+                sql_query(
+                "SELECT accounts.address, accounts.currency, sums.sum FROM (SELECT dr_account_id, SUM(value) FROM transactions GROUP BY dr_account_id) AS sums INNER JOIN accounts ON accounts.id = sums.dr_account_id WHERE accounts.kind = 'dr'")
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
+            let dr_turnovers: HashMap<_, _> = dr_turnovers
+                .into_iter()
+                .map(|balance_query| ((balance_query.address, balance_query.currency), balance_query.sum))
+                .collect();
+            let cr_turnovers: Vec<BalanceQuery> =
+                sql_query(
+                "SELECT accounts.address, accounts.currency, sums.sum FROM (SELECT cr_account_id, SUM(value) FROM transactions GROUP BY cr_account_id) AS sums INNER JOIN accounts ON accounts.id = sums.cr_account_id WHERE accounts.kind = 'dr'")
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
+            let mut cr_turnovers: HashMap<_, _> = cr_turnovers
+                .into_iter()
+                .map(|balance_query| ((balance_query.address, balance_query.currency), balance_query.sum))
+                .collect();
+            let mut res: HashMap<(BlockchainAddress, Currency), (Amount, Amount)> = HashMap::new();
+            for key in dr_turnovers.keys() {
+                let dr_value = dr_turnovers[key];
+                let cr_value = cr_turnovers.get(key).cloned().unwrap_or(Amount::new(0));
+                res.insert(key.clone(), (dr_value, cr_value));
+                cr_turnovers.remove(key);
+            }
+            for key in cr_turnovers.keys() {
+                res.insert(key.clone(), (Amount::new(0), cr_turnovers[key]));
+            }
+            Ok(res)
         })
     }
     fn get(&self, transaction_id_arg: TransactionId) -> RepoResult<Option<Transaction>> {

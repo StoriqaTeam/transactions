@@ -1,4 +1,8 @@
+use std::collections::HashMap;
+
 use diesel;
+use diesel::sql_query;
+use diesel::sql_types::{BigInt, VarChar};
 
 use super::error::*;
 use super::executor::with_tls_connection;
@@ -9,6 +13,7 @@ use schema::accounts::dsl::*;
 
 pub trait AccountsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewAccount) -> RepoResult<Account>;
+    fn count_by_user(&self) -> RepoResult<HashMap<String, u64>>;
     fn get(&self, account_id: AccountId) -> RepoResult<Option<Account>>;
     fn update(&self, account_id: AccountId, payload: UpdateAccount) -> RepoResult<Account>;
     fn delete(&self, account_id: AccountId) -> RepoResult<Account>;
@@ -21,6 +26,14 @@ pub trait AccountsRepo: Send + Sync + 'static {
 #[derive(Clone, Default)]
 pub struct AccountsRepoImpl;
 
+#[derive(Debug, Clone, Queryable, QueryableByName)]
+struct CountByUserQuery {
+    #[sql_type = "VarChar"]
+    name: String,
+    #[sql_type = "BigInt"]
+    count: i64,
+}
+
 impl<'a> AccountsRepo for AccountsRepoImpl {
     fn create(&self, payload: NewAccount) -> RepoResult<Account> {
         with_tls_connection(|conn| {
@@ -31,6 +44,23 @@ impl<'a> AccountsRepo for AccountsRepoImpl {
                     let error_kind = ErrorKind::from(&e);
                     ectx!(err e, error_kind => payload)
                 })
+        })
+    }
+    fn count_by_user(&self) -> RepoResult<HashMap<String, u64>> {
+        with_tls_connection(|conn| {
+            let counts: Vec<CountByUserQuery> =
+                sql_query(
+                "SELECT users.name, counts.count FROM (SELECT user_id, count(*) FROM accounts where kind='cr' GROUP BY user_id) AS counts INNER JOIN users ON counts.user_id = users.id")
+                    .get_results(conn)
+                    .map_err(move |e| {
+                        let error_kind = ErrorKind::from(&e);
+                        ectx!(try err e, error_kind)
+                    })?;
+            let counts: HashMap<String, u64> = counts
+                .into_iter()
+                .map(|count_res| (count_res.name, count_res.count as u64))
+                .collect();
+            Ok(counts)
         })
     }
     fn get(&self, account_id_arg: AccountId) -> RepoResult<Option<Account>> {

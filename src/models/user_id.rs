@@ -4,7 +4,7 @@ use std::str::FromStr;
 use diesel::sql_types::Uuid as SqlUuid;
 use uuid::{ParseError, Uuid};
 
-#[derive(Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Default, PartialEq)]
+#[derive(Serialize, Deserialize, FromSqlRow, AsExpression, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[sql_type = "SqlUuid"]
 pub struct UserId(Uuid);
 derive_newtype_sql!(user_id, SqlUuid, UserId, UserId);
