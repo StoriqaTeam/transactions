@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use futures::future::{self, Either};
+use validator::{ValidationError, ValidationErrors};
 
 use super::error::*;
 use client::{ExchangeClient, FeesClient};
@@ -61,8 +62,7 @@ impl<E: DbExecutor> FeesService for FeesServiceImpl<E> {
         let accounts_repo = self.accounts_repo.clone();
         let db_executor = self.db_executor.clone();
         let fees_client = self.fees_client.clone();
-        let to_currency = get_fees.to_currency;
-        let from_currency = get_fees.from_currency;
+        let currency = get_fees.currency;
         let fee_upside = self.fee_upside;
         let service = self.clone();
         let address = get_fees.account_address.clone();
@@ -70,73 +70,44 @@ impl<E: DbExecutor> FeesService for FeesServiceImpl<E> {
             db_executor
                 .execute(move || {
                     accounts_repo
-                        .get_by_address(address.clone(), to_currency, AccountKind::Cr)
+                        .filter_by_address(address.clone())
                         .map_err(ectx!(convert => address))
-                        .map(|acc| acc.is_some())
+                        .and_then(|accs| {
+                            if accs.len() == 0 {
+                                Ok(false)
+                            } else {
+                                if accs.iter().all(|acc| acc.currency == currency) {
+                                    Ok(true)
+                                } else {
+                                    let mut errors = ValidationErrors::new();
+                                    let mut error = ValidationError::new("currency");
+                                    error.add_param("message".into(), &"account currency differs from fee asked".to_string());
+                                    error.add_param("details".into(), &"no details".to_string());
+                                    errors.add("account", error);
+                                    Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::InvalidInput(errors) => accs, currency))
+                                }
+                            }
+                        })
                 }).and_then(move |acc_exists| {
                     if acc_exists {
-                        Either::A(future::ok(Fees::new(from_currency, vec![Fee::default()])))
+                        Either::A(future::ok(Fees::new(currency, vec![Fee::default()])))
                     } else {
                         Either::B(
-                            match (from_currency, to_currency) {
-                                (Currency::Btc, Currency::Btc) => {
-                                    Box::new(fees_client.bitcoin_fees().map_err(ectx!(convert => from_currency, to_currency)))
-                                        as Box<Future<Item = Vec<Fee>, Error = Error> + Send>
-                                }
-                                (Currency::Btc, Currency::Eth) => Box::new(
-                                    fees_client
-                                        .eth_fees()
-                                        .map_err(ectx!(convert => from_currency, to_currency))
-                                        .and_then(move |fees| service.convert_fees(fees, Currency::Btc, Currency::Eth)),
-                                )
+                            match currency {
+                                Currency::Btc => Box::new(fees_client.bitcoin_fees().map_err(ectx!(convert => currency)))
                                     as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
-                                (Currency::Btc, Currency::Stq) => Box::new(
+                                Currency::Eth => Box::new(fees_client.eth_fees().map_err(ectx!(convert => currency)))
+                                    as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
+                                Currency::Stq => Box::new(
                                     fees_client
                                         .stq_fees()
-                                        .map_err(ectx!(convert => from_currency, to_currency))
-                                        .and_then(move |fees| service.convert_fees(fees, Currency::Btc, Currency::Eth)),
-                                )
-                                    as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
-                                (Currency::Eth, Currency::Eth) => {
-                                    Box::new(fees_client.eth_fees().map_err(ectx!(convert => from_currency, to_currency)))
-                                        as Box<Future<Item = Vec<Fee>, Error = Error> + Send>
-                                }
-                                (Currency::Eth, Currency::Btc) => Box::new(
-                                    fees_client
-                                        .bitcoin_fees()
-                                        .map_err(ectx!(convert => from_currency, to_currency))
-                                        .and_then(move |fees| service.convert_fees(fees, Currency::Eth, Currency::Btc)),
-                                )
-                                    as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
-                                (Currency::Eth, Currency::Stq) => {
-                                    Box::new(fees_client.stq_fees().map_err(ectx!(convert => from_currency, to_currency)))
-                                        as Box<Future<Item = Vec<Fee>, Error = Error> + Send>
-                                }
-                                (Currency::Stq, Currency::Stq) => Box::new(
-                                    fees_client
-                                        .stq_fees()
-                                        .map_err(ectx!(convert => from_currency, to_currency))
+                                        .map_err(ectx!(convert => currency))
                                         .and_then(move |fees| service.convert_fees(fees, Currency::Stq, Currency::Eth)),
-                                )
-                                    as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
-                                (Currency::Stq, Currency::Btc) => Box::new(
-                                    fees_client
-                                        .bitcoin_fees()
-                                        .map_err(ectx!(convert => from_currency, to_currency))
-                                        .and_then(move |fees| service.convert_fees(fees, Currency::Stq, Currency::Btc)),
-                                )
-                                    as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
-                                (Currency::Stq, Currency::Eth) => Box::new(
-                                    fees_client
-                                        .eth_fees()
-                                        .map_err(ectx!(convert => from_currency, to_currency))
-                                        .and_then(move |fees| service.convert_fees(fees, Currency::Stq, Currency::Eth)),
-                                )
-                                    as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
+                                ) as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
                             }.map(move |mut fees| {
                                 fees.iter_mut()
                                     .for_each(|f| f.value = Amount::new((f.value.raw() as f64 * fee_upside) as u128));
-                                Fees::new(from_currency, fees)
+                                Fees::new(currency, fees)
                             }),
                         )
                     }
