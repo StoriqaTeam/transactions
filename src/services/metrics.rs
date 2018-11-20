@@ -45,6 +45,7 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
 impl<E: DbExecutor> MetricsService for MetricsServiceImpl<E> {
     fn get_metrics(&self) -> Box<Future<Item = Metrics, Error = Error> + Send> {
         let self_clone = self.clone();
+        let self_2 = self.clone();
         Box::new(
             self.db_executor
                 .execute_transaction_with_isolation(Isolation::RepeatableRead, move || {
@@ -52,10 +53,16 @@ impl<E: DbExecutor> MetricsService for MetricsServiceImpl<E> {
                     self_clone.update_counts(&mut metrics)?;
                     let balances = self_clone.transactions_repo.get_blockchain_balances()?;
                     let reduced_balances = self_clone.update_negative_balances_and_reduce(&mut metrics, balances)?;
-                    self_clone.update_fees_and_liquidity_balances(&mut metrics);
+                    let _ = self_clone.update_fees_and_liquidity_balances(&mut metrics)?;
                     self_clone.update_limits(&mut metrics);
                     self_clone.update_total_payments_system_balances(&mut metrics, &reduced_balances);
-                    Ok(metrics)
+                    Ok((metrics, reduced_balances))
+                }).and_then(move |(mut metrics, reduced_balances)| {
+                    let self_3 = self_2.clone();
+                    self_2.fetch_blockchain_balances(&reduced_balances).map(move |blockchain_balances| {
+                        self_3.update_blockchain_balances(&mut metrics, &reduced_balances, &blockchain_balances);
+                        metrics
+                    })
                 }),
         )
     }
@@ -74,6 +81,56 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
         metrics.accounts_count = counts;
         metrics.accounts_count_total = total;
         Ok(())
+    }
+
+    fn update_blockchain_balances(
+        &self,
+        metrics: &mut Metrics,
+        payments_system_balances: &HashMap<(BlockchainAddress, Currency), Amount>,
+        blockchain_balances: &HashMap<(BlockchainAddress, Currency), Amount>,
+    ) {
+        let mut total_blockchain_balances: HashMap<Currency, f64> = HashMap::new();
+        for currency in [Currency::Btc, Currency::Stq, Currency::Eth].into_iter() {
+            total_blockchain_balances.insert(*currency, 0.0);
+        }
+        for ((_, currency), value) in blockchain_balances.iter() {
+            total_blockchain_balances
+                .entry(*currency)
+                .and_modify(|balance| {
+                    *balance += value.to_super_unit(*currency);
+                }).or_insert(0.0);
+        }
+        metrics.total_blockchain_balances = total_blockchain_balances;
+
+        let mut diverging_blockchain_balances: Vec<DivergingBalance> = Vec::new();
+        for ((address, currency), payments_balance) in payments_system_balances {
+            let blockchain_balance = blockchain_balances
+                .get(&(address.clone(), *currency))
+                .cloned()
+                .unwrap_or(Amount::new(0));
+            if blockchain_balance != *payments_balance {
+                diverging_blockchain_balances.push(DivergingBalance {
+                    address: address.clone(),
+                    currency: *currency,
+                    payments_system_value: payments_balance.to_super_unit(*currency),
+                    blockchain_value: blockchain_balance.to_super_unit(*currency),
+                });
+            }
+        }
+        metrics.diverging_blockchain_balances = diverging_blockchain_balances;
+
+        let mut diverging_blockchain_balances_total: HashMap<Currency, f64> = HashMap::new();
+        for currency in [Currency::Btc, Currency::Stq, Currency::Eth].into_iter() {
+            diverging_blockchain_balances_total.insert(*currency, 0.0);
+        }
+
+        for div_balance in metrics.diverging_blockchain_balances.iter() {
+            diverging_blockchain_balances_total
+                .entry(div_balance.currency)
+                .and_modify(|value| *value += (div_balance.payments_system_value - div_balance.blockchain_value).abs());
+        }
+
+        metrics.diverging_blockchain_balances_total = diverging_blockchain_balances_total;
     }
 
     fn update_total_payments_system_balances(&self, metrics: &mut Metrics, balances: &HashMap<(BlockchainAddress, Currency), Amount>) {

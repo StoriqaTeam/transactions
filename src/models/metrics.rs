@@ -7,7 +7,7 @@ pub struct Metrics {
     pub accounts_count: HashMap<String, u64>,
     pub accounts_count_total: u64,
     pub total_payments_system_balances: HashMap<Currency, f64>,
-    pub total_blockchain_balance: HashMap<Currency, f64>,
+    pub total_blockchain_balances: HashMap<Currency, f64>,
     pub fees_balances: HashMap<Currency, f64>,
     pub liquidity_balances: HashMap<Currency, f64>,
     pub limits: HashMap<Currency, f64>,
@@ -21,8 +21,8 @@ pub struct Metrics {
 pub struct DivergingBalance {
     pub address: BlockchainAddress,
     pub currency: Currency,
-    pub transactions_value: Amount,
-    pub blockchain_value: Amount,
+    pub payments_system_value: f64,
+    pub blockchain_value: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
