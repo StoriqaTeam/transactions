@@ -16,9 +16,9 @@ use schema::accounts::dsl as Accounts;
 use schema::transactions::dsl::*;
 
 // 0.001 BTC
-const MIN_SIGNIFICANT_SATOSHIS: u128 = 100_000;
+const MIN_SIGNIFICANT_SATOSHIS: u128 = 1000;
 // 0.01 ETH
-const MIN_SIGNIFICANT_ETH: u128 = 10_000_000_000_000_000;
+const MIN_SIGNIFICANT_ETH: u128 = 500_000_000_000_000;
 // 100 STQ
 const MIN_SIGNIFICANT_STQ: u128 = 100_000_000_000_000_000_000;
 
@@ -541,14 +541,18 @@ impl TransactionsRepo for TransactionsRepoImpl {
                         account: acc,
                         balance: value_,
                     });
+                    value_ = Amount::new(0);
                     break;
                 } else {
                     value_ = value_.checked_sub(balance).expect("Unexpected < 0 value");
                     r.push(AccountWithBalance { account: acc, balance });
                 }
             }
-
-            Ok(r)
+            if value_ == Amount::new(0) {
+                Ok(r)
+            } else {
+                Err(ectx!(err ErrorContext::InsufficientWithdrawalFunds, ErrorKind::Internal))
+            }
         })
     }
 }

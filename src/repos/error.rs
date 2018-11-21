@@ -41,6 +41,8 @@ pub enum ErrorContext {
     BalanceOverflow,
     #[fail(display = "repo context - pair of accounts not found")]
     AccountsPair,
+    #[fail(display = "repo context - insufficient funds for withdrawal in the system")]
+    InsufficientWithdrawalFunds,
 }
 
 derive_error_impls!();
