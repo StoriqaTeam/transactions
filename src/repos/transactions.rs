@@ -541,14 +541,18 @@ impl TransactionsRepo for TransactionsRepoImpl {
                         account: acc,
                         balance: value_,
                     });
+                    value_ = Amount::new(0);
                     break;
                 } else {
                     value_ = value_.checked_sub(balance).expect("Unexpected < 0 value");
                     r.push(AccountWithBalance { account: acc, balance });
                 }
             }
-
-            Ok(r)
+            if value_ == Amount::new(0) {
+                Ok(r)
+            } else {
+                Err(ectx!(err ErrorContext::InsufficientWithdrawalFunds, ErrorKind::Internal))
+            }
         })
     }
 }
