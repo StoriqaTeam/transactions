@@ -117,6 +117,7 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
                 });
             }
         }
+        metrics.diverging_blockchain_balances_count = diverging_blockchain_balances.len() as u64;
         metrics.diverging_blockchain_balances = diverging_blockchain_balances;
 
         let mut diverging_blockchain_balances_total: HashMap<Currency, f64> = HashMap::new();
@@ -255,6 +256,7 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
                 res.insert(key.clone(), dr_turnover.checked_sub(cr_turnover).unwrap());
             }
         }
+        metrics.negative_balances_count = neg_res.len() as u64;
         metrics.negative_balances = neg_res;
         Ok(res)
     }

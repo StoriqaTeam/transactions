@@ -14,6 +14,8 @@ pub struct Metrics {
     pub diverging_blockchain_balances: Vec<DivergingBalance>,
     pub diverging_blockchain_balances_total: HashMap<Currency, f64>,
     pub negative_balances: Vec<NegativeBalance>,
+    pub negative_balances_count: u64,
+    pub diverging_blockchain_balances_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
