@@ -69,8 +69,8 @@ where
     fn handle_error(&self, error: E) {
         // We skip this error as it constantly appears probably on resubscription and pollutes log
         // Todo - figure out why channels are closing
-        if error.description() != CHANNEL_IS_NOT_CONNECTED_MESSAGE {
-            error!("{}", error);
+        if format!("{}", error) != CHANNEL_IS_NOT_CONNECTED_MESSAGE {
+            error!("r2d2 error: {}", error);
         }
     }
 }
