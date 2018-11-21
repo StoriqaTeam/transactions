@@ -16,9 +16,9 @@ use schema::accounts::dsl as Accounts;
 use schema::transactions::dsl::*;
 
 // 0.001 BTC
-const MIN_SIGNIFICANT_SATOSHIS: u128 = 100_000;
+const MIN_SIGNIFICANT_SATOSHIS: u128 = 200;
 // 0.01 ETH
-const MIN_SIGNIFICANT_ETH: u128 = 10_000_000_000_000_000;
+const MIN_SIGNIFICANT_ETH: u128 = 500_000_000_000_000;
 // 100 STQ
 const MIN_SIGNIFICANT_STQ: u128 = 100_000_000_000_000_000_000;
 
