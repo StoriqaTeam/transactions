@@ -165,7 +165,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
 
             let fees_account_dr = match blockchain_tx.currency {
                 // stq accounts bear eth fees, that are written off from system account
-                Currency::Stq => self.system_service.get_system_fees_account(fees_currency)?,
+                Currency::Stq => self.system_service.get_system_fees_account_dr(fees_currency)?,
                 // other accounts make withdrawal from some dr account, which is stored in tx.cr_account_id
                 // and fees will be written off from them
                 _ => self
