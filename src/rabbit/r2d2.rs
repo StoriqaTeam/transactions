@@ -1,3 +1,4 @@
+use std::error::Error as StdError;
 use std::fmt::{self, Debug};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
@@ -11,6 +12,7 @@ use lapin_async::connection::{ConnectingState, ConnectionState};
 use lapin_futures::channel::{BasicQosOptions, Channel};
 use lapin_futures::client::{Client, ConnectionOptions, HeartbeatHandle};
 use prelude::*;
+use r2d2::HandleError;
 use r2d2::{CustomizeConnection, ManageConnection, Pool};
 use regex::Regex;
 use tokio::net::tcp::TcpStream;
@@ -22,6 +24,7 @@ use config::Config;
 use utils::{format_error, log_error};
 
 const CONSUMER_PREFETCH_COUNT: u16 = 1000;
+const CHANNEL_IS_NOT_CONNECTED_MESSAGE: &'static str = "Channel is not connected";
 pub type RabbitPool = Pool<RabbitConnectionManager>;
 
 #[derive(Clone)]
@@ -52,6 +55,22 @@ impl Drop for RabbitHeartbeatHandle {
         let handle = self.0.take();
         if let Some(h) = handle {
             h.stop();
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct R2D2ErrorHandler;
+
+impl<E> HandleError<E> for R2D2ErrorHandler
+where
+    E: StdError,
+{
+    fn handle_error(&self, error: E) {
+        // We skip this error as it constantly appears probably on resubscription and pollutes log
+        // Todo - figure out why channels are closing
+        if error.description() != CHANNEL_IS_NOT_CONNECTED_MESSAGE {
+            error!("{}", error);
         }
     }
 }
@@ -270,8 +289,7 @@ impl ManageConnection for RabbitConnectionManager {
             return Err(e.compat());
         }
         if !conn.is_connected() {
-            let e: Error = ectx!(err format_err!("Channel is not connected"), ErrorKind::Internal);
-            let e: failure::Error = format_err!("{}", format_error(&e));
+            let e: failure::Error = format_err!("{}", CHANNEL_IS_NOT_CONNECTED_MESSAGE);
             return Err(e.compat());
         }
         trace!("Channel is ok");
