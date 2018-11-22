@@ -36,6 +36,7 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     blockchain_transactions_repo: Arc<dyn BlockchainTransactionsRepo>,
     accounts_repo: Arc<dyn AccountsRepo>,
     db_executor: E,
+    blockchain_client: Arc<dyn BlockchainClient>,
     exchange_client: Arc<dyn ExchangeClient>,
 }
 
@@ -94,7 +95,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         let blockchain_service = Arc::new(BlockchainServiceImpl::new(
             config.clone(),
             keys_client,
-            blockchain_client,
+            blockchain_client.clone(),
             exchange_client.clone(),
             pending_transactions_repo.clone(),
             system_service.clone(),
@@ -116,6 +117,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             accounts_repo,
             db_executor,
             converter_service,
+            blockchain_client,
             exchange_client,
         }
     }
@@ -245,6 +247,21 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         };
         res.push(self.create_base_tx(fee_tx, from_account.clone(), fees_account.clone())?);
 
+        let mut iter = 0;
+        // Stq transfers use transferFrom and made from the same account
+        // hence we need to increment nonce
+        let mut maybe_nonce = match to_currency {
+            Currency::Stq => {
+                let tx_initiator = self.system_service.get_system_fees_account(Currency::Eth)?.address;
+                Some(
+                    self.blockchain_client
+                        .get_ethereum_nonce(tx_initiator.clone())
+                        .map_err(ectx!(try convert => tx_initiator))
+                        .wait()?,
+                )
+            }
+            _ => None,
+        };
         for AccountWithBalance {
             account: acc,
             balance: value,
@@ -268,16 +285,24 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             let mut db_tx = self.create_base_tx(new_tx, from_account.clone(), acc.clone())?;
             let to = to_blockchain_address.clone();
             let blockchain_tx_id_res = match to_currency {
-                Currency::Eth => self
-                    .blockchain_service
-                    .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Eth),
-                Currency::Stq => self
-                    .blockchain_service
-                    .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Stq),
+                Currency::Eth => {
+                    if iter > 0 {
+                        // sleep before sending next tx, as time travel in txs may get it rejected
+                        std::thread::sleep(std::time::Duration::from_millis(1500));
+                    }
+                    self.blockchain_service
+                        .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Eth, None)
+                }
+                Currency::Stq => {
+                    self.blockchain_service
+                        .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Stq, maybe_nonce)
+                }
                 Currency::Btc => self
                     .blockchain_service
                     .create_bitcoin_tx(acc.address.clone(), to, *value, fee_price_est),
             };
+            maybe_nonce = maybe_nonce.map(|nonce| nonce + 1);
+            iter += 1;
 
             match blockchain_tx_id_res {
                 Ok(blockchain_tx_id) => {

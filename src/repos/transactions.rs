@@ -17,7 +17,7 @@ use schema::transactions::dsl::*;
 
 // 0.001 BTC
 const MIN_SIGNIFICANT_SATOSHIS: u128 = 1000;
-// 0.01 ETH
+// 0.0005 ETH
 const MIN_SIGNIFICANT_ETH: u128 = 500_000_000_000_000;
 // 100 STQ
 const MIN_SIGNIFICANT_STQ: u128 = 100_000_000_000_000_000_000;
@@ -531,6 +531,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
             // calculating accounts to take
             let mut r = vec![];
             for (acc, balance) in res_accounts {
+                info!("acc: {:?}, bal: {:?}, val: {:?}", acc, balance, value_);
                 // Note - it may seem counter intuitive that we subtract total_fee from each account
                 // rather than from only one. But in reality you will incur the fee on each blockchain
                 // transaction.

@@ -30,6 +30,7 @@ pub trait BlockchainService: Send + Sync + 'static {
         value: Amount,
         fee: Amount,
         currency: Currency,
+        nonce_offset: Option<u64>,
     ) -> Result<BlockchainTransactionId, Error>;
     fn estimate_withdrawal_fee(
         &self,
@@ -168,7 +169,9 @@ impl BlockchainService for BlockchainServiceImpl {
         value: Amount,
         fee: Amount,
         currency: Currency,
+        nonce_offset: Option<u64>,
     ) -> Result<BlockchainTransactionId, Error> {
+        let nonce_offset = nonce_offset.unwrap_or(0);
         match currency {
             Currency::Eth => (),
             Currency::Stq => (),
@@ -182,7 +185,8 @@ impl BlockchainService for BlockchainServiceImpl {
             .blockchain_client
             .get_ethereum_nonce(tx_initiator.clone())
             .map_err(ectx!(try convert => tx_initiator))
-            .wait()?;
+            .wait()?
+            + nonce_offset;
 
         // creating blockchain transactions array
         let create_blockchain_input = CreateBlockchainTx::new(from, to, currency, value, fee, Some(nonce), None);
