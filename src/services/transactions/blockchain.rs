@@ -108,7 +108,7 @@ impl BlockchainService for BlockchainServiceImpl {
                 .rate(input_rate.clone(), Role::System)
                 .wait()
                 .map_err(ectx!(try ErrorKind::Internal => input_rate))?;
-            total_blockchain_fee_native_currency.convert(input_fee_currency, rate)
+            total_blockchain_fee_native_currency.convert(input_fee_currency, estimate_currency, rate)
         };
         let fee_price = total_blockchain_fee_esitmate_currency
             .checked_div(base)
