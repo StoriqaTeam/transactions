@@ -63,11 +63,6 @@ impl Amount {
             _ => 1.0f64,
         };
 
-        println!(
-            "from: {}, to: {}, rate: {}, factor: {}",
-            from_currency, to_currency, rate, satoshi_wei_factor
-        );
-
         let divisor_exp = match from_currency {
             Currency::Btc => SATOSHIS_IN_BTC - MAX_SATOSHIS_PRECISION,
             Currency::Eth => WEI_IN_ETH - MAX_WEI_PRECISION,
