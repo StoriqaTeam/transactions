@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use futures::future::{self, Either};
 use futures::IntoFuture;
+use serde_json;
 use validator::Validate;
 
 use super::auth::AuthService;
@@ -63,7 +64,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
                 Either::B(
                     input
                         .validate()
-                        .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
+                        .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(serde_json::to_string(&e).unwrap_or_default()) => input))
                         .into_future()
                         .and_then({
                             let input = input.clone();
@@ -118,7 +119,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
         Box::new(
             payload
                 .validate()
-                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => payload))
+                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(serde_json::to_string(&e).unwrap_or_default()) => payload))
                 .into_future()
                 .and_then(move |_| {
                     auth_service.authenticate(token).and_then(move |user| {

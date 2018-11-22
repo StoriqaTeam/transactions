@@ -66,7 +66,7 @@ impl ExchangeClientImpl {
             .body(Body::from(body))
             .map_err(ectx!(ErrorSource::Hyper, ErrorKind::MalformedInput => query3))
             .into_future()
-            .and_then(move |req| cli.request(req).map_err(ectx!(ErrorKind::Internal => query1)))
+            .and_then(move |req| cli.request(req).map_err(ectx!(convert => query1)))
             .and_then(move |resp| read_body(resp.into_body()).map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal => query2)))
             .and_then(|bytes| {
                 let bytes_clone = bytes.clone();

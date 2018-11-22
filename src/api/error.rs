@@ -2,7 +2,6 @@ use failure::{Backtrace, Context, Fail};
 use services::ErrorKind as ServiceErrorKind;
 use std::fmt;
 use std::fmt::Display;
-use validator::ValidationErrors;
 
 #[derive(Debug)]
 pub struct Error {
@@ -17,7 +16,7 @@ pub enum ErrorKind {
     #[fail(display = "controller error - bad request")]
     BadRequest,
     #[fail(display = "controller error - unprocessable entity")]
-    UnprocessableEntity(ValidationErrors),
+    UnprocessableEntity(String),
     #[fail(display = "controller error - internal error")]
     Internal,
     #[fail(display = "controller error - not found")]
@@ -59,7 +58,7 @@ impl From<ServiceErrorKind> for ErrorKind {
             ServiceErrorKind::Unauthorized => ErrorKind::Unauthorized,
             ServiceErrorKind::MalformedInput | ServiceErrorKind::Balance => ErrorKind::BadRequest,
             ServiceErrorKind::NotFound => ErrorKind::NotFound,
-            ServiceErrorKind::InvalidInput(validation_errors) => ErrorKind::UnprocessableEntity(validation_errors),
+            ServiceErrorKind::InvalidInput(s) => ErrorKind::UnprocessableEntity(s),
         }
     }
 }

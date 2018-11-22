@@ -2,7 +2,7 @@ use std::fmt;
 use std::fmt::Display;
 
 use failure::{Backtrace, Context, Fail};
-use validator::ValidationErrors;
+use serde_json;
 
 use client::blockchain_gateway::ErrorKind as BlockchainClientErrorKind;
 use client::exchange::ErrorKind as ExchangeClientErrorKind;
@@ -23,7 +23,7 @@ pub enum ErrorKind {
     #[fail(display = "service error - malformed input")]
     MalformedInput,
     #[fail(display = "service error - invalid input, errors: {}", _0)]
-    InvalidInput(ValidationErrors),
+    InvalidInput(String),
     #[fail(display = "service error - internal error")]
     Internal,
     #[fail(display = "service error - not found")]
@@ -96,7 +96,9 @@ impl From<ReposErrorKind> for ErrorKind {
         match e {
             ReposErrorKind::Internal => ErrorKind::Internal,
             ReposErrorKind::Unauthorized => ErrorKind::Unauthorized,
-            ReposErrorKind::Constraints(validation_errors) => ErrorKind::InvalidInput(validation_errors),
+            ReposErrorKind::Constraints(validation_errors) => {
+                ErrorKind::InvalidInput(serde_json::to_string(&validation_errors).unwrap_or_default())
+            }
         }
     }
 }
@@ -137,6 +139,7 @@ impl From<ExchangeClientErrorKind> for ErrorKind {
             ExchangeClientErrorKind::Internal => ErrorKind::Internal,
             ExchangeClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
             ExchangeClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
+            ExchangeClientErrorKind::Validation(s) => ErrorKind::InvalidInput(s),
         }
     }
 }
