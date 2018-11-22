@@ -14,8 +14,10 @@ use repos::{
 use serde_json;
 use utils::{log_and_capture_error, log_error};
 
-// 500 stq
-const STQ_BALANCE_THRESHOLD: u128 = 500_000_000_000_000_000_000;
+// it's ok to have this low approval threshold, the attack is still not
+// feasible, as an attacker need to spend at least 20000 gas per stq transfer
+// to a new account => his cost will be smth like 30% of ours
+const STQ_BALANCE_THRESHOLD: u128 = 1;
 // 100 bn of storiqa
 const STQ_ALLOWANCE: u128 = 100_000_000_000_000_000_000_000_000_000;
 
@@ -125,9 +127,10 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                             ..Default::default()
                         };
                         self.accounts_repo.update(account.id, changeset.clone())?;
-                        if let Some(cr_account) = self.accounts_repo.get_by_address(from, Currency::Stq, AccountKind::Cr)? {
-                            self.accounts_repo.update(cr_account.id, changeset)?;
-                        }
+                        // We don't need the notion of approved credit account anymore, as all debit accounts get approved
+                        // if let Some(cr_account) = self.accounts_repo.get_by_address(from, Currency::Stq, AccountKind::Cr)? {
+                        //     self.accounts_repo.update(cr_account.id, changeset)?;
+                        // }
                         self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
                         self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
                         self.seen_hashes_repo.create(NewSeenHashes {
