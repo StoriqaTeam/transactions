@@ -1,7 +1,7 @@
 pub mod blockchain_gateway;
 pub mod exchange;
 pub mod fees;
-mod http_client;
+pub mod http_client;
 pub mod keys;
 
 pub use self::blockchain_gateway::*;

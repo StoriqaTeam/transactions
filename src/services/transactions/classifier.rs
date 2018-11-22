@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use chrono::Duration;
+use serde_json;
 use validator::Validate;
 
 use super::super::error::*;
@@ -55,7 +56,7 @@ impl ClassifierService for ClassifierServiceImpl {
     fn validate_and_classify_transaction(&self, input: &CreateTransactionInput) -> Result<TransactionType, Error> {
         input
             .validate()
-            .map_err(|e| ectx!(try err e.clone(), ErrorKind::InvalidInput(e) => input))?;
+            .map_err(|e| ectx!(try err e.clone(), ErrorKind::InvalidInput(serde_json::to_string(&e).unwrap_or_default()) => input))?;
         let from_account = self
             .accounts_repo
             .get(input.from)?

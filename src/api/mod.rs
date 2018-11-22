@@ -223,7 +223,7 @@ impl Service for ApiService {
                         Ok(Response::builder()
                             .status(422)
                             .header("Content-Type", "application/json")
-                            .body(Body::from(serde_json::to_string(&errors).unwrap_or_default()))
+                            .body(Body::from(errors))
                             .unwrap())
                     }
                     ErrorKind::Internal => {

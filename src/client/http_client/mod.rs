@@ -1,8 +1,8 @@
-mod error;
+pub mod error;
 
 use config::Config;
 use failure::Fail;
-use futures::future::Either;
+use futures::future::{self, Either};
 use futures::prelude::*;
 use hyper;
 use hyper::{client::HttpConnector, Body, Request, Response};
@@ -71,17 +71,23 @@ impl HttpClient for HttpClientImpl {
 
         Box::new(fut.and_then(|resp| {
             if resp.status().is_client_error() || resp.status().is_server_error() {
-                match resp.status().as_u16() {
-                    400 => Err(ectx!(err ErrorSource::Server, ErrorKind::BadRequest)),
-                    401 => Err(ectx!(err ErrorSource::Server, ErrorKind::Unauthorized)),
-                    404 => Err(ectx!(err ErrorSource::Server, ErrorKind::NotFound)),
-                    500 => Err(ectx!(err ErrorSource::Server, ErrorKind::Internal)),
-                    502 => Err(ectx!(err ErrorSource::Server, ErrorKind::BadGateway)),
-                    504 => Err(ectx!(err ErrorSource::Server, ErrorKind::GatewayTimeout)),
-                    _ => Err(ectx!(err ErrorSource::Server, ErrorKind::UnknownServerError)),
-                }
+                Either::A(match resp.status().as_u16() {
+                    400 => Either::A(future::err(ectx!(err ErrorSource::Server, ErrorKind::BadRequest))),
+                    401 => Either::A(future::err(ectx!(err ErrorSource::Server, ErrorKind::Unauthorized))),
+                    404 => Either::A(future::err(ectx!(err ErrorSource::Server, ErrorKind::NotFound))),
+                    422 => Either::B(read_body(resp.into_body()).then(|body| match body {
+                        Ok(b) => {
+                            future::err(ectx!(err ErrorSource::Server, ErrorKind::Validation(String::from_utf8(b).unwrap_or_default())))
+                        }
+                        Err(_) => future::err(ectx!(err ErrorSource::Server, ErrorKind::UnknownServerError)),
+                    })),
+                    500 => Either::A(future::err(ectx!(err ErrorSource::Server, ErrorKind::Internal))),
+                    502 => Either::A(future::err(ectx!(err ErrorSource::Server, ErrorKind::BadGateway))),
+                    504 => Either::A(future::err(ectx!(err ErrorSource::Server, ErrorKind::GatewayTimeout))),
+                    _ => Either::A(future::err(ectx!(err ErrorSource::Server, ErrorKind::UnknownServerError))),
+                })
             } else {
-                Ok(resp)
+                Either::B(future::ok(resp))
             }
         }))
     }

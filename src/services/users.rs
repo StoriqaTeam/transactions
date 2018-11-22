@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use futures::IntoFuture;
+use serde_json;
 use validator::Validate;
 
 use super::error::*;
@@ -32,7 +33,7 @@ impl<E: DbExecutor> UsersService for UsersServiceImpl<E> {
         Box::new(
             input
                 .validate()
-                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(e) => input))
+                .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(serde_json::to_string(&e).unwrap_or_default()) => input))
                 .into_future()
                 .and_then(move |_| {
                     db_executor.execute(move || users_repo.create(input.clone()).map_err(ectx!(ErrorKind::Internal => input)))
