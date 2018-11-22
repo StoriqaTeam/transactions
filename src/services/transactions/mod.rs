@@ -317,9 +317,15 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         let mut res: Vec<Transaction> = Vec::new();
 
         let (from_value, to_value) = if from_account.currency == input.value_currency {
-            (input.value, input.value.convert(from_account.currency, exchange_rate))
+            (
+                input.value,
+                input.value.convert(from_account.currency, to_account.currency, exchange_rate),
+            )
         } else if to_account.currency == input.value_currency {
-            (input.value.convert(to_account.currency, 1.0 / exchange_rate), input.value)
+            (
+                input.value.convert(to_account.currency, from_account.currency, 1.0 / exchange_rate),
+                input.value,
+            )
         } else {
             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => input, from_account, to_account));
         };

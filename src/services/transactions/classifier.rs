@@ -67,7 +67,7 @@ impl ClassifierService for ClassifierServiceImpl {
             input.value
         } else if let Some(rate) = input.exchange_rate {
             // we trust user input here, since o/w the exchange will fail anyway
-            input.value.convert(input.value_currency, 1.0 / rate)
+            input.value.convert(input.value_currency, from_account.currency, 1.0 / rate)
         } else {
             return Err(ectx!(err ErrorContext::MissingExchangeRate, ErrorKind::MalformedInput));
         };

@@ -55,16 +55,34 @@ impl Amount {
         self.0
     }
 
-    pub fn convert(&self, current_currency: Currency, rate: f64) -> Amount {
-        let divisor_exp = match current_currency {
+    pub fn convert(&self, from_currency: Currency, to_currency: Currency, rate: f64) -> Amount {
+        let satoshi_wei_factor: f64 = match (from_currency, to_currency) {
+            (Currency::Btc, Currency::Btc) => 1.0f64,
+            (Currency::Btc, _) => 10f64.powi((WEI_IN_ETH as i32) - (SATOSHIS_IN_BTC as i32)),
+            (_, Currency::Btc) => 10f64.powi((SATOSHIS_IN_BTC as i32) - (WEI_IN_ETH as i32)),
+            _ => 1.0f64,
+        };
+
+        println!(
+            "from: {}, to: {}, rate: {}, factor: {}",
+            from_currency, to_currency, rate, satoshi_wei_factor
+        );
+
+        let divisor_exp = match from_currency {
             Currency::Btc => SATOSHIS_IN_BTC - MAX_SATOSHIS_PRECISION,
             Currency::Eth => WEI_IN_ETH - MAX_WEI_PRECISION,
             Currency::Stq => WEI_IN_ETH - MAX_WEI_PRECISION,
         };
         let divisor = 10u128.pow(divisor_exp);
         let amount: u128 = self.0 / divisor;
-        let converted: f64 = (amount as f64) * rate;
-        Amount::new((converted as u128) * divisor)
+        let converted: f64 = (amount as f64) * rate * satoshi_wei_factor;
+        if converted < 10_000f64 {
+            // in this case we might lose precision and it's ok to first multiply as f64
+            Amount::new((converted * (divisor as f64)) as u128)
+        } else {
+            // in this case converted is big enough to cast to u128
+            Amount::new((converted as u128) * divisor)
+        }
     }
 
     pub fn to_super_unit(&self, current_currency: Currency) -> f64 {
@@ -225,23 +243,41 @@ mod tests {
             (
                 100_000_000_000_000_000,
                 Currency::Eth,
-                1.5f64,
-                1_499_999_000_000_000_00,
-                1_500_001_000_000_000_00,
-            ),
-            // 1 STQ
-            (
-                1_000_000_000_000_000_000,
                 Currency::Stq,
-                0.0015f64,
-                1_499_999_000_000_000,
-                1_500_001_000_000_000,
+                130_000f64,
+                12_999_999_000_000_000_000_000,
+                13_000_001_000_000_000_000_000,
+            ),
+            // 13 000 STQ
+            (
+                13_000_000_000_000_000_000_000,
+                Currency::Stq,
+                Currency::Eth,
+                1.0f64 / 130_000f64,
+                99_999_000_000_000_000,
+                100_001_000_000_000_000,
             ),
             // 0.01 BTC
-            (1_000_000, Currency::Btc, 1.5f64, 1_499_999, 1_500_001),
+            (
+                1_000_000,
+                Currency::Btc,
+                Currency::Stq,
+                4_500_000f64,
+                44_999_999_000_000_000_000_000,
+                45_000_001_000_000_000_000_000,
+            ),
+            // 45_000 Stq
+            (
+                45_000_000_000_000_000_000_000,
+                Currency::Stq,
+                Currency::Btc,
+                1.0f64 / 4_500_000f64,
+                999_000,
+                1_001_000,
+            ),
         ];
-        for (amount, currency, rate, lower, upper) in cases.into_iter() {
-            let converted = Amount::new(*amount).convert(*currency, *rate).raw();
+        for (amount, from_currency, to_currency, rate, lower, upper) in cases.into_iter() {
+            let converted = Amount::new(*amount).convert(*from_currency, *to_currency, *rate).raw();
             assert!(
                 (converted > *lower) && (converted < *upper),
                 "original: {}, converted: {}, lower: {}, upper: {}",
