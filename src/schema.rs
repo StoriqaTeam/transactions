@@ -28,6 +28,15 @@ table! {
 }
 
 table! {
+    key_values (key) {
+        key -> Varchar,
+        value -> Jsonb,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+table! {
     pending_blockchain_transactions (hash) {
         hash -> Varchar,
         from_ -> Varchar,
@@ -102,6 +111,7 @@ joinable!(transactions -> users (user_id));
 allow_tables_to_appear_in_same_query!(
     accounts,
     blockchain_transactions,
+    key_values,
     pending_blockchain_transactions,
     seen_hashes,
     strange_blockchain_transactions,
