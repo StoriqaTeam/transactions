@@ -6,7 +6,7 @@ use client::{BlockchainClient, ExchangeClient, KeysClient};
 use config::Config;
 use models::*;
 use prelude::*;
-use repos::PendingBlockchainTransactionsRepo;
+use repos::{KeyValuesRepo, PendingBlockchainTransactionsRepo};
 use utils::log_and_capture_error;
 
 pub struct FeeEstimate {
@@ -46,6 +46,7 @@ pub struct BlockchainServiceImpl {
     blockchain_client: Arc<dyn BlockchainClient>,
     exchange_client: Arc<dyn ExchangeClient>,
     pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+    key_values_repo: Arc<KeyValuesRepo>,
     system_service: Arc<SystemService>,
 }
 
@@ -56,6 +57,7 @@ impl BlockchainServiceImpl {
         blockchain_client: Arc<dyn BlockchainClient>,
         exchange_client: Arc<ExchangeClient>,
         pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+        key_values_repo: Arc<KeyValuesRepo>,
         system_service: Arc<SystemService>,
     ) -> Self {
         Self {
@@ -64,6 +66,7 @@ impl BlockchainServiceImpl {
             blockchain_client,
             exchange_client,
             pending_blockchain_transactions_repo,
+            key_values_repo,
             system_service,
         }
     }
@@ -178,11 +181,39 @@ impl BlockchainService for BlockchainServiceImpl {
             Currency::Stq => self.system_service.get_system_fees_account(Currency::Eth)?.address,
             _ => from.clone(),
         };
-        let nonce = self
+        let maybe_db_nonce = match currency {
+            Currency::Stq => self
+                .key_values_repo
+                .get_nonce(tx_initiator.clone())
+                .map_err(ectx!(try ErrorKind::Internal))?,
+            _ => None,
+        };
+
+        let tx_initiator_ = tx_initiator.clone();
+        let ethereum_nonce = self
             .blockchain_client
             .get_ethereum_nonce(tx_initiator.clone())
-            .map_err(ectx!(try convert => tx_initiator))
+            .map_err(ectx!(try convert => tx_initiator_))
             .wait()?;
+
+        let nonce = match (maybe_db_nonce, ethereum_nonce) {
+            (None, ethereum_nonce) => ethereum_nonce,
+            // if for some reason we missed blockchain nonce
+            (Some(db_nonce), ethereum_nonce) => db_nonce.max(ethereum_nonce),
+        };
+
+        let _ = self
+            .key_values_repo
+            .set_nonce(tx_initiator.clone(), nonce + 1)
+            .map_err(ectx!(try ErrorKind::Internal))?;
+
+        // TODO, at this stage transaction is dropped if there's another tx in progress
+        // but this needs to be additionally verified
+        // Therefore we don't do any ether transaction
+        // alternative - use locks, but there are also caveats depending on the transactions isolation
+        // and master / slave reads
+        // https://www.postgresql.org/docs/9.6/applevel-consistency.html
+        // https://www.postgresql.org/docs/9.6/explicit-locking.html
 
         // creating blockchain transactions array
         let create_blockchain_input = CreateBlockchainTx::new(from, to, currency, value, fee, Some(nonce), None);
