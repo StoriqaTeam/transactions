@@ -10,5 +10,5 @@ value:
   stq: 1000000000000000000
   eth: 1000000000000000
   btc: 10000
-number_per_thread: 1
-number_of_threads: 1
+number_per_thread: 10
+number_of_threads: 10

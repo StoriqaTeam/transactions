@@ -6,8 +6,6 @@ require 'json'
 require 'net/http'
 require 'uri'
 
-$http = Net::HTTP.new('localhost', 8010)
-
 def create_withraw_tx(config, currency)
   {
     id: SecureRandom::uuid,
@@ -22,7 +20,7 @@ def create_withraw_tx(config, currency)
   }
 end
 
-def post_tx(config, payload)
+def post_tx(config, http, payload)
   token = config["token"]
   headers = {
     'Content-Type': 'application/json',
@@ -30,7 +28,7 @@ def post_tx(config, payload)
   }
   request = Net::HTTP::Post.new(config['url'], headers)
   request.body = payload.to_json
-  $http.request(request)
+  http.request(request)
 end
 
 
@@ -39,9 +37,12 @@ threads = []
 
 config["number_of_threads"].times do
   threads << Thread::new do
-    payload = create_withraw_tx(config, "stq")
-    resp = post_tx(config, payload)
-    puts "Code: #{resp.code}, Body: #{resp.body}"
+    http = Net::HTTP.new('localhost', 8010)
+    config["number_per_thread"].times do
+      payload = create_withraw_tx(config, "stq")
+      resp = post_tx(config, http, payload)
+      puts "Code: #{resp.code}, Body: #{resp.body}"
+    end
   end
 end
 
