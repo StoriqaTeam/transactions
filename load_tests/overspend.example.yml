@@ -1,0 +1,14 @@
+url: /v1/transactions
+userId: 5fe50f8e-7ddd-49d4-ad0b-1485471dce9f
+token: rLBhFO8Sji8CJSU4sLKEh0jKT66HmvaA1ll4O78ch2s=
+to_address: 00d44DD2f6a2d2005326Db58eC5137204C5Cba5A
+account_id:
+  stq: 30d6348e-c4bf-480b-8855-82bf84af6b7d
+  eth: 83de5a90-23f1-40ff-a281-eb8088c0d292
+  btc: 9addcd92-205b-4685-82fc-7f3843842e3d
+value:
+  stq: 1000000000000000000
+  eth: 1000000000000000
+  btc: 10000
+number_per_thread: 10
+number_of_threads: 10
