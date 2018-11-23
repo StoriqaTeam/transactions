@@ -505,8 +505,10 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })?;
 
             for tx in pending_transactions {
-                remaining_accounts.remove(&tx.cr_account_id);
-                remaining_accounts.remove(&tx.dr_account_id);
+                if currency_ != Currency::Stq {
+                    remaining_accounts.remove(&tx.cr_account_id);
+                    remaining_accounts.remove(&tx.dr_account_id);
+                }
             }
 
             let res_account_ids: Vec<AccountId> = remaining_accounts.keys().cloned().collect();
