@@ -182,7 +182,7 @@ impl BlockchainService for BlockchainServiceImpl {
             _ => from.clone(),
         };
         let maybe_db_nonce = match currency {
-            Currency::Stq => self
+            Currency::Stq | Currency::Eth => self
                 .key_values_repo
                 .get_nonce(tx_initiator.clone())
                 .map_err(ectx!(try ErrorKind::Internal))?,

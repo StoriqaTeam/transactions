@@ -505,7 +505,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 })?;
 
             for tx in pending_transactions {
-                if currency_ != Currency::Stq {
+                if currency_ == Currency::Btc {
                     remaining_accounts.remove(&tx.cr_account_id);
                     remaining_accounts.remove(&tx.dr_account_id);
                 }
