@@ -20,7 +20,9 @@ use client::KeysClient;
 use config::Config;
 use models::*;
 use prelude::*;
-use repos::{AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, PendingBlockchainTransactionsRepo, TransactionsRepo};
+use repos::{
+    AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, KeyValuesRepo, PendingBlockchainTransactionsRepo, TransactionsRepo,
+};
 use tokio_core::reactor::Core;
 use utils::log_and_capture_error;
 
@@ -79,6 +81,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         pending_transactions_repo: Arc<dyn PendingBlockchainTransactionsRepo>,
         blockchain_transactions_repo: Arc<dyn BlockchainTransactionsRepo>,
         accounts_repo: Arc<dyn AccountsRepo>,
+        key_values_repo: Arc<dyn KeyValuesRepo>,
         db_executor: E,
         keys_client: Arc<dyn KeysClient>,
         blockchain_client: Arc<dyn BlockchainClient>,
@@ -97,6 +100,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             blockchain_client,
             exchange_client.clone(),
             pending_transactions_repo.clone(),
+            key_values_repo.clone(),
             system_service.clone(),
         ));
         let converter_service = Arc::new(ConverterServiceImpl::new(

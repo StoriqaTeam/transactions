@@ -11,6 +11,7 @@ extern crate gelf;
 extern crate hyper;
 extern crate r2d2;
 extern crate serde;
+#[macro_use]
 extern crate serde_json;
 extern crate serde_qs;
 #[macro_use]

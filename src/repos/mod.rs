@@ -4,6 +4,7 @@ pub mod accounts;
 pub mod blockchain_transactions;
 pub mod error;
 pub mod executor;
+pub mod key_values;
 #[cfg(test)]
 mod mocks;
 pub mod pending_blockchain_transactions;
@@ -18,6 +19,7 @@ pub use self::accounts::*;
 pub use self::blockchain_transactions::*;
 pub use self::error::*;
 pub use self::executor::*;
+pub use self::key_values::*;
 #[cfg(test)]
 pub use self::mocks::*;
 pub use self::pending_blockchain_transactions::*;
