@@ -215,6 +215,9 @@ impl BlockchainService for BlockchainServiceImpl {
         // https://www.postgresql.org/docs/9.6/applevel-consistency.html
         // https://www.postgresql.org/docs/9.6/explicit-locking.html
 
+        // sleeping so there's a guaranteed interval between withdrawals
+        std::thread::sleep_ms(1500);
+
         // creating blockchain transactions array
         let create_blockchain_input = CreateBlockchainTx::new(from, to, currency, value, fee, Some(nonce), None);
 
