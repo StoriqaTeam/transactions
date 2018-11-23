@@ -20,7 +20,7 @@ const MIN_SIGNIFICANT_SATOSHIS: u128 = 1000;
 // 0.0005 ETH
 const MIN_SIGNIFICANT_ETH: u128 = 500_000_000_000_000;
 // 100 STQ
-const MIN_SIGNIFICANT_STQ: u128 = 100_000_000_000_000_000_000;
+const MIN_SIGNIFICANT_STQ: u128 = 1_000_000_000_000_000_000;
 
 pub trait TransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewTransaction) -> RepoResult<Transaction>;
