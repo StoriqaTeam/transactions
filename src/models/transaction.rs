@@ -115,7 +115,7 @@ pub struct CreateBlockchainTx {
     pub to: BlockchainAddress,
     pub currency: Currency,
     pub value: Amount,
-    pub fee_price: Amount,
+    pub fee_price: f64,
     pub nonce: Option<u64>,
     pub utxos: Option<Vec<BitcoinUtxos>>,
 }
@@ -128,7 +128,7 @@ impl Default for CreateBlockchainTx {
             to: BlockchainAddress::default(),
             currency: Currency::Eth,
             value: Amount::default(),
-            fee_price: Amount::default(),
+            fee_price: 0.0,
             nonce: Some(0),
             utxos: None,
         }
@@ -141,7 +141,7 @@ impl CreateBlockchainTx {
         to: BlockchainAddress,
         currency: Currency,
         value: Amount,
-        fee_price: Amount,
+        fee_price: f64,
         nonce: Option<u64>,
         utxos: Option<Vec<BitcoinUtxos>>,
     ) -> Self {

@@ -8,6 +8,6 @@ pub struct ApproveInput {
     pub approve_address: BlockchainAddress,
     pub currency: Currency,
     pub value: Amount,
-    pub fee_price: Amount,
+    pub fee_price: f64,
     pub nonce: u64,
 }

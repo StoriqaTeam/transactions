@@ -38,8 +38,8 @@ pub struct Server {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct FeePrice {
-    pub bitcoin: u64,
-    pub ethereum: u64,
+    pub bitcoin: f64,
+    pub ethereum: f64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -95,7 +95,7 @@ pub struct System {
     pub keys_system_user_token: AuthenticationToken,
     pub exchange_gateway_system_user_id: UserId,
     pub exchange_gateway_system_user_token: AuthenticationToken,
-    pub approve_gas_price: u64,
+    pub approve_gas_price: f64,
     pub approve_gas_limit: u64,
     pub approve_delay_secs: u64,
 }

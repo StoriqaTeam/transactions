@@ -40,14 +40,12 @@ pub struct KeysClientImpl {
     keys_token: AuthenticationToken,
     keys_system_user_id: UserId,
     keys_system_token: AuthenticationToken,
-    bitcoin_fee_price: Amount,
-    ethereum_fee_price: Amount,
+    bitcoin_fee_price: f64,
+    ethereum_fee_price: f64,
 }
 
 impl KeysClientImpl {
     pub fn new<C: HttpClient>(config: &Config, cli: C) -> Self {
-        let bitcoin_fee_price = Amount::new(config.fee_price.bitcoin as u128);
-        let ethereum_fee_price = Amount::new(config.fee_price.ethereum as u128);
         Self {
             cli: Arc::new(cli),
             keys_url: config.client.keys_url.clone(),
@@ -55,8 +53,8 @@ impl KeysClientImpl {
             keys_token: config.auth.keys_token.clone(),
             keys_system_user_id: config.system.keys_system_user_id,
             keys_system_token: config.system.keys_system_user_token.clone(),
-            bitcoin_fee_price,
-            ethereum_fee_price,
+            bitcoin_fee_price: config.fee_price.bitcoin,
+            ethereum_fee_price: config.fee_price.ethereum,
         }
     }
 
