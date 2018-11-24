@@ -11,7 +11,7 @@ use utils::log_and_capture_error;
 
 pub struct FeeEstimate {
     pub gross_fee: Amount,
-    pub fee_price: Amount,
+    pub fee_price: f64,
     pub currency: Currency,
 }
 
@@ -21,14 +21,14 @@ pub trait BlockchainService: Send + Sync + 'static {
         from: BlockchainAddress,
         to: BlockchainAddress,
         value: Amount,
-        fee: Amount,
+        fee_price: f64,
     ) -> Result<BlockchainTransactionId, Error>;
     fn create_ethereum_tx(
         &self,
         from: BlockchainAddress,
         to: BlockchainAddress,
         value: Amount,
-        fee: Amount,
+        fee_price: f64,
         currency: Currency,
     ) -> Result<BlockchainTransactionId, Error>;
     fn estimate_withdrawal_fee(
@@ -113,9 +113,14 @@ impl BlockchainService for BlockchainServiceImpl {
                 .map_err(ectx!(try ErrorKind::Internal => input_rate))?;
             total_blockchain_fee_native_currency.convert(input_fee_currency, estimate_currency, rate)
         };
-        let fee_price = total_blockchain_fee_esitmate_currency
+        let fee_price_int = total_blockchain_fee_esitmate_currency
             .checked_div(base)
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+        let fee_price = if fee_price_int < Amount::new(1000) {
+            (total_blockchain_fee_esitmate_currency.raw() as f64) / (base.raw() as f64)
+        } else {
+            fee_price_int.raw() as f64
+        };
         Ok(FeeEstimate {
             gross_fee: total_blockchain_fee_esitmate_currency,
             fee_price,
@@ -128,7 +133,7 @@ impl BlockchainService for BlockchainServiceImpl {
         from: BlockchainAddress,
         to: BlockchainAddress,
         value: Amount,
-        fee: Amount,
+        fee_price: f64,
     ) -> Result<BlockchainTransactionId, Error> {
         let from_clone = from.clone();
         let utxos = self
@@ -137,7 +142,7 @@ impl BlockchainService for BlockchainServiceImpl {
             .map_err(ectx!(try convert => from_clone))
             .wait()?;
 
-        let create_blockchain_input = CreateBlockchainTx::new(from, to, Currency::Btc, value, fee, None, Some(utxos));
+        let create_blockchain_input = CreateBlockchainTx::new(from, to, Currency::Btc, value, fee_price, None, Some(utxos));
         let create_blockchain_input_clone = create_blockchain_input.clone();
 
         let raw_tx = self
@@ -169,7 +174,7 @@ impl BlockchainService for BlockchainServiceImpl {
         from: BlockchainAddress,
         to: BlockchainAddress,
         value: Amount,
-        fee: Amount,
+        fee_price: f64,
         currency: Currency,
     ) -> Result<BlockchainTransactionId, Error> {
         match currency {
@@ -219,7 +224,7 @@ impl BlockchainService for BlockchainServiceImpl {
         std::thread::sleep(std::time::Duration::from_millis(1500));
 
         // creating blockchain transactions array
-        let create_blockchain_input = CreateBlockchainTx::new(from, to, currency, value, fee, Some(nonce), None);
+        let create_blockchain_input = CreateBlockchainTx::new(from, to, currency, value, fee_price, Some(nonce), None);
 
         let create_blockchain = create_blockchain_input.clone();
         let raw_tx = self

@@ -42,7 +42,7 @@ impl From<(CreateBlockchainTx, BlockchainTransactionId)> for NewPendingBlockchai
             to_: transaction.0.to,
             currency: transaction.0.currency,
             value: transaction.0.value,
-            fee: transaction.0.fee_price,
+            fee: Amount::new(0),
             erc20_operation_kind: None,
         }
     }
@@ -56,7 +56,7 @@ impl From<(ApproveInput, BlockchainTransactionId)> for NewPendingBlockchainTrans
             to_: transaction.0.approve_address,
             currency: transaction.0.currency,
             value: transaction.0.value,
-            fee: transaction.0.fee_price,
+            fee: Amount::new(0),
             erc20_operation_kind: Some(Erc20OperationKind::Approve),
         }
     }

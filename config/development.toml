@@ -60,8 +60,8 @@ bitcoin = 4
 [fees_options]
 btc_fees_collect_url = "https://bitcoinfees.earn.com/api/v1/fees/recommended"
 eth_fees_collect_url = "https://www.etherchain.org/api/gasPriceOracle"
-btc_transaction_size = 250
+btc_transaction_size = 280
 eth_gas_limit = 21000
 stq_gas_limit = 60000
-fee_upside = 2
+fee_upside = 1.1
 

@@ -378,7 +378,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             to: account.address.clone(),
             currency: Currency::Eth,
             value,
-            fee_price: Amount::new(self.config.system.approve_gas_price as u128),
+            fee_price: self.config.system.approve_gas_price,
             nonce: Some(eth_fees_account_nonce),
             utxos: None,
         };
@@ -438,7 +438,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             approve_address: eth_fees_dr_account.address.clone(),
             currency: Currency::Stq,
             value: Amount::new(STQ_ALLOWANCE),
-            fee_price: Amount::new(self.config.system.approve_gas_price as u128),
+            fee_price: self.config.system.approve_gas_price,
             nonce: approve_nonce,
         };
 
