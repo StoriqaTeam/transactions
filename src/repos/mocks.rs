@@ -331,6 +331,10 @@ pub struct PendingBlockchainTransactionsRepoMock {
 }
 
 impl PendingBlockchainTransactionsRepo for PendingBlockchainTransactionsRepoMock {
+    fn count(&self) -> RepoResult<u64> {
+        let data = self.data.lock().unwrap();
+        Ok(data.len() as u64)
+    }
     fn create(&self, payload: NewPendingBlockchainTransactionDB) -> RepoResult<PendingBlockchainTransactionDB> {
         let mut data = self.data.lock().unwrap();
         let res = PendingBlockchainTransactionDB {

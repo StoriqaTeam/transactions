@@ -16,6 +16,8 @@ pub struct Metrics {
     pub negative_balances: Vec<NegativeBalance>,
     pub negative_balances_count: u64,
     pub diverging_blockchain_balances_count: u64,
+    pub pending_blockchain_transactions_count: u64,
+    pub invalid_blockchain_transactions_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
