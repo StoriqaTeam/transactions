@@ -32,7 +32,7 @@ use models::*;
 use prelude::*;
 use repos::{
     AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutorImpl, KeyValuesRepoImpl, PendingBlockchainTransactionsRepoImpl,
-    TransactionsRepoImpl, UsersRepoImpl,
+    StrangeBlockchainTransactionsRepoImpl, TransactionsRepoImpl, UsersRepoImpl,
 };
 use services::{
     AccountsServiceImpl, AuthServiceImpl, ExchangeServiceImpl, FeesServiceImpl, MetricsServiceImpl, TransactionsServiceImpl,
@@ -161,6 +161,8 @@ impl Service for ApiService {
                         Arc::new(config.clone()),
                         Arc::new(AccountsRepoImpl),
                         Arc::new(TransactionsRepoImpl::new(config.system.system_user_id)),
+                        Arc::new(PendingBlockchainTransactionsRepoImpl),
+                        Arc::new(StrangeBlockchainTransactionsRepoImpl),
                         db_executor.clone(),
                         blockchain_client.clone(),
                     ));

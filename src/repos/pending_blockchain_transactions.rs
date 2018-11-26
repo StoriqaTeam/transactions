@@ -1,4 +1,5 @@
 use diesel;
+use diesel::dsl::count;
 
 use super::error::*;
 use super::executor::with_tls_connection;
@@ -10,6 +11,7 @@ use schema::pending_blockchain_transactions::dsl::*;
 pub trait PendingBlockchainTransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewPendingBlockchainTransactionDB) -> RepoResult<PendingBlockchainTransactionDB>;
     fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<PendingBlockchainTransactionDB>>;
+    fn count(&self) -> RepoResult<u64>;
     fn delete(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<PendingBlockchainTransactionDB>>;
 }
 
@@ -17,6 +19,19 @@ pub trait PendingBlockchainTransactionsRepo: Send + Sync + 'static {
 pub struct PendingBlockchainTransactionsRepoImpl;
 
 impl PendingBlockchainTransactionsRepo for PendingBlockchainTransactionsRepoImpl {
+    fn count(&self) -> RepoResult<u64> {
+        with_tls_connection(|conn| {
+            pending_blockchain_transactions
+                .select(count(hash))
+                .first(conn)
+                .map(|x: i64| x as u64)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind)
+                })
+        })
+    }
+
     fn create(&self, payload: NewPendingBlockchainTransactionDB) -> RepoResult<PendingBlockchainTransactionDB> {
         with_tls_connection(|conn| {
             diesel::insert_into(pending_blockchain_transactions)

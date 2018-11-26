@@ -1,4 +1,5 @@
 use diesel;
+use diesel::dsl::count;
 
 use super::error::*;
 use super::executor::with_tls_connection;
@@ -9,6 +10,7 @@ use schema::strange_blockchain_transactions::dsl::*;
 
 pub trait StrangeBlockchainTransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewStrangeBlockchainTransactionDB) -> RepoResult<StrangeBlockchainTransactionDB>;
+    fn count(&self) -> RepoResult<u64>;
     fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<StrangeBlockchainTransactionDB>>;
 }
 
@@ -16,6 +18,19 @@ pub trait StrangeBlockchainTransactionsRepo: Send + Sync + 'static {
 pub struct StrangeBlockchainTransactionsRepoImpl;
 
 impl StrangeBlockchainTransactionsRepo for StrangeBlockchainTransactionsRepoImpl {
+    fn count(&self) -> RepoResult<u64> {
+        with_tls_connection(|conn| {
+            strange_blockchain_transactions
+                .select(count(hash))
+                .first(conn)
+                .map(|x: i64| x as u64)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind)
+                })
+        })
+    }
+
     fn create(&self, payload: NewStrangeBlockchainTransactionDB) -> RepoResult<StrangeBlockchainTransactionDB> {
         with_tls_connection(|conn| {
             diesel::insert_into(strange_blockchain_transactions)

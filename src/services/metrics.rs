@@ -5,7 +5,7 @@ use client::BlockchainClient;
 use config::Config;
 use models::*;
 use prelude::*;
-use repos::{AccountsRepo, DbExecutor, Isolation, TransactionsRepo};
+use repos::{AccountsRepo, DbExecutor, Isolation, PendingBlockchainTransactionsRepo, StrangeBlockchainTransactionsRepo, TransactionsRepo};
 
 use super::error::*;
 
@@ -20,6 +20,8 @@ pub struct MetricsServiceImpl<E: DbExecutor> {
     config: Arc<Config>,
     accounts_repo: Arc<AccountsRepo>,
     transactions_repo: Arc<TransactionsRepo>,
+    pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+    strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
     blockchain_client: Arc<BlockchainClient>,
     db_executor: E,
 }
@@ -29,6 +31,8 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
         config: Arc<Config>,
         accounts_repo: Arc<AccountsRepo>,
         transactions_repo: Arc<TransactionsRepo>,
+        pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+        strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
         db_executor: E,
         blockchain_client: Arc<BlockchainClient>,
     ) -> Self {
@@ -36,6 +40,8 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
             config,
             accounts_repo,
             transactions_repo,
+            pending_blockchain_transactions_repo,
+            strange_blockchain_transactions_repo,
             blockchain_client,
             db_executor,
         }
@@ -78,8 +84,19 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
     fn update_counts(&self, metrics: &mut Metrics) -> Result<(), Error> {
         let counts = self.accounts_repo.count_by_user().map_err(ectx!(try ErrorKind::Internal))?;
         let total = counts.iter().map(|(_, v)| v).sum();
+        let invalid_count = self
+            .strange_blockchain_transactions_repo
+            .count()
+            .map_err(ectx!(try ErrorKind::Internal))?;
+        let pending_count = self
+            .pending_blockchain_transactions_repo
+            .count()
+            .map_err(ectx!(try ErrorKind::Internal))?;
+
         metrics.accounts_count = counts;
         metrics.accounts_count_total = total;
+        metrics.invalid_blockchain_transactions_count = invalid_count;
+        metrics.pending_blockchain_transactions_count = pending_count;
         Ok(())
     }
 
