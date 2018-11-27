@@ -71,6 +71,7 @@ impl ConverterServiceImpl {
         };
         Ok(TransactionOut {
             id: tx.gid,
+            user_id: to_account.user_id,
             from,
             to,
             from_value: tx.value,
@@ -108,6 +109,7 @@ impl ConverterServiceImpl {
 
         Ok(TransactionOut {
             id: tx.gid,
+            user_id: to_account.user_id,
             from,
             to,
             from_value: tx.value,
@@ -150,6 +152,7 @@ impl ConverterServiceImpl {
         };
         Ok(TransactionOut {
             id: from_tx.gid,
+            user_id: to_account.user_id,
             from,
             to,
             from_value: from_tx.value,
@@ -241,6 +244,7 @@ impl ConverterServiceImpl {
         let blockchain_tx_ids: Vec<_> = withdrawal_txs.into_iter().flat_map(|tx| tx.blockchain_tx_id.into_iter()).collect();
         Ok(TransactionOut {
             id: withdrawal_tx.gid,
+            user_id: withdrawal_account.user_id,
             from,
             to,
             from_value: value,
@@ -273,6 +277,7 @@ impl ConverterServiceImpl {
         let withdrawal_tx_out = self.convert_external_transaction(withdrawal_txs)?;
         Ok(TransactionOut {
             id: currency_tx_out.id,
+            user_id: withdrawal_tx_out.user_id,
             from: currency_tx_out.from,
             to: withdrawal_tx_out.to,
             from_value: currency_tx_out.from_value,

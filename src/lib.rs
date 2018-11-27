@@ -110,6 +110,7 @@ pub fn start_server() {
     let accounts_repo = Arc::new(AccountsRepoImpl);
     let seen_hashes_repo = Arc::new(SeenHashesRepoImpl);
     let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoImpl);
+    let users_repo = Arc::new(UsersRepoImpl::new(config.system.system_user_id));
     let strange_blockchain_transactions_repo = Arc::new(StrangeBlockchainTransactionsRepoImpl);
     let pending_blockchain_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoImpl);
     let client = HttpClientImpl::new(&config_clone);
@@ -136,10 +137,17 @@ pub fn start_server() {
         rabbit_connection_pool.clone(),
         rabbit_thread_pool.clone(),
     ));
-    core.run(publisher.init())
-        .map_err(|e| {
-            log_error(&e);
-        }).unwrap();
+    core.run(
+        db_executor
+            .execute(move || -> Result<Vec<UserId>, ReposError> { users_repo.get_all().map(|u| u.into_iter().map(|u| u.id).collect()) })
+            .map_err(|e| {
+                log_error(&e);
+            }).and_then(|users| {
+                publisher.init(users).map_err(|e| {
+                    log_error(&e);
+                })
+            }),
+    ).unwrap();
     let fetcher = BlockchainFetcher::new(
         Arc::new(config_clone.clone()),
         transactions_repo,
@@ -262,7 +270,7 @@ pub fn create_user(name: &str) {
     let config = get_config();
     let db_pool = create_db_pool(&config);
     let cpu_pool = CpuPool::new(1);
-    let users_repo = UsersRepoImpl;
+    let users_repo = UsersRepoImpl::new(config.system.system_user_id);
     let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
     let mut new_user: NewUser = Default::default();
     new_user.name = name.to_string();

@@ -1,16 +1,17 @@
 use std::io::Error as StdIoError;
 
-use super::error::*;
-use super::r2d2::RabbitConnectionManager;
-use super::r2d2::RabbitPool;
 use futures::future;
 use futures_cpupool::CpuPool;
 use lapin_futures::channel::{Channel, ExchangeDeclareOptions, QueueDeclareOptions};
-use models::*;
-use prelude::*;
 use r2d2::PooledConnection;
 use serde_json;
 use tokio::net::tcp::TcpStream;
+
+use super::error::*;
+use super::r2d2::RabbitConnectionManager;
+use super::r2d2::RabbitPool;
+use models::*;
+use prelude::*;
 
 pub trait TransactionPublisher: Send + Sync + 'static {
     fn publish(&self, tx: TransactionOut) -> Box<Future<Item = (), Error = Error> + Send>;
@@ -27,9 +28,9 @@ impl TransactionPublisherImpl {
         Self { rabbit_pool, thread_pool }
     }
 
-    pub fn init(&self) -> impl Future<Item = (), Error = Error> {
+    pub fn init(&self, users: Vec<UserId>) -> impl Future<Item = (), Error = Error> {
         let self_clone = self.clone();
-        self.get_channel().and_then(move |channel| self_clone.declare(&channel))
+        self.get_channel().and_then(move |channel| self_clone.declare(&channel, users))
     }
 
     fn get_channel(&self) -> impl Future<Item = PooledConnection<RabbitConnectionManager>, Error = Error> {
@@ -45,35 +46,37 @@ impl TransactionPublisherImpl {
             .into_future()
     }
 
-    fn declare(&self, channel: &Channel<TcpStream>) -> impl Future<Item = (), Error = Error> {
-        let f1: Box<Future<Item = (), Error = StdIoError>> = Box::new(channel.exchange_declare(
-            "transactions",
-            "direct",
-            ExchangeDeclareOptions {
-                durable: true,
-                ..Default::default()
-            },
-            Default::default(),
-        ));
-        let f2: Box<Future<Item = (), Error = StdIoError>> = Box::new(
-            channel
-                .queue_declare(
-                    "transactions",
-                    QueueDeclareOptions {
-                        durable: true,
-                        ..Default::default()
-                    },
-                    Default::default(),
-                ).map(|_| ()),
-        );
-        let f3: Box<Future<Item = (), Error = StdIoError>> = Box::new(channel.queue_bind(
-            "transactions",
-            "transactions",
-            "transactions",
-            Default::default(),
-            Default::default(),
-        ));
-        future::join_all(vec![f1, f2, f3])
+    fn declare(&self, channel: &Channel<TcpStream>, users: Vec<UserId>) -> impl Future<Item = (), Error = Error> {
+        let mut f = vec![];
+        for user in users {
+            let queue_name = format!("transactions_{}", user);
+            let f1: Box<Future<Item = (), Error = StdIoError>> = Box::new(channel.exchange_declare(
+                &queue_name,
+                "direct",
+                ExchangeDeclareOptions {
+                    durable: true,
+                    ..Default::default()
+                },
+                Default::default(),
+            ));
+            f.push(f1);
+            let f2: Box<Future<Item = (), Error = StdIoError>> = Box::new(
+                channel
+                    .queue_declare(
+                        &queue_name,
+                        QueueDeclareOptions {
+                            durable: true,
+                            ..Default::default()
+                        },
+                        Default::default(),
+                    ).map(|_| ()),
+            );
+            f.push(f2);
+            let f3: Box<Future<Item = (), Error = StdIoError>> =
+                Box::new(channel.queue_bind(&queue_name, "transactions", &queue_name, Default::default(), Default::default()));
+            f.push(f3);
+        }
+        future::join_all(f)
             .map(|_| ())
             .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
     }
@@ -84,10 +87,11 @@ impl TransactionPublisher for TransactionPublisherImpl {
         Box::new(
             self.get_channel()
                 .and_then(move |channel| {
+                    let routing_key = format!("transactions_{}", tx.user_id);
                     let payload = serde_json::to_string(&tx).unwrap().into_bytes();
                     channel
                         .clone()
-                        .basic_publish("transactions", "transactions", payload, Default::default(), Default::default())
+                        .basic_publish("transactions", &routing_key, payload, Default::default(), Default::default())
                         .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                 }).map(|_| ()),
         )
