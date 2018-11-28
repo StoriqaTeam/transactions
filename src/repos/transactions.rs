@@ -528,7 +528,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 .map(|acc| {
                     let balance = remaining_accounts.get(&acc.id).cloned().unwrap_or_default();
                     (acc, balance)
-                }).collect();
+                }).filter(|(acc, _)| currency_ != Currency::Stq || acc.erc20_approved)
+                .collect();
 
             // calculating accounts to take
             let mut r = vec![];
