@@ -8,7 +8,7 @@ use config::Config;
 use models::*;
 use prelude::*;
 use repos::{
-    AccountsRepo, BlockchainTransactionsRepo, DbExecutor, PendingBlockchainTransactionsRepo, SeenHashesRepo,
+    AccountsRepo, BlockchainTransactionsRepo, DbExecutor, KeyValuesRepo, PendingBlockchainTransactionsRepo, SeenHashesRepo,
     StrangeBlockchainTransactionsRepo, TransactionsRepo,
 };
 use serde_json;
@@ -30,6 +30,7 @@ pub struct BlockchainFetcher<E: DbExecutor> {
     blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
     strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
     pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+    key_values_repo: Arc<KeyValuesRepo>,
     system_service: Arc<SystemService>,
     blockchain_client: Arc<BlockchainClient>,
     keys_client: Arc<KeysClient>,
@@ -45,6 +46,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
         strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
         pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+        key_values_repo: Arc<KeyValuesRepo>,
         blockchain_client: Arc<BlockchainClient>,
         keys_client: Arc<KeysClient>,
         db_executor: E,
@@ -58,6 +60,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             blockchain_transactions_repo,
             strange_blockchain_transactions_repo,
             pending_blockchain_transactions_repo,
+            key_values_repo,
             system_service,
             blockchain_client,
             keys_client,
@@ -361,9 +364,30 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let eth_fees_cr_account = self.system_service.get_system_fees_account(Currency::Eth)?;
         let eth_fees_dr_account = self.system_service.get_system_fees_account_dr(Currency::Eth)?;
 
-        let eth_fees_account_nonce = core
-            .run(self.blockchain_client.get_ethereum_nonce(eth_fees_dr_account.address.clone()))
-            .map_err(ectx!(try ErrorKind::Internal => account.clone()))?;
+        let tx_initiator = eth_fees_dr_account.address.clone();
+
+        let maybe_db_nonce = self
+            .key_values_repo
+            .get_nonce(tx_initiator.clone())
+            .map_err(ectx!(try ErrorKind::Internal))?;
+
+        let tx_initiator_ = tx_initiator.clone();
+        let ethereum_nonce = core.run(
+            self.blockchain_client
+                .get_ethereum_nonce(tx_initiator.clone())
+                .map_err(ectx!(try convert => tx_initiator_)),
+        )?;
+
+        let eth_fees_account_nonce = match (maybe_db_nonce, ethereum_nonce) {
+            (None, ethereum_nonce) => ethereum_nonce,
+            // if for some reason we missed blockchain nonce
+            (Some(db_nonce), ethereum_nonce) => db_nonce.max(ethereum_nonce),
+        };
+
+        let _ = self
+            .key_values_repo
+            .set_nonce(tx_initiator.clone(), eth_fees_account_nonce + 1)
+            .map_err(ectx!(try ErrorKind::Internal))?;
 
         let id = TransactionId::generate();
         let next_id = id.next();
