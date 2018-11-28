@@ -145,9 +145,8 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         } else {
             let mut errors = ValidationErrors::new();
             let mut error = ValidationError::new("not_enough_balance");
-            error.add_param("message".into(), &"account balance is not enough".to_string());
-            error.add_param("details".into(), &"no details".to_string());
-            errors.add("account", error);
+            error.message = Some("account balance is not enough".into());
+            errors.add("value", error);
             Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::InvalidInput(serde_json::to_string(&errors).unwrap_or_default()) => tx))
         }
     }
@@ -226,9 +225,8 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             if balance < *value {
                 let mut errors = ValidationErrors::new();
                 let mut error = ValidationError::new("not_enough_balance");
-                error.add_param("message".into(), &"account balance is not enough".to_string());
-                error.add_param("details".into(), &"no details".to_string());
-                errors.add("account", error);
+                error.message = Some("account balance is not enough".into());
+                errors.add("value", error);
                 return Err(
                     ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::InvalidInput(serde_json::to_string(&errors).unwrap_or_default()) => balance, value),
                 );

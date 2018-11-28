@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use chrono::Duration;
 use serde_json;
-use validator::Validate;
+use validator::{Validate, ValidationError, ValidationErrors};
 
 use super::super::error::*;
 use config::Config;
@@ -82,7 +82,14 @@ impl ClassifierService for ClassifierServiceImpl {
             Currency::Stq => self.stq_wei_limit,
         };
         if spending > limit {
-            return Err(ectx!(err ErrorContext::LimitExceeded, ErrorKind::MalformedInput));
+            let mut errors = ValidationErrors::new();
+            let mut error = ValidationError::new("exceeded_daily_limit");
+            error.message = Some("daily limit for the account exceeded".into());
+            error.add_param("limit".into(), &limit.to_super_unit(from_account.currency).to_string());
+            errors.add("value", error);
+            return Err(
+                ectx!(err ErrorContext::LimitExceeded, ErrorKind::InvalidInput(serde_json::to_string(&errors).unwrap_or_default()) => spending, limit),
+            );
         }
         match input.to_type {
             RecepientType::Account => {
