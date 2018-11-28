@@ -163,6 +163,7 @@ impl TransactionsRepo for TransactionsRepoMock {
             kind: TransactionKind::Internal,
             group_kind: TransactionGroupKind::Internal,
             related_tx: None,
+            ..Default::default()
         };
         data.push(res.clone());
         Ok(res)

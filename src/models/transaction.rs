@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 
 use diesel::sql_types::Numeric;
 use diesel::sql_types::Uuid as SqlUuid;
+use serde_json::Value;
 use validator::Validate;
 
 use models::*;
@@ -23,6 +24,7 @@ pub struct Transaction {
     pub kind: TransactionKind,
     pub group_kind: TransactionGroupKind,
     pub related_tx: Option<TransactionId>,
+    pub meta: Value,
 }
 
 #[derive(Debug, Queryable, Clone, QueryableByName)]
@@ -51,6 +53,7 @@ impl Default for Transaction {
             kind: TransactionKind::Internal,
             group_kind: TransactionGroupKind::Internal,
             related_tx: None,
+            meta: json!({}),
         }
     }
 }

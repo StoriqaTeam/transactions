@@ -92,6 +92,7 @@ table! {
         kind -> Varchar,
         group_kind -> Varchar,
         related_tx -> Nullable<Uuid>,
+        meta -> Jsonb,
     }
 }
 
