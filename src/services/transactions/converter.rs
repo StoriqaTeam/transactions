@@ -122,6 +122,43 @@ impl ConverterServiceImpl {
         })
     }
 
+    // 6) Internal:
+    //   Always 1 tx with status Done
+    fn convert_reversal_transaction(&self, transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
+        if transactions.len() != 1 {
+            return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
+        }
+        let tx = transactions[0].clone();
+        if tx.kind != TransactionKind::Reversal {
+            return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
+        }
+        let from_account = self.accounts_repo.get(tx.dr_account_id)?.unwrap();
+        let to_account = self.accounts_repo.get(tx.cr_account_id)?.unwrap();
+        let from = vec![TransactionAddressInfo {
+            account_id: Some(from_account.id),
+            blockchain_address: from_account.address,
+        }];
+        let to = TransactionAddressInfo {
+            account_id: Some(to_account.id),
+            blockchain_address: to_account.address,
+        };
+
+        Ok(TransactionOut {
+            id: tx.gid,
+            from,
+            to,
+            from_value: tx.value,
+            from_currency: tx.currency,
+            to_value: tx.value,
+            to_currency: tx.currency,
+            fee: Amount::new(0),
+            status: tx.status,
+            blockchain_tx_ids: tx.blockchain_tx_id.iter().cloned().collect(),
+            created_at: tx.created_at,
+            updated_at: tx.updated_at,
+        })
+    }
+
     // 4) InternalMulti:
     //   two txs: MultiFrom - Done, MultiTo - Done
     fn convert_internal_multi_transaction(&self, transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
@@ -309,6 +346,8 @@ impl ConverterService for ConverterServiceImpl {
     //   b) MultiFrom - Done, MultiTo - Done, Withdrawal - Done, Fee - Done, BlockchainFee - Done
 
     // 6) Approval - we don't serve this as TransactionOut since it's internal to our system
+    // 7) Reversal
+    //   Always 1 tx with status Done
 
     // Input txs should be with len() > 0 and have the same `gid`- this guarantees exactly one TransactionOut
     fn convert_transaction(&self, transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
@@ -325,7 +364,10 @@ impl ConverterService for ConverterServiceImpl {
             TransactionGroupKind::InternalMulti => self.convert_internal_multi_transaction(transactions),
             TransactionGroupKind::Withdrawal => self.convert_external_transaction(transactions),
             TransactionGroupKind::WithdrawalMulti => self.convert_external_multi_transaction(transactions),
-            _ => return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions)),
+            TransactionGroupKind::Reversal => self.convert_reversal_transaction(transactions),
+            TransactionGroupKind::Approval => {
+                return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))
+            }
         }
         // // internal + withdrawal tx
         // if transactions.len() == 1 {
