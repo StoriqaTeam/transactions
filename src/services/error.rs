@@ -28,8 +28,6 @@ pub enum ErrorKind {
     Internal,
     #[fail(display = "service error - not found")]
     NotFound,
-    #[fail(display = "service error - balance failure")]
-    Balance,
 }
 
 #[allow(dead_code)]

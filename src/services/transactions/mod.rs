@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use futures::future;
 use futures::prelude::*;
+use validator::{ValidationError, ValidationErrors};
 
 use self::blockchain::{BlockchainService, BlockchainServiceImpl, FeeEstimate};
 use self::classifier::{ClassifierService, ClassifierServiceImpl, TransactionType};
@@ -142,7 +143,12 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         if balance >= tx.value {
             self.transactions_repo.create(tx.clone()).map_err(ectx!(convert => tx.clone()))
         } else {
-            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => tx))
+            let mut errors = ValidationErrors::new();
+            let mut error = ValidationError::new("not_enough_balance");
+            error.add_param("message".into(), &"account balance is not enough".to_string());
+            error.add_param("details".into(), &"no details".to_string());
+            errors.add("account", error);
+            Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::InvalidInput(serde_json::to_string(&errors).unwrap_or_default()) => tx))
         }
     }
 
@@ -218,7 +224,14 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 .get_account_balance(acc_id, AccountKind::Dr)
                 .map_err(ectx!(try convert => acc_id))?;
             if balance < *value {
-                return Err(ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::Balance => balance, value));
+                let mut errors = ValidationErrors::new();
+                let mut error = ValidationError::new("not_enough_balance");
+                error.add_param("message".into(), &"account balance is not enough".to_string());
+                error.add_param("details".into(), &"no details".to_string());
+                errors.add("account", error);
+                return Err(
+                    ectx!(err ErrorContext::NotEnoughFunds, ErrorKind::InvalidInput(serde_json::to_string(&errors).unwrap_or_default()) => balance, value),
+                );
             }
             total_value = total_value
                 .checked_add(*value)
