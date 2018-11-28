@@ -64,4 +64,3 @@ btc_transaction_size = 280
 eth_gas_limit = 21000
 stq_gas_limit = 60000
 fee_upside = 2
-

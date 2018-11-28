@@ -46,9 +46,10 @@ const GWEI_DECIMALS: u128 = 1_000_000_000u128;
 impl EthFeeResponse {
     pub fn to_fees(self, gas_limit: i32) -> Vec<Fee> {
         let mut result = vec![];
-        let one_dimension = (self.fastest - self.safe_low) / 10f64;
+        let lowest = self.standard;
+        let one_dimension = (self.fastest - lowest) / 10f64;
         for i in 0..10 {
-            let fee = self.safe_low + (i as f64) * one_dimension;
+            let fee = lowest + (i as f64) * one_dimension;
             let value = Amount::new(((fee * (gas_limit as f64)) as u128) * GWEI_DECIMALS);
             let estimated_time = 280 - i * 30;
             let r = Fee { value, estimated_time };
