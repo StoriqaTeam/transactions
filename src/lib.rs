@@ -74,8 +74,8 @@ use self::models::*;
 use self::prelude::*;
 use self::repos::{
     AccountsRepo, AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError,
-    ErrorKind as ReposErrorKind, PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl, StrangeBlockchainTransactionsRepoImpl,
-    TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
+    ErrorKind as ReposErrorKind, KeyValuesRepoImpl, PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl,
+    StrangeBlockchainTransactionsRepoImpl, TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
 };
 use client::{BlockchainClientImpl, KeysClient, KeysClientImpl};
 use config::{Config, System};
@@ -116,6 +116,7 @@ pub fn start_server() {
         let client = HttpClientImpl::new(&config_clone);
         let blockchain_client = Arc::new(BlockchainClientImpl::new(&config_clone, client.clone()));
         let keys_client = Arc::new(KeysClientImpl::new(&config_clone, client.clone()));
+        let keys_values_repo = Arc::new(KeyValuesRepoImpl);
         let fetcher = BlockchainFetcher::new(
             Arc::new(config_clone.clone()),
             transactions_repo,
@@ -124,6 +125,7 @@ pub fn start_server() {
             blockchain_transactions_repo,
             strange_blockchain_transactions_repo,
             pending_blockchain_transactions_repo,
+            keys_values_repo,
             blockchain_client,
             keys_client,
             db_executor,
