@@ -86,6 +86,7 @@ impl ClassifierService for ClassifierServiceImpl {
             let mut error = ValidationError::new("exceeded_daily_limit");
             error.message = Some("daily limit for the account exceeded".into());
             error.add_param("limit".into(), &limit.to_super_unit(from_account.currency).to_string());
+            error.add_param("currency".into(), &from_account.currency.to_string().to_uppercase());
             errors.add("value", error);
             return Err(
                 ectx!(err ErrorContext::LimitExceeded, ErrorKind::InvalidInput(serde_json::to_string(&errors).unwrap_or_default()) => spending, limit),
