@@ -32,7 +32,7 @@ impl SeenHashesRepo for SeenHashesRepoImpl {
         with_tls_connection(|conn| {
             diesel::insert_into(seen_hashes)
                 .values(payload.clone())
-                .on_conflict(hash)
+                .on_conflict((hash, currency))
                 .do_nothing()
                 .get_result::<SeenHashes>(conn)
                 .map_err(move |e| {
