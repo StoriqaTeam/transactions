@@ -134,7 +134,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                         // if let Some(cr_account) = self.accounts_repo.get_by_address(from, Currency::Stq, AccountKind::Cr)? {
                         //     self.accounts_repo.update(cr_account.id, changeset)?;
                         // }
-                        self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
+                        self.blockchain_transactions_repo.upsert(blockchain_tx.clone().into())?;
                         self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
                         self.seen_hashes_repo.create(NewSeenHashes {
                             hash: blockchain_tx.hash.clone(),
@@ -251,7 +251,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 related_tx: None,
             };
             self.transactions_repo.create(new_tx)?;
-            self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
+            self.blockchain_transactions_repo.upsert(blockchain_tx.clone().into())?;
             // approve account if balance has passed threshold
             if (to_dr_account.currency == Currency::Stq) && !to_dr_account.erc20_approved {
                 let balance = self

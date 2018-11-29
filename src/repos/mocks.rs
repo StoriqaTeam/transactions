@@ -385,6 +385,25 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoMock {
         data.push(res.clone());
         Ok(res)
     }
+
+    fn upsert(&self, payload: NewBlockchainTransactionDB) -> RepoResult<BlockchainTransactionDB> {
+        let mut data = self.data.lock().unwrap();
+        let res = BlockchainTransactionDB {
+            hash: payload.hash,
+            from_: payload.from_,
+            to_: payload.to_,
+            currency: payload.currency,
+            fee: payload.fee,
+            block_number: payload.block_number,
+            confirmations: payload.confirmations,
+            created_at: ::chrono::Utc::now().naive_utc(),
+            updated_at: ::chrono::Utc::now().naive_utc(),
+            erc20_operation_kind: None,
+        };
+        data.push(res.clone());
+        Ok(res)
+    }
+
     fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<BlockchainTransactionDB>> {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.hash == hash_).nth(0).cloned())

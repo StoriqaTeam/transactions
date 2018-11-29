@@ -1,6 +1,6 @@
 [package]
 name = "transactions"
-version = "0.2.2"
+version = "0.2.9"
 authors = ["Alexey Karasev <karasev.alexey@gmail.com>"]
 
 [lib]
