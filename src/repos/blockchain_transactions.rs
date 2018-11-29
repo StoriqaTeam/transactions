@@ -33,7 +33,9 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoImpl {
             diesel::insert_into(blockchain_transactions)
                 .values(payload.clone())
                 .on_conflict(hash)
-                .do_nothing()
+                .do_update()
+                // this will guarantee that tx is returned, unlike do_nothing case
+                .set(hash.eq(payload.hash.clone()))
                 .get_result::<BlockchainTransactionDB>(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);

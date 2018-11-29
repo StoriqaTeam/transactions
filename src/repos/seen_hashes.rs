@@ -33,7 +33,9 @@ impl SeenHashesRepo for SeenHashesRepoImpl {
             diesel::insert_into(seen_hashes)
                 .values(payload.clone())
                 .on_conflict((hash, currency))
-                .do_nothing()
+                .do_update()
+                // this will guarantee that tx is returned, unlike do_nothing case
+                .set(hash.eq(payload.hash.clone()))
                 .get_result::<SeenHashes>(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
