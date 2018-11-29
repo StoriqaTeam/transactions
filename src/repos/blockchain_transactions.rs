@@ -32,7 +32,7 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoImpl {
         with_tls_connection(|conn| {
             diesel::insert_into(blockchain_transactions)
                 .values(payload.clone())
-                .on_conflict(hash)
+                .on_conflict((hash, currency))
                 .do_nothing()
                 .get_result::<BlockchainTransactionDB>(conn)
                 .map_err(move |e| {

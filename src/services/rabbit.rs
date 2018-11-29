@@ -180,7 +180,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                     .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => blockchain_tx, fees_currency))?,
             };
             let fees_account_cr = self.system_service.get_system_fees_account(fees_currency)?;
-            self.blockchain_transactions_repo.upsert(blockchain_tx.clone().into())?;
+            self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
             self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
             self.transactions_repo
                 .update_status(blockchain_tx.hash.clone(), TransactionStatus::Done)?;
@@ -251,7 +251,6 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 related_tx: None,
             };
             self.transactions_repo.create(new_tx)?;
-            // upsert, because we can have 2 relevant address per one tx
             self.blockchain_transactions_repo.upsert(blockchain_tx.clone().into())?;
             // approve account if balance has passed threshold
             if (to_dr_account.currency == Currency::Stq) && !to_dr_account.erc20_approved {
@@ -267,7 +266,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 }
             }
 
-            self.seen_hashes_repo.upsert(NewSeenHashes {
+            self.seen_hashes_repo.create(NewSeenHashes {
                 hash: blockchain_tx.hash.clone(),
                 block_number: blockchain_tx.block_number as i64,
                 currency: blockchain_tx.currency,
