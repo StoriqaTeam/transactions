@@ -8,7 +8,7 @@ use config::Config;
 use models::*;
 use prelude::*;
 use repos::{
-    AccountsRepo, BlockchainTransactionsRepo, DbExecutor, KeyValuesRepo, PendingBlockchainTransactionsRepo, SeenHashesRepo,
+    AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, KeyValuesRepo, PendingBlockchainTransactionsRepo, SeenHashesRepo,
     StrangeBlockchainTransactionsRepo, TransactionsRepo,
 };
 use serde_json;
@@ -96,9 +96,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
     pub fn handle_message(&self, data: Vec<u8>) -> impl Future<Item = (), Error = Error> + Send {
         let db_executor = self.db_executor.clone();
         let self_clone = self.clone();
-        parse_transaction(data)
-            .into_future()
-            .and_then(move |tx| db_executor.execute_transaction(move || self_clone.handle_transaction(&tx)))
+        parse_transaction(data).into_future().and_then(move |tx| {
+            db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || self_clone.handle_transaction(&tx))
+        })
     }
 
     fn handle_transaction(&self, blockchain_tx: &BlockchainTransaction) -> Result<(), Error> {
@@ -225,6 +225,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             return Ok(());
         }
 
+        let mut idx = 0;
         for to_dr_account in matched_dr_accounts {
             let to_entry = blockchain_tx
                 .to
@@ -253,6 +254,13 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             self.transactions_repo.create(new_tx)?;
             // upsert, because we can have 2 relevant address per one tx
             self.blockchain_transactions_repo.upsert(blockchain_tx.clone().into())?;
+            if idx == 0 {
+                self.seen_hashes_repo.create(NewSeenHashes {
+                    hash: blockchain_tx.hash.clone(),
+                    block_number: blockchain_tx.block_number as i64,
+                    currency: blockchain_tx.currency,
+                })?;
+            };
             // approve account if balance has passed threshold
             if (to_dr_account.currency == Currency::Stq) && !to_dr_account.erc20_approved {
                 let balance = self
@@ -266,12 +274,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                     });
                 }
             }
-
-            self.seen_hashes_repo.upsert(NewSeenHashes {
-                hash: blockchain_tx.hash.clone(),
-                block_number: blockchain_tx.block_number as i64,
-                currency: blockchain_tx.currency,
-            })?;
+            idx += 1;
         }
         Ok(())
     }
