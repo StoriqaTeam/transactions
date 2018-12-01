@@ -134,7 +134,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                         // if let Some(cr_account) = self.accounts_repo.get_by_address(from, Currency::Stq, AccountKind::Cr)? {
                         //     self.accounts_repo.update(cr_account.id, changeset)?;
                         // }
-                        self.blockchain_transactions_repo.upsert(blockchain_tx.clone().into())?;
+                        self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
                         self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
                         self.seen_hashes_repo.create(NewSeenHashes {
                             hash: blockchain_tx.hash.clone(),
@@ -180,7 +180,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                     .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => blockchain_tx, fees_currency))?,
             };
             let fees_account_cr = self.system_service.get_system_fees_account(fees_currency)?;
-            self.blockchain_transactions_repo.upsert(blockchain_tx.clone().into())?;
+            self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
             self.pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
             self.transactions_repo
                 .update_status(blockchain_tx.hash.clone(), TransactionStatus::Done)?;
@@ -252,9 +252,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 related_tx: None,
             };
             self.transactions_repo.create(new_tx)?;
-            // upsert, because we can have 2 relevant address per one tx
-            self.blockchain_transactions_repo.upsert(blockchain_tx.clone().into())?;
+            // don't need to create these more than one time, or conflict will be o/w
             if idx == 0 {
+                self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
                 self.seen_hashes_repo.create(NewSeenHashes {
                     hash: blockchain_tx.hash.clone(),
                     block_number: blockchain_tx.block_number as i64,
