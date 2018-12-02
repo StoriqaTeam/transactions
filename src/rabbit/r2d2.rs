@@ -23,7 +23,9 @@ use super::error::*;
 use config::Config;
 use utils::{format_error, log_error};
 
-const CONSUMER_PREFETCH_COUNT: u16 = 1000;
+// large limits may force RabbitMQ to close connection
+// (in case of socket buffer overflow)
+const CONSUMER_PREFETCH_COUNT: u16 = 10;
 const CHANNEL_IS_NOT_CONNECTED_MESSAGE: &'static str = "Channel is not connected";
 pub type RabbitPool = Pool<RabbitConnectionManager>;
 
