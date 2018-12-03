@@ -440,6 +440,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
         user_id_: UserId,
         total_fee: Amount,
     ) -> RepoResult<Vec<AccountWithBalance>> {
+        let system_user_id = self.system_user_id;
         with_tls_connection(|conn| {
             let total_fee = match currency_ {
                 // we can drain stq account to 0,
@@ -458,9 +459,10 @@ impl TransactionsRepo for TransactionsRepoImpl {
             // get all dr accounts
             let dr_sum_accounts: Vec<TransactionSum> =
                 sql_query(
-                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE currency = $1 AND user_id = $2 GROUP BY dr_account_id")
+                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE currency = $1 AND (user_id = $2 OR user_id = $3) GROUP BY dr_account_id")
                     .bind::<VarChar, _>(currency_)
                     .bind::<SqlUuid, _>(user_id_)
+                    .bind::<SqlUuid, _>(system_user_id)
                     .get_results(conn)
                     .map_err(move |e| {
                         let error_kind = ErrorKind::from(&e);
@@ -473,9 +475,10 @@ impl TransactionsRepo for TransactionsRepoImpl {
 
             // get all cr accounts
             let cr_sum_accounts: Vec<TransactionSum> = sql_query(
-                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 AND user_id = $2 GROUP BY cr_account_id")
+                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 AND (user_id = $2 OR user_id = $3) GROUP BY cr_account_id")
                 .bind::<VarChar, _>(currency_)
                 .bind::<SqlUuid, _>(user_id_)
+                .bind::<SqlUuid, _>(system_user_id)
                 .get_results(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
