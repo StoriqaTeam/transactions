@@ -533,7 +533,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
 
             // calculating accounts to take
             let mut r = vec![];
-            for (acc, balance) in res_accounts {
+            for (acc, balance) in res_accounts.clone() {
                 // Note - it may seem counter intuitive that we subtract total_fee from each account
                 // rather than from only one. But in reality you will incur the fee on each blockchain
                 // transaction.
@@ -554,7 +554,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
             if value_ == Amount::new(0) {
                 Ok(r)
             } else {
-                Err(ectx!(err ErrorContext::InsufficientWithdrawalFunds, ErrorKind::Internal))
+                Err(ectx!(err ErrorContext::InsufficientWithdrawalFunds, ErrorKind::Internal => res_accounts, value_))
             }
         })
     }
