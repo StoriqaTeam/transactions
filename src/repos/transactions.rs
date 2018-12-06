@@ -38,13 +38,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn list_groups_for_user_skip_approval(&self, user_id: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn get_system_balances(&self) -> RepoResult<HashMap<AccountId, (Amount, Amount)>>;
     fn get_blockchain_balances(&self) -> RepoResult<HashMap<(BlockchainAddress, Currency), (Amount, Amount)>>;
-    fn get_accounts_for_withdrawal(
-        &self,
-        value: Amount,
-        currency: Currency,
-        user_id: UserId,
-        total_fee: Amount,
-    ) -> RepoResult<Vec<AccountWithBalance>>;
+    fn get_accounts_for_withdrawal(&self, value: Amount, currency: Currency, total_fee: Amount) -> RepoResult<Vec<AccountWithBalance>>;
 }
 
 #[derive(Debug, Clone, Queryable, QueryableByName)]
@@ -437,10 +431,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
         &self,
         mut value_: Amount,
         currency_: Currency,
-        user_id_: UserId,
         total_fee: Amount,
     ) -> RepoResult<Vec<AccountWithBalance>> {
-        let system_user_id = self.system_user_id;
         with_tls_connection(|conn| {
             let total_fee = match currency_ {
                 // we can drain stq account to 0,
@@ -457,17 +449,14 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 Currency::Stq => MIN_SIGNIFICANT_STQ,
             };
             // get all dr accounts
-            let dr_sum_accounts: Vec<TransactionSum> =
-                sql_query(
-                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE currency = $1 AND (user_id = $2 OR user_id = $3) GROUP BY dr_account_id")
-                    .bind::<VarChar, _>(currency_)
-                    .bind::<SqlUuid, _>(user_id_)
-                    .bind::<SqlUuid, _>(system_user_id)
-                    .get_results(conn)
-                    .map_err(move |e| {
-                        let error_kind = ErrorKind::from(&e);
-                        ectx!(try err e, error_kind)
-                    })?;
+            let dr_sum_accounts: Vec<TransactionSum> = sql_query(
+                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE currency = $1 GROUP BY dr_account_id",
+            ).bind::<VarChar, _>(currency_)
+            .get_results(conn)
+            .map_err(move |e| {
+                let error_kind = ErrorKind::from(&e);
+                ectx!(try err e, error_kind)
+            })?;
             let mut dr_sum_accounts = dr_sum_accounts
                 .into_iter()
                 .map(|r: TransactionSum| (r.account_id, r.sum))
@@ -475,15 +464,13 @@ impl TransactionsRepo for TransactionsRepoImpl {
 
             // get all cr accounts
             let cr_sum_accounts: Vec<TransactionSum> = sql_query(
-                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 AND (user_id = $2 OR user_id = $3) GROUP BY cr_account_id")
-                .bind::<VarChar, _>(currency_)
-                .bind::<SqlUuid, _>(user_id_)
-                .bind::<SqlUuid, _>(system_user_id)
-                .get_results(conn)
-                .map_err(move |e| {
-                    let error_kind = ErrorKind::from(&e);
-                    ectx!(try err e, error_kind)
-                })?;
+                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 GROUP BY cr_account_id",
+            ).bind::<VarChar, _>(currency_)
+            .get_results(conn)
+            .map_err(move |e| {
+                let error_kind = ErrorKind::from(&e);
+                ectx!(try err e, error_kind)
+            })?;
 
             // get accounts balance
             for tr in cr_sum_accounts {
@@ -498,13 +485,12 @@ impl TransactionsRepo for TransactionsRepoImpl {
 
             // filtering accounts with pending transactions
             let pending_transactions: Vec<Transaction> = transactions
-                .filter(user_id.eq(&user_id_))
                 .filter(currency.eq(currency_))
                 .filter(status.eq(TransactionStatus::Pending))
                 .get_results(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
-                    ectx!(try err e, error_kind => value_, currency_, user_id_)
+                    ectx!(try err e, error_kind => value_, currency_)
                 })?;
 
             for tx in pending_transactions {

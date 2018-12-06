@@ -204,11 +204,10 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         } = self
             .blockchain_service
             .estimate_withdrawal_fee(input.fee, fee_currency, to_currency)?;
-        let user_id = input.user_id;
         let withdrawal_accs_with_balance = self
             .transactions_repo
-            .get_accounts_for_withdrawal(value, to_currency, input.user_id, total_fee_est)
-            .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, to_currency, user_id))?;
+            .get_accounts_for_withdrawal(value, to_currency, total_fee_est)
+            .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, to_currency))?;
 
         let mut total_value = Amount::new(0);
         //double check
