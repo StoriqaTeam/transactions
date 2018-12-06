@@ -303,18 +303,12 @@ impl TransactionsRepo for TransactionsRepoMock {
         Ok(u.unwrap())
     }
 
-    fn get_accounts_for_withdrawal(
-        &self,
-        value_: Amount,
-        currency_: Currency,
-        user_id_: UserId,
-        _fee_per_tx: Amount,
-    ) -> RepoResult<Vec<AccountWithBalance>> {
+    fn get_accounts_for_withdrawal(&self, value_: Amount, currency_: Currency, _fee_per_tx: Amount) -> RepoResult<Vec<AccountWithBalance>> {
         let data = self.data.lock().unwrap();
         Ok(data
             .clone()
             .into_iter()
-            .filter(|x| x.currency == currency_ && x.value > value_ && user_id_ == x.user_id)
+            .filter(|x| x.currency == currency_ && x.value > value_)
             .map(|t| {
                 let mut acc = Account::default();
                 acc.id = t.cr_account_id;
