@@ -95,14 +95,14 @@ impl<E: DbExecutor> FeesService for FeesServiceImpl<E> {
                     } else {
                         Either::B(
                             match currency {
-                                Currency::Btc => Box::new(fees_client.bitcoin_fees().map_err(ectx!(convert => currency)))
+                                Currency::Btc => Box::new(fees_client.bitcoin_fees().map_err(ectx!(ErrorKind::Internal => currency)))
                                     as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
-                                Currency::Eth => Box::new(fees_client.eth_fees().map_err(ectx!(convert => currency)))
+                                Currency::Eth => Box::new(fees_client.eth_fees().map_err(ectx!(ErrorKind::Internal => currency)))
                                     as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
                                 Currency::Stq => Box::new(
                                     fees_client
                                         .stq_fees()
-                                        .map_err(ectx!(convert => currency))
+                                        .map_err(ectx!(ErrorKind::Internal => currency))
                                         .and_then(move |fees| service.convert_fees(fees, Currency::Stq, Currency::Eth)),
                                 ) as Box<Future<Item = Vec<Fee>, Error = Error> + Send>,
                             }.map(move |mut fees| {

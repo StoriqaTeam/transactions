@@ -203,11 +203,15 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             ..
         } = self
             .blockchain_service
-            .estimate_withdrawal_fee(input.fee, fee_currency, to_currency)?;
+            .estimate_withdrawal_fee(input.fee, fee_currency, to_currency)
+            .map_err({
+                let fee = input.fee.clone();
+                ectx!(try ErrorKind::Internal => fee, fee_currency, to_currency)
+            })?;
         let withdrawal_accs_with_balance = self
             .transactions_repo
             .get_accounts_for_withdrawal(value, to_currency, total_fee_est)
-            .map_err(ectx!(try convert ErrorContext::NotEnoughFunds => value, to_currency))?;
+            .map_err(ectx!(try convert => value, to_currency, total_fee_est))?;
 
         let mut total_value = Amount::new(0);
         //double check
@@ -220,7 +224,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             let balance = self
                 .transactions_repo
                 .get_account_balance(acc_id, AccountKind::Dr)
-                .map_err(ectx!(try convert => acc_id))?;
+                .map_err(ectx!(try convert => acc_id, AccountKind::Dr))?;
             if balance < *value {
                 let mut errors = ValidationErrors::new();
                 let mut error = ValidationError::new("not_enough_balance");
@@ -232,7 +236,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             }
             total_value = total_value
                 .checked_add(*value)
-                .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+                .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => total_value, *value))?;
         }
 
         if total_value != input.value {
@@ -241,7 +245,8 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         let mut res: Vec<Transaction> = Vec::new();
         let mut current_tx_id = input.id;
-        let fees_account = self.system_service.get_system_fees_account(to_currency)?;
+        let fees_account = self.system_service.get_system_fees_account(to_currency)
+            .map_err(ectx!(try ErrorKind::Internal => to_currency))?;
 
         let fee_tx = NewTransaction {
             id: current_tx_id,
@@ -284,13 +289,16 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             let blockchain_tx_id_res = match to_currency {
                 Currency::Eth => self
                     .blockchain_service
-                    .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Eth),
+                    .create_ethereum_tx(acc.address.clone(), to.clone(), *value, fee_price_est, Currency::Eth)
+                    .map_err(ectx!(try ErrorKind::Internal => acc.address, to, *value, fee_price_est, Currency::Eth)),
                 Currency::Stq => self
                     .blockchain_service
-                    .create_ethereum_tx(acc.address.clone(), to, *value, fee_price_est, Currency::Stq),
+                    .create_ethereum_tx(acc.address.clone(), to.clone(), *value, fee_price_est, Currency::Stq)
+                    .map_err(ectx!(try ErrorKind::Internal => acc.address, to, *value, fee_price_est, Currency::Stq)),
                 Currency::Btc => self
                     .blockchain_service
-                    .create_bitcoin_tx(acc.address.clone(), to, *value, fee_price_est),
+                    .create_bitcoin_tx(acc.address.clone(), to.clone(), *value, fee_price_est)
+                    .map_err(ectx!(try ErrorKind::Internal => acc.address, to, *value, fee_price_est)),
             };
 
             match blockchain_tx_id_res {
@@ -347,7 +355,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         let current_tx_id = input.id;
 
         // Moving money from `from` account to system liquidity account
-        let from_counterpart_acc = self.system_service.get_system_liquidity_account(from_account.currency)?;
+        let from_acct_currency = from_account.currency.clone();
+        let from_counterpart_acc = self.system_service.get_system_liquidity_account(from_acct_currency.clone())
+            .map_err(ectx!(try ErrorKind::Internal => from_acct_currency))?;
         let from_tx = NewTransaction {
             id: current_tx_id,
             gid: input.id,
@@ -366,7 +376,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         // Moving money from system liquidity account to `to` account
         let current_tx_id = current_tx_id.next();
-        let to_counterpart_acc = self.system_service.get_system_liquidity_account(to_account.currency)?;
+        let to_acct_currency = to_account.currency.clone();
+        let to_counterpart_acc = self.system_service.get_system_liquidity_account(to_acct_currency.clone())
+            .map_err(ectx!(try ErrorKind::Internal => to_acct_currency))?;
         let to_tx = NewTransaction {
             id: current_tx_id,
             gid: input.id,
@@ -525,14 +537,14 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
             db_executor.execute(move || {
                 let transaction = transactions_repo
                     .get(transaction_id)
-                    .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
+                    .map_err(ectx!(try convert => transaction_id))?;
                 if let Some(ref transaction) = transaction {
                     if transaction.user_id != user.id {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                     }
                     let tx_group = transactions_repo
                         .get_by_gid(transaction.gid)
-                        .map_err(ectx!(try ErrorKind::Internal => transaction_id))?;
+                        .map_err(ectx!(try convert => transaction_id))?;
                     let tx_out = self_clone.converter_service.convert_transaction(tx_group)?;
                     return Ok(Some(tx_out));
                 }
@@ -609,7 +621,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
             db_executor.execute(move || {
                 let account = accounts_repo
                     .get(account_id)
-                    .map_err(ectx!(try ErrorKind::Internal => account_id))?;
+                    .map_err(ectx!(try convert => account_id))?;
                 if let Some(ref account) = account {
                     if account.user_id != user.id {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));

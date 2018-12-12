@@ -97,7 +97,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
             db_executor.execute(move || {
                 let account = accounts_repo
                     .get(account_id)
-                    .map_err(ectx!(try ErrorKind::Internal => account_id))?;
+                    .map_err(ectx!(try convert => account_id))?;
                 if let Some(ref account) = account {
                     if account.user_id != user.id {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
@@ -126,7 +126,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
                         db_executor.execute_transaction(move || {
                             let account = accounts_repo
                                 .update(account_id, payload.clone())
-                                .map_err(ectx!(try ErrorKind::Internal => account_id, payload))?;
+                                .map_err(ectx!(try convert => account_id, payload))?;
                             if account.user_id != user.id {
                                 return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                             }
@@ -143,7 +143,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
             db_executor.execute_transaction(move || {
                 let account = accounts_repo
                     .delete(account_id)
-                    .map_err(ectx!(try ErrorKind::Internal => account_id))?;
+                    .map_err(ectx!(try convert => account_id))?;
                 if account.user_id != user.id {
                     return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                 }
@@ -167,7 +167,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
                 }
                 accounts_repo
                     .list_for_user(user_id, offset, limit)
-                    .map_err(ectx!(ErrorKind::Internal => user_id, offset, limit))
+                    .map_err(ectx!(convert => user_id, offset, limit))
             })
         }))
     }

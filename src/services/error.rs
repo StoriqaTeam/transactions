@@ -78,6 +78,8 @@ pub enum ErrorContext {
     Timer,
     #[fail(display = "service error context - operations limit exceeded")]
     LimitExceeded,
+    #[fail(display = "service error context - missing address in transaction")]
+    MissingAddressInTx,
 }
 
 derive_error_impls!();
@@ -105,8 +107,8 @@ impl From<KeysClientErrorKind> for ErrorKind {
     fn from(err: KeysClientErrorKind) -> Self {
         match err {
             KeysClientErrorKind::Internal => ErrorKind::Internal,
-            KeysClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
-            KeysClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
+            KeysClientErrorKind::Unauthorized => ErrorKind::Internal,
+            KeysClientErrorKind::MalformedInput => ErrorKind::Internal,
         }
     }
 }
@@ -115,8 +117,8 @@ impl From<FeesClientErrorKind> for ErrorKind {
     fn from(err: FeesClientErrorKind) -> Self {
         match err {
             FeesClientErrorKind::Internal => ErrorKind::Internal,
-            FeesClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
-            FeesClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
+            FeesClientErrorKind::Unauthorized => ErrorKind::Internal,
+            FeesClientErrorKind::MalformedInput => ErrorKind::Internal,
         }
     }
 }
@@ -125,8 +127,8 @@ impl From<BlockchainClientErrorKind> for ErrorKind {
     fn from(err: BlockchainClientErrorKind) -> Self {
         match err {
             BlockchainClientErrorKind::Internal => ErrorKind::Internal,
-            BlockchainClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
-            BlockchainClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
+            BlockchainClientErrorKind::Unauthorized => ErrorKind::Internal,
+            BlockchainClientErrorKind::MalformedInput => ErrorKind::Internal,
         }
     }
 }
@@ -135,8 +137,8 @@ impl From<ExchangeClientErrorKind> for ErrorKind {
     fn from(err: ExchangeClientErrorKind) -> Self {
         match err {
             ExchangeClientErrorKind::Internal => ErrorKind::Internal,
-            ExchangeClientErrorKind::Unauthorized => ErrorKind::Unauthorized,
-            ExchangeClientErrorKind::MalformedInput => ErrorKind::MalformedInput,
+            ExchangeClientErrorKind::Unauthorized => ErrorKind::Internal,
+            ExchangeClientErrorKind::MalformedInput => ErrorKind::Internal,
             ExchangeClientErrorKind::Validation(s) => ErrorKind::InvalidInput(s),
         }
     }

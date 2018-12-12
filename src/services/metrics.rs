@@ -57,7 +57,8 @@ impl<E: DbExecutor> MetricsService for MetricsServiceImpl<E> {
                 .execute_transaction_with_isolation(Isolation::RepeatableRead, move || {
                     let mut metrics: Metrics = Default::default();
                     self_clone.update_counts(&mut metrics)?;
-                    let balances = self_clone.transactions_repo.get_blockchain_balances()?;
+                    let balances = self_clone.transactions_repo.get_blockchain_balances()
+                        .map_err(ectx!(try ErrorKind::Internal))?;
                     let reduced_balances = self_clone.update_negative_balances_and_reduce(&mut metrics, balances)?;
                     let _ = self_clone.update_fees_and_liquidity_balances(&mut metrics)?;
                     self_clone.update_limits(&mut metrics);
@@ -188,7 +189,8 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
     }
 
     fn update_fees_and_liquidity_balances(&self, metrics: &mut Metrics) -> Result<(), Error> {
-        let balances = self.transactions_repo.get_system_balances()?;
+        let balances = self.transactions_repo.get_system_balances()
+            .map_err(ectx!(try ErrorKind::Internal))?;
         let mut liquidity_balances: HashMap<Currency, f64> = HashMap::new();
         let mut fees_balances: HashMap<Currency, f64> = HashMap::new();
         for currency in [Currency::Btc, Currency::Stq, Currency::Eth].into_iter() {
@@ -227,7 +229,8 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
             None => {
                 let account = self
                     .accounts_repo
-                    .get(account_id)?
+                    .get(account_id)
+                    .map_err(ectx!(try ErrorKind::Internal))?
                     .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
                 if metrics
                     .negative_balances

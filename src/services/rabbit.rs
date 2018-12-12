@@ -104,7 +104,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
     fn handle_transaction(&self, blockchain_tx: &BlockchainTransaction) -> Result<(), Error> {
         let normalized_tx = blockchain_tx
             .normalized()
-            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => blockchain_tx))?;
         // already processed this transaction - skipping
         if let Some(_) = self.seen_hashes_repo.get(normalized_tx.hash.clone(), normalized_tx.currency)? {
             return Ok(());
@@ -227,15 +227,16 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
 
         let mut idx = 0;
         for to_dr_account in matched_dr_accounts {
+            let Account { address: to_dr_address, currency: to_dr_currency, .. } = to_dr_account.clone();
             let to_entry = blockchain_tx
                 .to
                 .iter()
-                .find(|entry| entry.address == to_dr_account.address)
-                .unwrap();
+                .find(|entry| entry.address == to_dr_address.clone())
+                .ok_or(ectx!(try err ErrorContext::MissingAddressInTx, ErrorKind::Internal => to_dr_address.clone()))?;
             let to_cr_account = self
                 .accounts_repo
-                .get_by_address(to_dr_account.address.clone(), to_dr_account.currency, AccountKind::Cr)?
-                .unwrap();
+                .get_by_address(to_dr_address.clone(), to_dr_currency.clone(), AccountKind::Cr)?
+                .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => to_dr_address, to_dr_currency, AccountKind::Cr))?;
             let tx_id = TransactionId::generate();
             let new_tx = NewTransaction {
                 id: tx_id,
