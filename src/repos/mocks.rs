@@ -196,8 +196,13 @@ impl TransactionsRepo for TransactionsRepoMock {
         unimplemented!()
     }
 
-    fn get_account_spending(&self, _account_id: AccountId, _kind_: AccountKind, _period: Duration) -> RepoResult<Amount> {
-        unimplemented!()
+    fn get_account_spending(&self, account_id: AccountId, _kind: AccountKind, period: Duration) -> RepoResult<Amount> {
+        let data = self.data.lock().unwrap();
+        let amount = data
+            .iter()
+            .filter(|x| account_id == x.dr_account_id && x.created_at < (chrono::Utc::now().naive_utc() - period))
+            .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|a| a.checked_add(elem.value)));
+        Ok(amount.unwrap())
     }
 
     fn list_groups_for_account_skip_approval(&self, _account_id: AccountId, _offset: i64, _limit: i64) -> RepoResult<Vec<Transaction>> {

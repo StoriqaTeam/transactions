@@ -10,7 +10,7 @@ use models::*;
 use prelude::*;
 use repos::{AccountsRepo, TransactionsRepo};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TransactionType {
     Internal(Account, Account),
     Withdrawal(Account, BlockchainAddress, Currency),
@@ -132,7 +132,7 @@ impl ClassifierService for ClassifierServiceImpl {
                 {
                     None => {
                         // check that we don't own any other accounts with this address
-                        // eg a user accidentally put ehter address to recieve stq tokens
+                        // eg a user accidentially put ether address to receive stq tokens
                         let accounts = self.accounts_repo.filter_by_address(to_address.clone())?;
                         if accounts.len() != 0 {
                             return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input.clone()));
@@ -173,5 +173,351 @@ impl ClassifierService for ClassifierServiceImpl {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use config::Config;
+    use repos::*;
+
+    fn create_classifier_service(accounts_repo: Arc<dyn AccountsRepo>) -> ClassifierServiceImpl {
+        let config = Config::new().unwrap();
+        let transactions_repo = Arc::new(TransactionsRepoMock::default());
+        ClassifierServiceImpl::new(&config, accounts_repo, transactions_repo)
+    }
+
+    fn create_internal_transaction_input(
+        user_id: UserId,
+        from: AccountId,
+        from_currency: Currency,
+        to: Recepient,
+        to_type: RecepientType,
+        to_currency: Currency,
+        value: Amount,
+    ) -> CreateTransactionInput {
+        CreateTransactionInput {
+            id: TransactionId::generate(),
+            user_id,
+            from,
+            to,
+            to_type,
+            to_currency,
+            value,
+            value_currency: from_currency,
+            fee: Amount::default(),
+            exchange_id: None,
+            exchange_rate: None,
+        }
+    }
+
+    fn create_internal_exchange_transaction_input(
+        user_id: UserId,
+        from: AccountId,
+        from_currency: Currency,
+        to: Recepient,
+        to_type: RecepientType,
+        to_currency: Currency,
+        value: Amount,
+        exchange_id: Option<ExchangeId>,
+        exchange_rate: Option<f64>,
+    ) -> CreateTransactionInput {
+        CreateTransactionInput {
+            id: TransactionId::generate(),
+            user_id,
+            from,
+            to,
+            to_type,
+            to_currency,
+            value,
+            value_currency: from_currency,
+            fee: Amount::default(),
+            exchange_id,
+            exchange_rate,
+        }
+    }
+
+    #[test]
+    fn test_classify_internal_happy() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        let acc2 = accounts_repo.create(new_account).unwrap();
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(acc2.id.to_string()),
+            RecepientType::Account,
+            acc2.currency,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input).unwrap();
+        assert_eq!(res, TransactionType::Internal(acc1.clone(), acc2.clone()));
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(acc2.address.to_string()),
+            RecepientType::Address,
+            acc2.currency,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input).unwrap();
+        assert_eq!(res, TransactionType::Internal(acc1, acc2));
+    }
+
+    #[test]
+    fn test_classify_internal_one_account() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(acc1.id.to_string()),
+            RecepientType::Account,
+            acc1.currency,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input).unwrap();
+        assert_eq!(res, TransactionType::Internal(acc1.clone(), acc1.clone()));
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(acc1.address.to_string()),
+            RecepientType::Address,
+            acc1.currency,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input).unwrap();
+        assert_eq!(res, TransactionType::Internal(acc1.clone(), acc1));
+    }
+
+    #[test]
+    fn test_classify_internal_exceed_limit() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(acc1.id.to_string()),
+            RecepientType::Account,
+            acc1.currency,
+            Amount::new(9999999999999999999999999),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(acc1.address.to_string()),
+            RecepientType::Address,
+            acc1.currency,
+            Amount::new(99999999999999999999999999),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_classify_internal_wrong_currencies() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        new_account.currency = Currency::Stq;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        new_account.currency = Currency::Stq;
+        let acc2 = accounts_repo.create(new_account).unwrap();
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            Currency::Eth,
+            Recepient::new(acc2.id.to_string()),
+            RecepientType::Account,
+            acc2.currency,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            Currency::Eth,
+            Recepient::new(acc2.address.to_string()),
+            RecepientType::Address,
+            acc2.currency,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(acc2.id.to_string()),
+            RecepientType::Account,
+            Currency::Eth,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(acc2.address.to_string()),
+            RecepientType::Address,
+            Currency::Eth,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_classify_internal_wrong_account_ids() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        let acc2 = accounts_repo.create(new_account).unwrap();
+
+        let input = create_internal_transaction_input(
+            user_id,
+            AccountId::generate(),
+            acc1.currency,
+            Recepient::new(acc2.id.to_string()),
+            RecepientType::Account,
+            acc2.currency,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+
+        let input = create_internal_transaction_input(
+            user_id,
+            AccountId::generate(),
+            acc1.currency,
+            Recepient::new(acc2.address.to_string()),
+            RecepientType::Address,
+            acc2.currency,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+
+        let input = create_internal_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(AccountId::generate().to_string()),
+            RecepientType::Account,
+            acc2.currency,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_classify_internal_exchange_happy() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        new_account.currency = Currency::Btc;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        new_account.currency = Currency::Stq;
+        let acc2 = accounts_repo.create(new_account).unwrap();
+
+        let exchange_id = Some(ExchangeId::generate());
+
+        let input = create_internal_exchange_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(acc2.id.to_string()),
+            RecepientType::Account,
+            acc2.currency,
+            Amount::new(0),
+            exchange_id,
+            Some(1f64),
+        );
+
+        let res = service.validate_and_classify_transaction(&input).unwrap();
+        assert_eq!(
+            res,
+            TransactionType::InternalExchange(acc1.clone(), acc2.clone(), exchange_id.unwrap(), 1f64)
+        );
+
+        let input = create_internal_exchange_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            Recepient::new(acc2.address.to_string()),
+            RecepientType::Address,
+            acc2.currency,
+            Amount::new(0),
+            exchange_id,
+            Some(1f64),
+        );
+
+        let res = service.validate_and_classify_transaction(&input).unwrap();
+        assert_eq!(
+            res,
+            TransactionType::InternalExchange(acc1.clone(), acc2.clone(), exchange_id.unwrap(), 1f64)
+        );
     }
 }

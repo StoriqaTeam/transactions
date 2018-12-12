@@ -679,14 +679,14 @@ mod tests {
         )
     }
 
-    #[test]
-    fn test_transaction_create() {
-        let mut core = Core::new().unwrap();
-        let token = AuthenticationToken::default();
-        let user_id = UserId::generate();
-        let service = create_transaction_service(token.clone(), user_id);
+    // #[test]
+    // fn test_transaction_create() {
+    //     let mut core = Core::new().unwrap();
+    //     let token = AuthenticationToken::default();
+    //     let user_id = UserId::generate();
+    //     let service = create_transaction_service(token.clone(), user_id);
 
-        assert!(true);
-    }
+    //     assert!(true);
+    // }
 
 }
