@@ -644,6 +644,7 @@ fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
 }
 
 #[cfg(test)]
+#[allow(unused)]
 mod tests {
     use super::*;
     use client::*;
@@ -678,15 +679,4 @@ mod tests {
             exchange_client,
         )
     }
-
-    // #[test]
-    // fn test_transaction_create() {
-    //     let mut core = Core::new().unwrap();
-    //     let token = AuthenticationToken::default();
-    //     let user_id = UserId::generate();
-    //     let service = create_transaction_service(token.clone(), user_id);
-
-    //     assert!(true);
-    // }
-
 }

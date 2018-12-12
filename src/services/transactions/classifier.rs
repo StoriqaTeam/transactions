@@ -93,7 +93,8 @@ impl ClassifierServiceImpl {
 
     fn get_from_account(&self, input: &CreateTransactionInput) -> Result<Account, Error> {
         self.accounts_repo
-            .get(input.from)?
+            .get(input.from)
+            .map_err(ectx!(try convert => input.from))?
             .ok_or(ectx!(err ErrorContext::NoAccount, ErrorKind::NotFound => input))
     }
 
@@ -107,7 +108,8 @@ impl ClassifierServiceImpl {
                     .map_err(|_| ectx!(try err ErrorContext::InvalidUuid, ErrorKind::MalformedInput => input.clone()))?;
                 let to_account = self
                     .accounts_repo
-                    .get(to_account_id)?
+                    .get(to_account_id)
+                    .map_err(ectx!(try convert => to_account_id))?
                     .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => input))?;
                 if to_account.currency != input.to_currency {
                     return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input));
@@ -118,7 +120,7 @@ impl ClassifierServiceImpl {
                 let to_address = input.to.clone().to_account_address();
                 self.accounts_repo
                     .get_by_address(to_address.clone(), input.to_currency, AccountKind::Cr)
-                    .map_err(From::from)
+                    .map_err(ectx!(convert => to_address, input.to_currency ))
             }
         }
     }

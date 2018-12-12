@@ -13,6 +13,7 @@ pub enum RecepientType {
 pub struct Recepient(String);
 
 impl Recepient {
+    #[cfg(test)]
     pub fn new(rec: String) -> Self {
         Recepient(rec)
     }

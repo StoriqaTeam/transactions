@@ -196,12 +196,12 @@ impl TransactionsRepo for TransactionsRepoMock {
         unimplemented!()
     }
 
-    fn get_account_spending(&self, account_id: AccountId, _kind: AccountKind, period: Duration) -> RepoResult<Amount> {
+    fn get_account_spending(&self, account_id: AccountId, _kind: AccountKind, _period: Duration) -> RepoResult<Amount> {
         let data = self.data.lock().unwrap();
         let amount = data
             .iter()
-            .filter(|x| account_id == x.dr_account_id && x.created_at < (chrono::Utc::now().naive_utc() - period))
-            .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|a| a.checked_add(elem.value)));
+            .filter(|x| account_id == x.dr_account_id)
+            .try_fold(Amount::new(0), |acc, elem| acc.checked_add(elem.value));
         Ok(amount.unwrap())
     }
 
@@ -414,7 +414,7 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoMock {
 
     fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<BlockchainTransactionDB>> {
         let data = self.data.lock().unwrap();
-        Ok(data.iter().filter(|x| x.hash == hash_).nth(0).cloned())
+        Ok(data.iter().filter(|x| x.hash == hash_).next().cloned())
     }
 }
 
