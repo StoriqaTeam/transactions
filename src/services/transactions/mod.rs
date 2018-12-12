@@ -502,7 +502,8 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         });
                         core.run(f)
                     })
-                }).and_then(|tx_group| {
+                })
+                .and_then(|tx_group| {
                     // this point we already wrote transactions, incl to blockchain
                     // so if smth fails here, we need not corrupt our data
                     let db_executor = self_clone2.db_executor.clone();
@@ -640,4 +641,42 @@ fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
         res.entry(tx.gid).and_modify(|txs| txs.push(tx.clone())).or_insert(vec![tx.clone()]);
     }
     res.into_iter().map(|(_, txs)| txs).collect()
+}
+
+#[cfg(test)]
+#[allow(unused)]
+mod tests {
+    use super::*;
+    use client::*;
+    use config::Config;
+    use repos::*;
+    use services::*;
+    use tokio_core::reactor::Core;
+
+    fn create_transaction_service(token: AuthenticationToken, user_id: UserId) -> TransactionsServiceImpl<DbExecutorMock> {
+        let config = Config::new().unwrap();
+        let auth_service = Arc::new(AuthServiceMock::new(vec![(token, user_id)]));
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let transactions_repo = Arc::new(TransactionsRepoMock::default());
+        let pending_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoMock::default());
+        let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoMock::default());
+        let key_values_repo = Arc::new(KeyValuesRepoMock::default());
+        let keys_client = Arc::new(KeysClientMock::default());
+        let blockchain_client = Arc::new(BlockchainClientMock::default());
+        let exchange_client = Arc::new(ExchangeClientMock::default());
+        let db_executor = DbExecutorMock::default();
+        TransactionsServiceImpl::new(
+            config,
+            auth_service,
+            transactions_repo,
+            pending_transactions_repo,
+            blockchain_transactions_repo,
+            accounts_repo,
+            key_values_repo,
+            db_executor,
+            keys_client,
+            blockchain_client,
+            exchange_client,
+        )
+    }
 }

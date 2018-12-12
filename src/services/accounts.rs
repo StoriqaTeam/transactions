@@ -73,7 +73,8 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
                                     .create_account_address(input.clone().into(), Role::User)
                                     .map_err(ectx!(convert => input))
                             }
-                        }).and_then(move |address| {
+                        })
+                        .and_then(move |address| {
                             db_executor.execute_transaction(move || {
                                 let new_account_cr: NewAccount = (input, address).into();
                                 let new_account_dr = new_account_cr.create_debit();

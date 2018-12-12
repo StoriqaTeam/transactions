@@ -50,12 +50,14 @@ impl HttpClient for HttpClientImpl {
                         );
                         let req = Request::from_parts(parts, body.into());
                         cli.request(req).map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal))
-                    }).and_then(|resp| {
+                    })
+                    .and_then(|resp| {
                         let (parts, body) = resp.into_parts();
                         read_body(body)
                             .map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal))
                             .map(|body| (parts, body))
-                    }).map(|(parts, body)| {
+                    })
+                    .map(|(parts, body)| {
                         debug!(
                             "HttpClient, recieved response with status {} headers: {:#?} and body: {:?}",
                             parts.status.as_u16(),

@@ -402,7 +402,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
                         .filter(|tx| match account.kind {
                             AccountKind::Cr => tx.cr_account_id == account.id,
                             AccountKind::Dr => tx.dr_account_id == account.id,
-                        }).fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
+                        })
+                        .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
                         .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
                     let minus = txs_grouped
                         .get(&account.id)
@@ -411,7 +412,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
                         .filter(|tx| match account.kind {
                             AccountKind::Cr => tx.dr_account_id == account.id,
                             AccountKind::Dr => tx.cr_account_id == account.id,
-                        }).fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
+                        })
+                        .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
                         .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
                     let balance = plus
                         .checked_sub(minus)
@@ -420,7 +422,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
                         account: account.clone(),
                         balance,
                     })
-                }).collect()
+                })
+                .collect()
         })
     }
 
@@ -451,7 +454,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
             // get all dr accounts
             let dr_sum_accounts: Vec<TransactionSum> = sql_query(
                 "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE currency = $1 GROUP BY dr_account_id",
-            ).bind::<VarChar, _>(currency_)
+            )
+            .bind::<VarChar, _>(currency_)
             .get_results(conn)
             .map_err(move |e| {
                 let error_kind = ErrorKind::from(&e);
@@ -465,7 +469,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
             // get all cr accounts
             let cr_sum_accounts: Vec<TransactionSum> = sql_query(
                 "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 GROUP BY cr_account_id",
-            ).bind::<VarChar, _>(currency_)
+            )
+            .bind::<VarChar, _>(currency_)
             .get_results(conn)
             .map_err(move |e| {
                 let error_kind = ErrorKind::from(&e);
@@ -517,7 +522,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 .map(|acc| {
                     let balance = remaining_accounts.get(&acc.id).cloned().unwrap_or_default();
                     (acc, balance)
-                }).filter(|(acc, _)| currency_ != Currency::Stq || acc.erc20_approved)
+                })
+                .filter(|(acc, _)| currency_ != Currency::Stq || acc.erc20_approved)
                 .collect();
 
             // calculating accounts to take

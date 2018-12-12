@@ -59,7 +59,8 @@ impl ConverterServiceImpl {
             .map(|blockchain_address| TransactionAddressInfo {
                 account_id: None,
                 blockchain_address,
-            }).collect();
+            })
+            .collect();
         let to_account = self.accounts_repo.get(tx.cr_account_id)?;
         if to_account.is_none() {
             return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
@@ -230,11 +231,11 @@ impl ConverterServiceImpl {
             .blockchain_transactions_repo
             .get(blockchain_tx_hash.clone())?
             .map(Into::<BlockchainTransaction>::into)
-            .or(
-                self.pending_blockchain_transactions_repo
-                    .get(blockchain_tx_hash)?
-                    .map(Into::<BlockchainTransaction>::into)
-            ).ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
+            .or(self
+                .pending_blockchain_transactions_repo
+                .get(blockchain_tx_hash)?
+                .map(Into::<BlockchainTransaction>::into))
+            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
         let blockchain_tx = blockchain_tx.normalized().unwrap();
         let to_address = blockchain_tx
             .to

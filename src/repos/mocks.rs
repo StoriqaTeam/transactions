@@ -8,6 +8,7 @@ use super::accounts::*;
 use super::blockchain_transactions::*;
 use super::error::*;
 use super::executor::{DbExecutor, Isolation};
+use super::key_values::*;
 use super::pending_blockchain_transactions::*;
 use super::transactions::*;
 use super::types::RepoResult;
@@ -58,7 +59,8 @@ impl UsersRepo for UsersRepoMock {
                 } else {
                     None
                 }
-            }).nth(0)
+            })
+            .nth(0)
             .cloned();
         Ok(u.unwrap())
     }
@@ -100,7 +102,8 @@ impl AccountsRepo for AccountsRepoMock {
                 } else {
                     None
                 }
-            }).nth(0)
+            })
+            .nth(0)
             .cloned();
         Ok(u.unwrap())
     }
@@ -193,8 +196,13 @@ impl TransactionsRepo for TransactionsRepoMock {
         unimplemented!()
     }
 
-    fn get_account_spending(&self, _account_id: AccountId, _kind_: AccountKind, _period: Duration) -> RepoResult<Amount> {
-        unimplemented!()
+    fn get_account_spending(&self, account_id: AccountId, _kind: AccountKind, _period: Duration) -> RepoResult<Amount> {
+        let data = self.data.lock().unwrap();
+        let amount = data
+            .iter()
+            .filter(|x| account_id == x.dr_account_id)
+            .try_fold(Amount::new(0), |acc, elem| acc.checked_add(elem.value));
+        Ok(amount.unwrap())
     }
 
     fn list_groups_for_account_skip_approval(&self, _account_id: AccountId, _offset: i64, _limit: i64) -> RepoResult<Vec<Transaction>> {
@@ -220,7 +228,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                 } else {
                     None
                 }
-            }).nth(0)
+            })
+            .nth(0)
             .cloned();
         Ok(u.unwrap())
     }
@@ -237,7 +246,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                     account: account.clone(),
                     balance,
                 })
-            }).collect()
+            })
+            .collect()
     }
     fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount> {
         let data = self.data.lock().unwrap();
@@ -254,7 +264,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                 } else {
                     None
                 }
-            }).ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
+            })
+            .ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
 
         let dr_sum = data
             .clone()
@@ -269,7 +280,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                 } else {
                     None
                 }
-            }).ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
+            })
+            .ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
         match kind {
             AccountKind::Cr => cr_sum
                 .checked_sub(dr_sum)
@@ -298,7 +310,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                 } else {
                     None
                 }
-            }).nth(0)
+            })
+            .nth(0)
             .cloned();
         Ok(u.unwrap())
     }
@@ -316,7 +329,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                     account: acc,
                     balance: value_,
                 }
-            }).collect())
+            })
+            .collect())
     }
 }
 
@@ -400,7 +414,32 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoMock {
 
     fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<BlockchainTransactionDB>> {
         let data = self.data.lock().unwrap();
-        Ok(data.iter().filter(|x| x.hash == hash_).nth(0).cloned())
+        Ok(data.iter().filter(|x| x.hash == hash_).next().cloned())
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct KeyValuesRepoMock {
+    data: Arc<Mutex<Vec<KeyValue>>>,
+}
+
+impl KeyValuesRepo for KeyValuesRepoMock {
+    fn get_nonce(&self, address: BlockchainAddress) -> RepoResult<Option<u64>> {
+        let data = self.data.lock().unwrap();
+        let key = format!("nonce:{}", address);
+        Ok(data.iter().filter(|x| x.key == key).nth(0).map(|kv| kv.value.as_u64().unwrap()))
+    }
+    fn set_nonce(&self, address: BlockchainAddress, nonce: u64) -> RepoResult<u64> {
+        let mut data = self.data.lock().unwrap();
+        let key = format!("nonce:{}", address);
+        let res = KeyValue {
+            key,
+            value: json!(nonce),
+            created_at: ::chrono::Utc::now().naive_utc(),
+            updated_at: ::chrono::Utc::now().naive_utc(),
+        };
+        data.push(res.clone());
+        Ok(nonce)
     }
 }
 
