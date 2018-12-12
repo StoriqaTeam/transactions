@@ -641,3 +641,50 @@ fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
     }
     res.into_iter().map(|(_, txs)| txs).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use client::*;
+    use repos::*;
+    use services::*;
+    use config::Config;
+    use tokio_core::reactor::Core;
+
+    fn create_transaction_service(token: AuthenticationToken, user_id: UserId) -> TransactionsServiceImpl<DbExecutorMock> {
+        let config = Config::new().unwrap();
+        let auth_service = Arc::new(AuthServiceMock::new(vec![(token, user_id)]));
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let transactions_repo = Arc::new(TransactionsRepoMock::default());
+        let pending_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoMock::default());
+        let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoMock::default());
+        let key_values_repo = Arc::new(KeyValuesRepoMock::default());
+        let keys_client = Arc::new(KeysClientMock::default());
+        let blockchain_client = Arc::new(BlockchainClientMock::default());
+        let exchange_client = Arc::new(ExchangeClientMock::default());
+        let db_executor = DbExecutorMock::default();
+        TransactionsServiceImpl::new(
+            config,
+            auth_service,
+            transactions_repo,
+            pending_transactions_repo,
+            blockchain_transactions_repo,
+            accounts_repo,
+            key_values_repo,
+            db_executor,
+            keys_client,
+            blockchain_client,
+            exchange_client)
+    }
+
+    #[test]
+    fn test_transaction_create() {
+        let mut core = Core::new().unwrap();
+        let token = AuthenticationToken::default();
+        let user_id = UserId::generate();
+        let service = create_transaction_service(token.clone(), user_id);
+
+        assert!(true);
+    }
+
+}

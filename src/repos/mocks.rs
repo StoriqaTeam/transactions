@@ -10,6 +10,7 @@ use super::error::*;
 use super::executor::{DbExecutor, Isolation};
 use super::pending_blockchain_transactions::*;
 use super::transactions::*;
+use super::key_values::*;
 use super::types::RepoResult;
 use super::users::*;
 use models::*;
@@ -401,6 +402,31 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoMock {
     fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<BlockchainTransactionDB>> {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.hash == hash_).nth(0).cloned())
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct KeyValuesRepoMock {
+    data: Arc<Mutex<Vec<KeyValue>>>,
+}
+
+impl KeyValuesRepo for KeyValuesRepoMock {
+    fn get_nonce(&self, address: BlockchainAddress) -> RepoResult<Option<u64>> {
+        let data = self.data.lock().unwrap();
+        let key = format!("nonce:{}", address);
+        Ok(data.iter().filter(|x| x.key == key).nth(0).map(|kv| kv.value.as_u64().unwrap()))
+    }
+    fn set_nonce(&self, address: BlockchainAddress, nonce: u64) -> RepoResult<u64> {
+        let mut data = self.data.lock().unwrap();
+        let key = format!("nonce:{}", address);
+        let res = KeyValue {
+            key,
+            value: json!(nonce),
+            created_at: ::chrono::Utc::now().naive_utc(),
+            updated_at: ::chrono::Utc::now().naive_utc(),
+        };
+        data.push(res.clone());
+        Ok(nonce)
     }
 }
 
