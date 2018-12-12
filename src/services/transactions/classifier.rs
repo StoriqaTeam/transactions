@@ -249,6 +249,54 @@ mod tests {
         }
     }
 
+    fn create_withdraw_transaction_input(
+        user_id: UserId,
+        from: AccountId,
+        from_currency: Currency,
+        to: BlockchainAddress,
+        to_currency: Currency,
+        value: Amount,
+    ) -> CreateTransactionInput {
+        CreateTransactionInput {
+            id: TransactionId::generate(),
+            user_id,
+            from,
+            to: Recepient::new(to.to_string()),
+            to_type: RecepientType::Address,
+            to_currency,
+            value,
+            value_currency: from_currency,
+            fee: Amount::default(),
+            exchange_id: None,
+            exchange_rate: None,
+        }
+    }
+
+    fn create_withdraw_exchange_transaction_input(
+        user_id: UserId,
+        from: AccountId,
+        from_currency: Currency,
+        to: BlockchainAddress,
+        to_currency: Currency,
+        value: Amount,
+        exchange_id: Option<ExchangeId>,
+        exchange_rate: Option<f64>,
+    ) -> CreateTransactionInput {
+        CreateTransactionInput {
+            id: TransactionId::generate(),
+            user_id,
+            from,
+            to: Recepient::new(to.to_string()),
+            to_type: RecepientType::Address,
+            to_currency,
+            value,
+            value_currency: from_currency,
+            fee: Amount::default(),
+            exchange_id,
+            exchange_rate,
+        }
+    }
+
     #[test]
     fn test_classify_internal_happy() {
         let accounts_repo = Arc::new(AccountsRepoMock::default());
@@ -708,6 +756,169 @@ mod tests {
             Amount::new(0),
             exchange_id,
             Some(1f64),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_classify_withdraw_happy() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let address = BlockchainAddress::default();
+        let input = create_withdraw_transaction_input(user_id, acc1.id, acc1.currency, address.clone(), acc1.currency, Amount::new(0));
+
+        let res = service.validate_and_classify_transaction(&input).unwrap();
+        assert_eq!(res, TransactionType::Withdrawal(acc1.clone(), address, acc1.currency));
+    }
+
+    #[test]
+    fn test_classify_withdraw_exceed_limit() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let address = BlockchainAddress::default();
+        let input = create_withdraw_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            address,
+            acc1.currency,
+            Amount::new(9999999999999999999999999),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_classify_withdraw_wrong_currencies() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        new_account.currency = Currency::Stq;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let address = BlockchainAddress::default();
+        let input = create_withdraw_transaction_input(user_id, acc1.id, Currency::Btc, address.clone(), Currency::Btc, Amount::new(0));
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+
+        let input = create_withdraw_transaction_input(user_id, acc1.id, acc1.currency, address, Currency::Btc, Amount::new(0));
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_classify_withdraw_wrong_account_ids() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let address = BlockchainAddress::default();
+        let input = create_withdraw_transaction_input(
+            user_id,
+            AccountId::generate(),
+            acc1.currency,
+            address,
+            acc1.currency,
+            Amount::new(0),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_classify_withdraw_exchange_happy() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        new_account.currency = Currency::Btc;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let exchange_id = Some(ExchangeId::generate());
+        let address = BlockchainAddress::default();
+        let input = create_withdraw_exchange_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            address.clone(),
+            Currency::Stq,
+            Amount::new(0),
+            exchange_id,
+            Some(1f64),
+        );
+
+        let res = service.validate_and_classify_transaction(&input).unwrap();
+        assert_eq!(
+            res,
+            TransactionType::WithdrawalExchange(acc1.clone(), address, Currency::Stq, exchange_id.unwrap(), 1f64)
+        );
+    }
+
+    #[test]
+    fn test_classify_withdraw_exchange_wrong_exchange_data() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let user_id = UserId::generate();
+        let service = create_classifier_service(accounts_repo.clone());
+        let mut new_account = NewAccount::default();
+        new_account.user_id = user_id;
+        new_account.currency = Currency::Btc;
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let address = BlockchainAddress::default();
+        let exchange_id = Some(ExchangeId::generate());
+        let input = create_withdraw_exchange_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            address.clone(),
+            Currency::Stq,
+            Amount::new(0),
+            exchange_id,
+            Some(0f64),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+
+        let input = create_withdraw_exchange_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            address.clone(),
+            Currency::Stq,
+            Amount::new(0),
+            None,
+            Some(0f64),
+        );
+
+        let res = service.validate_and_classify_transaction(&input);
+        assert!(res.is_err());
+
+        let input = create_withdraw_exchange_transaction_input(
+            user_id,
+            acc1.id,
+            acc1.currency,
+            address,
+            Currency::Stq,
+            Amount::new(0),
+            exchange_id,
+            None,
         );
 
         let res = service.validate_and_classify_transaction(&input);
