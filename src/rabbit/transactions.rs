@@ -64,7 +64,8 @@ impl TransactionConsumerImpl {
                     ..Default::default()
                 },
                 Default::default(),
-            ).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
+            )
+            .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
             .and_then(move |queue| {
                 channel_clone
                     .basic_consume(&queue, "", BasicConsumeOptions::default(), FieldTable::new())

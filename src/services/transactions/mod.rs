@@ -502,7 +502,8 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         });
                         core.run(f)
                     })
-                }).and_then(|tx_group| {
+                })
+                .and_then(|tx_group| {
                     // this point we already wrote transactions, incl to blockchain
                     // so if smth fails here, we need not corrupt our data
                     let db_executor = self_clone2.db_executor.clone();
@@ -646,9 +647,9 @@ fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
 mod tests {
     use super::*;
     use client::*;
+    use config::Config;
     use repos::*;
     use services::*;
-    use config::Config;
     use tokio_core::reactor::Core;
 
     fn create_transaction_service(token: AuthenticationToken, user_id: UserId) -> TransactionsServiceImpl<DbExecutorMock> {
@@ -674,7 +675,8 @@ mod tests {
             db_executor,
             keys_client,
             blockchain_client,
-            exchange_client)
+            exchange_client,
+        )
     }
 
     #[test]

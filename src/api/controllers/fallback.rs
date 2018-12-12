@@ -10,6 +10,7 @@ pub fn not_found(ctx: &Context) -> ControllerFuture {
             .status(404)
             .header("Content-Type", "application/json")
             .body(Body::from(r#"{"description": "Not found"}"#))
-            .unwrap()).into_future(),
+            .unwrap())
+        .into_future(),
     )
 }

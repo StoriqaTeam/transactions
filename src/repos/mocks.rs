@@ -8,9 +8,9 @@ use super::accounts::*;
 use super::blockchain_transactions::*;
 use super::error::*;
 use super::executor::{DbExecutor, Isolation};
+use super::key_values::*;
 use super::pending_blockchain_transactions::*;
 use super::transactions::*;
-use super::key_values::*;
 use super::types::RepoResult;
 use super::users::*;
 use models::*;
@@ -59,7 +59,8 @@ impl UsersRepo for UsersRepoMock {
                 } else {
                     None
                 }
-            }).nth(0)
+            })
+            .nth(0)
             .cloned();
         Ok(u.unwrap())
     }
@@ -101,7 +102,8 @@ impl AccountsRepo for AccountsRepoMock {
                 } else {
                     None
                 }
-            }).nth(0)
+            })
+            .nth(0)
             .cloned();
         Ok(u.unwrap())
     }
@@ -221,7 +223,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                 } else {
                     None
                 }
-            }).nth(0)
+            })
+            .nth(0)
             .cloned();
         Ok(u.unwrap())
     }
@@ -238,7 +241,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                     account: account.clone(),
                     balance,
                 })
-            }).collect()
+            })
+            .collect()
     }
     fn get_account_balance(&self, account_id: AccountId, kind: AccountKind) -> RepoResult<Amount> {
         let data = self.data.lock().unwrap();
@@ -255,7 +259,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                 } else {
                     None
                 }
-            }).ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
+            })
+            .ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
 
         let dr_sum = data
             .clone()
@@ -270,7 +275,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                 } else {
                     None
                 }
-            }).ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
+            })
+            .ok_or_else(|| ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => account_id))?;
         match kind {
             AccountKind::Cr => cr_sum
                 .checked_sub(dr_sum)
@@ -299,7 +305,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                 } else {
                     None
                 }
-            }).nth(0)
+            })
+            .nth(0)
             .cloned();
         Ok(u.unwrap())
     }
@@ -317,7 +324,8 @@ impl TransactionsRepo for TransactionsRepoMock {
                     account: acc,
                     balance: value_,
                 }
-            }).collect())
+            })
+            .collect())
     }
 }
 
