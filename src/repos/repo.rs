@@ -115,5 +115,5 @@ pub mod test {
         + Update<Users::users, Users::id, UserId, User, UpdateUser>
         + Delete<Users::users, Users::id, UserId, User>
     {
-}
+    }
 }

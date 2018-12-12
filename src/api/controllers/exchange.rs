@@ -20,7 +20,8 @@ pub fn post_rate(ctx: &Context) -> ControllerFuture {
                     .and_then(move |input| {
                         let input_clone = input.clone();
                         exchange_service.rate(token, input).map_err(ectx!(convert => input_clone))
-                    }).and_then(|rate| response_with_model(&rate))
+                    })
+                    .and_then(|rate| response_with_model(&rate))
             }),
     )
 }

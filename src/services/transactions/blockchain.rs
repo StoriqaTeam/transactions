@@ -81,12 +81,6 @@ impl BlockchainService for BlockchainServiceImpl {
         input_fee_currency: Currency,
         withdrawal_currency: Currency,
     ) -> Result<FeeEstimate, Error> {
-        let base = match withdrawal_currency {
-            Currency::Btc => self.config.fees_options.btc_transaction_size,
-            Currency::Eth => self.config.fees_options.eth_gas_limit,
-            Currency::Stq => self.config.fees_options.stq_gas_limit,
-        };
-        let base = Amount::new(base as u128);
         let total_blockchain_fee_native_currency = input_gross_fee
             .checked_div(Amount::new(self.config.fees_options.fee_upside as u128))
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
@@ -113,6 +107,13 @@ impl BlockchainService for BlockchainServiceImpl {
                 .map_err(ectx!(try ErrorKind::Internal => input_rate))?;
             total_blockchain_fee_native_currency.convert(input_fee_currency, estimate_currency, rate)
         };
+
+        let base = match withdrawal_currency {
+            Currency::Btc => self.config.fees_options.btc_transaction_size,
+            Currency::Eth => self.config.fees_options.eth_gas_limit,
+            Currency::Stq => self.config.fees_options.stq_gas_limit,
+        };
+        let base = Amount::new(base as u128);
         let fee_price_int = total_blockchain_fee_esitmate_currency
             .checked_div(base)
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
@@ -183,9 +184,12 @@ impl BlockchainService for BlockchainServiceImpl {
             _ => return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::InvalidInput(currency.to_string()))),
         };
         let tx_initiator = match currency {
-            Currency::Stq => self.system_service.get_system_fees_account(Currency::Eth)
-                .map_err(ectx!(try ErrorKind::Internal => Currency::Eth))?
-                .address,
+            Currency::Stq => {
+                self.system_service
+                    .get_system_fees_account(Currency::Eth)
+                    .map_err(ectx!(try ErrorKind::Internal => Currency::Eth))?
+                    .address
+            }
             _ => from.clone(),
         };
 

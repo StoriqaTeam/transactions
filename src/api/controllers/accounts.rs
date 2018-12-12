@@ -25,7 +25,8 @@ pub fn post_accounts(ctx: &Context) -> ControllerFuture {
                         accounts_service
                             .create_account(token, input.into())
                             .map_err(ectx!(convert => input_clone))
-                    }).and_then(|account| response_with_model(&AccountsResponse::from(account)))
+                    })
+                    .and_then(|account| response_with_model(&AccountsResponse::from(account)))
             }),
     )
 }
@@ -44,7 +45,8 @@ pub fn get_users_accounts(ctx: &Context, user_id: UserId) -> ControllerFuture {
                     let e = format_err!("{}", e);
                     ectx!(err e, ErrorContext::RequestQueryParams, ErrorKind::BadRequest => path_and_query_clone)
                 })
-            }).into_future()
+            })
+            .into_future()
             .and_then(move |input| {
                 maybe_token
                     .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
@@ -55,7 +57,8 @@ pub fn get_users_accounts(ctx: &Context, user_id: UserId) -> ControllerFuture {
                             .get_accounts_for_user(token, user_id, input.offset, input.limit)
                             .map_err(ectx!(convert => input_clone))
                     })
-            }).and_then(|accounts| {
+            })
+            .and_then(|accounts| {
                 let accounts: Vec<AccountsResponse> = accounts.into_iter().map(From::from).collect();
                 response_with_model(&accounts)
             }),
@@ -93,7 +96,8 @@ pub fn put_accounts(ctx: &Context, account_id: AccountId) -> ControllerFuture {
                         accounts_service
                             .update_account(token, account_id, input.into())
                             .map_err(ectx!(convert => input_clone))
-                    }).and_then(|account| response_with_model(&AccountsResponse::from(account)))
+                    })
+                    .and_then(|account| response_with_model(&AccountsResponse::from(account)))
             }),
     )
 }

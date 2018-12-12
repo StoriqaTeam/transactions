@@ -73,7 +73,8 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
                                     .create_account_address(input.clone().into(), Role::User)
                                     .map_err(ectx!(convert => input))
                             }
-                        }).and_then(move |address| {
+                        })
+                        .and_then(move |address| {
                             db_executor.execute_transaction(move || {
                                 let new_account_cr: NewAccount = (input, address).into();
                                 let new_account_dr = new_account_cr.create_debit();
@@ -95,9 +96,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
         let db_executor = self.db_executor.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
             db_executor.execute(move || {
-                let account = accounts_repo
-                    .get(account_id)
-                    .map_err(ectx!(try convert => account_id))?;
+                let account = accounts_repo.get(account_id).map_err(ectx!(try convert => account_id))?;
                 if let Some(ref account) = account {
                     if account.user_id != user.id {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
@@ -141,9 +140,7 @@ impl<E: DbExecutor> AccountsService for AccountsServiceImpl<E> {
         let db_executor = self.db_executor.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
             db_executor.execute_transaction(move || {
-                let account = accounts_repo
-                    .delete(account_id)
-                    .map_err(ectx!(try convert => account_id))?;
+                let account = accounts_repo.delete(account_id).map_err(ectx!(try convert => account_id))?;
                 if account.user_id != user.id {
                     return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
                 }

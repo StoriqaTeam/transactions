@@ -57,14 +57,17 @@ impl<E: DbExecutor> MetricsService for MetricsServiceImpl<E> {
                 .execute_transaction_with_isolation(Isolation::RepeatableRead, move || {
                     let mut metrics: Metrics = Default::default();
                     self_clone.update_counts(&mut metrics)?;
-                    let balances = self_clone.transactions_repo.get_blockchain_balances()
+                    let balances = self_clone
+                        .transactions_repo
+                        .get_blockchain_balances()
                         .map_err(ectx!(try ErrorKind::Internal))?;
                     let reduced_balances = self_clone.update_negative_balances_and_reduce(&mut metrics, balances)?;
                     let _ = self_clone.update_fees_and_liquidity_balances(&mut metrics)?;
                     self_clone.update_limits(&mut metrics);
                     self_clone.update_total_payments_system_balances(&mut metrics, &reduced_balances);
                     Ok((metrics, reduced_balances))
-                }).and_then(move |(mut metrics, reduced_balances)| {
+                })
+                .and_then(move |(mut metrics, reduced_balances)| {
                     let self_3 = self_2.clone();
                     self_2.fetch_blockchain_balances(&reduced_balances).map(move |blockchain_balances| {
                         self_3.update_blockchain_balances(&mut metrics, &reduced_balances, &blockchain_balances);
@@ -116,7 +119,8 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
                 .entry(*currency)
                 .and_modify(|balance| {
                     *balance += value.to_super_unit(*currency);
-                }).or_insert(0.0);
+                })
+                .or_insert(0.0);
         }
         metrics.total_blockchain_balances = total_blockchain_balances;
 
@@ -161,7 +165,8 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
             res.entry(*currency)
                 .and_modify(|balance| {
                     *balance += value.to_super_unit(*currency);
-                }).or_insert(0.0);
+                })
+                .or_insert(0.0);
         }
         metrics.total_payments_system_balances = res;
     }
@@ -181,7 +186,8 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
                     .get_balance(address.clone(), currency)
                     .map(move |value| ((address_, currency), value))
                     .map_err(ectx!(ErrorKind::Internal => address_2))
-            }).buffered(BLOCKCHAIN_BALANCES_CONCURRENCY);
+            })
+            .buffered(BLOCKCHAIN_BALANCES_CONCURRENCY);
         stream.collect().map(|vec| {
             let res: HashMap<(BlockchainAddress, Currency), Amount> = vec.into_iter().collect();
             res
@@ -189,7 +195,9 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
     }
 
     fn update_fees_and_liquidity_balances(&self, metrics: &mut Metrics) -> Result<(), Error> {
-        let balances = self.transactions_repo.get_system_balances()
+        let balances = self
+            .transactions_repo
+            .get_system_balances()
             .map_err(ectx!(try ErrorKind::Internal))?;
         let mut liquidity_balances: HashMap<Currency, f64> = HashMap::new();
         let mut fees_balances: HashMap<Currency, f64> = HashMap::new();

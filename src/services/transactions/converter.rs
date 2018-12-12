@@ -47,14 +47,17 @@ impl ConverterServiceImpl {
             return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
         }
         let blockchain_tx_id = tx.blockchain_tx_id.clone().unwrap();
-        let blockchain_tx = self.blockchain_transactions_repo.get(blockchain_tx_id.clone())
+        let blockchain_tx = self
+            .blockchain_transactions_repo
+            .get(blockchain_tx_id.clone())
             .map_err(ectx!(try ErrorKind::Internal => blockchain_tx_id))?;
 
         if blockchain_tx.is_none() {
             return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
         }
 
-        let blockchain_tx = Into::<BlockchainTransaction>::into(blockchain_tx.unwrap()).normalized()
+        let blockchain_tx = Into::<BlockchainTransaction>::into(blockchain_tx.unwrap())
+            .normalized()
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
         let from: Vec<_> = blockchain_tx
             .from
@@ -62,9 +65,12 @@ impl ConverterServiceImpl {
             .map(|blockchain_address| TransactionAddressInfo {
                 account_id: None,
                 blockchain_address,
-            }).collect();
+            })
+            .collect();
         let to_acct_id = tx.cr_account_id.clone();
-        let to_account = self.accounts_repo.get(to_acct_id.clone())
+        let to_account = self
+            .accounts_repo
+            .get(to_acct_id.clone())
             .map_err(ectx!(try ErrorKind::Internal => to_acct_id))?;
         if to_account.is_none() {
             return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
@@ -102,12 +108,16 @@ impl ConverterServiceImpl {
         }
 
         let from_acct_id = tx.dr_account_id.clone();
-        let from_account = self.accounts_repo.get(from_acct_id.clone())
+        let from_account = self
+            .accounts_repo
+            .get(from_acct_id.clone())
             .map_err(ectx!(try ErrorKind::Internal => from_acct_id))?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => from_acct_id))?;
-        
+
         let to_acct_id = tx.cr_account_id.clone();
-        let to_account = self.accounts_repo.get(to_acct_id.clone())
+        let to_account = self
+            .accounts_repo
+            .get(to_acct_id.clone())
             .map_err(ectx!(try ErrorKind::Internal => to_acct_id))?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => to_acct_id))?;
 
@@ -148,15 +158,19 @@ impl ConverterServiceImpl {
         }
 
         let from_acct_id = tx.dr_account_id.clone();
-        let from_account = self.accounts_repo.get(from_acct_id.clone())
+        let from_account = self
+            .accounts_repo
+            .get(from_acct_id.clone())
             .map_err(ectx!(try ErrorKind::Internal => from_acct_id))?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => from_acct_id))?;
 
         let to_acct_id = tx.cr_account_id.clone();
-        let to_account = self.accounts_repo.get(to_acct_id.clone())
+        let to_account = self
+            .accounts_repo
+            .get(to_acct_id.clone())
             .map_err(ectx!(try ErrorKind::Internal => to_acct_id))?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => to_acct_id))?;
-        
+
         let from = vec![TransactionAddressInfo {
             account_id: Some(from_account.id),
             blockchain_address: from_account.address,
@@ -200,12 +214,16 @@ impl ConverterServiceImpl {
             .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
 
         let from_acct_id = from_tx.dr_account_id.clone();
-        let from_account = self.accounts_repo.get(from_acct_id.clone())
+        let from_account = self
+            .accounts_repo
+            .get(from_acct_id.clone())
             .map_err(ectx!(try ErrorKind::Internal => from_acct_id))?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => from_acct_id))?;
 
         let to_acct_id = to_tx.cr_account_id.clone();
-        let to_account = self.accounts_repo.get(to_acct_id.clone())
+        let to_account = self
+            .accounts_repo
+            .get(to_acct_id.clone())
             .map_err(ectx!(try ErrorKind::Internal => to_acct_id))?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => to_acct_id))?;
 
@@ -264,13 +282,14 @@ impl ConverterServiceImpl {
             .get(blockchain_tx_hash_clone.clone())
             .map_err(ectx!(try ErrorKind::Internal => blockchain_tx_hash_clone))?
             .map(Into::<BlockchainTransaction>::into)
-            .or(
-                self.pending_blockchain_transactions_repo
-                    .get(blockchain_tx_hash.clone())
-                    .map_err(ectx!(try ErrorKind::Internal => blockchain_tx_hash))?
-                    .map(Into::<BlockchainTransaction>::into)
-            ).ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
-        let blockchain_tx = blockchain_tx.normalized()
+            .or(self
+                .pending_blockchain_transactions_repo
+                .get(blockchain_tx_hash.clone())
+                .map_err(ectx!(try ErrorKind::Internal => blockchain_tx_hash))?
+                .map(Into::<BlockchainTransaction>::into))
+            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
+        let blockchain_tx = blockchain_tx
+            .normalized()
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
         let to_address = blockchain_tx
             .to

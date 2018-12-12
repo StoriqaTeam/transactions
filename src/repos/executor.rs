@@ -116,7 +116,8 @@ impl DbExecutor for DbExecutorImpl {
                                     *err_ref = Some(e);
                                     DieselError::RollbackTransaction
                                 })
-                            }).map_err(ectx!(ErrorSource::Diesel, ErrorKind::Internal))
+                            })
+                            .map_err(ectx!(ErrorSource::Diesel, ErrorKind::Internal))
                     })
                 };
                 res.map_err(|e| {

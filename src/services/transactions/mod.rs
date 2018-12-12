@@ -245,7 +245,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         let mut res: Vec<Transaction> = Vec::new();
         let mut current_tx_id = input.id;
-        let fees_account = self.system_service.get_system_fees_account(to_currency)
+        let fees_account = self
+            .system_service
+            .get_system_fees_account(to_currency)
             .map_err(ectx!(try ErrorKind::Internal => to_currency))?;
 
         let fee_tx = NewTransaction {
@@ -356,7 +358,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
 
         // Moving money from `from` account to system liquidity account
         let from_acct_currency = from_account.currency.clone();
-        let from_counterpart_acc = self.system_service.get_system_liquidity_account(from_acct_currency.clone())
+        let from_counterpart_acc = self
+            .system_service
+            .get_system_liquidity_account(from_acct_currency.clone())
             .map_err(ectx!(try ErrorKind::Internal => from_acct_currency))?;
         let from_tx = NewTransaction {
             id: current_tx_id,
@@ -377,7 +381,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         // Moving money from system liquidity account to `to` account
         let current_tx_id = current_tx_id.next();
         let to_acct_currency = to_account.currency.clone();
-        let to_counterpart_acc = self.system_service.get_system_liquidity_account(to_acct_currency.clone())
+        let to_counterpart_acc = self
+            .system_service
+            .get_system_liquidity_account(to_acct_currency.clone())
             .map_err(ectx!(try ErrorKind::Internal => to_acct_currency))?;
         let to_tx = NewTransaction {
             id: current_tx_id,
@@ -514,7 +520,8 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         });
                         core.run(f)
                     })
-                }).and_then(|tx_group| {
+                })
+                .and_then(|tx_group| {
                     // this point we already wrote transactions, incl to blockchain
                     // so if smth fails here, we need not corrupt our data
                     let db_executor = self_clone2.db_executor.clone();
@@ -619,9 +626,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let self_clone = self.clone();
         Box::new(self.auth_service.authenticate(token).and_then(move |user| {
             db_executor.execute(move || {
-                let account = accounts_repo
-                    .get(account_id)
-                    .map_err(ectx!(try convert => account_id))?;
+                let account = accounts_repo.get(account_id).map_err(ectx!(try convert => account_id))?;
                 if let Some(ref account) = account {
                     if account.user_id != user.id {
                         return Err(ectx!(err ErrorContext::InvalidToken, ErrorKind::Unauthorized => user.id));
@@ -652,4 +657,42 @@ fn group_transactions(transactions: &[Transaction]) -> Vec<Vec<Transaction>> {
         res.entry(tx.gid).and_modify(|txs| txs.push(tx.clone())).or_insert(vec![tx.clone()]);
     }
     res.into_iter().map(|(_, txs)| txs).collect()
+}
+
+#[cfg(test)]
+#[allow(unused)]
+mod tests {
+    use super::*;
+    use client::*;
+    use config::Config;
+    use repos::*;
+    use services::*;
+    use tokio_core::reactor::Core;
+
+    fn create_transaction_service(token: AuthenticationToken, user_id: UserId) -> TransactionsServiceImpl<DbExecutorMock> {
+        let config = Config::new().unwrap();
+        let auth_service = Arc::new(AuthServiceMock::new(vec![(token, user_id)]));
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let transactions_repo = Arc::new(TransactionsRepoMock::default());
+        let pending_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoMock::default());
+        let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoMock::default());
+        let key_values_repo = Arc::new(KeyValuesRepoMock::default());
+        let keys_client = Arc::new(KeysClientMock::default());
+        let blockchain_client = Arc::new(BlockchainClientMock::default());
+        let exchange_client = Arc::new(ExchangeClientMock::default());
+        let db_executor = DbExecutorMock::default();
+        TransactionsServiceImpl::new(
+            config,
+            auth_service,
+            transactions_repo,
+            pending_transactions_repo,
+            blockchain_transactions_repo,
+            accounts_repo,
+            key_values_repo,
+            db_executor,
+            keys_client,
+            blockchain_client,
+            exchange_client,
+        )
+    }
 }

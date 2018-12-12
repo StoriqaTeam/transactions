@@ -82,8 +82,9 @@ impl<E: DbExecutor> FeesService for FeesServiceImpl<E> {
                                 } else {
                                     let mut errors = ValidationErrors::new();
                                     let mut error = ValidationError::new("currency");
-                                    error.add_param("message".into(), &"account currency differs from fee asked".to_string());
-                                    error.add_param("details".into(), &"no details".to_string());
+                                    error.message = Some("account currency differs from fee asked".into());
+                                    error.add_param("account_currency".into(), &accs.iter().nth(0).unwrap().currency.to_string());
+                                    error.add_param("received_currency".into(), &currency.to_string());
                                     errors.add("account", error);
                                     Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::InvalidInput(serde_json::to_string(&errors).unwrap_or_default()) => accs, currency))
                                 }

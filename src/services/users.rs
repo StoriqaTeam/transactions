@@ -35,9 +35,7 @@ impl<E: DbExecutor> UsersService for UsersServiceImpl<E> {
                 .validate()
                 .map_err(|e| ectx!(err e.clone(), ErrorKind::InvalidInput(serde_json::to_string(&e).unwrap_or_default()) => input))
                 .into_future()
-                .and_then(move |_| {
-                    db_executor.execute(move || users_repo.create(input.clone()).map_err(ectx!(convert => input)))
-                }),
+                .and_then(move |_| db_executor.execute(move || users_repo.create(input.clone()).map_err(ectx!(convert => input)))),
         )
     }
     fn find_user_by_authentication_token(&self, token: AuthenticationToken) -> Box<Future<Item = Option<User>, Error = Error> + Send> {

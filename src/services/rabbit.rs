@@ -122,7 +122,8 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                     .get(0)
                     .ok_or(
                         ectx!(try err ErrorContext::InvalidBlockchainTransactionStructure, ErrorKind::Internal => blockchain_tx.clone()),
-                    )?.clone();
+                    )?
+                    .clone();
                 if let Some(account) = self.accounts_repo.get_by_address(from.clone(), Currency::Stq, AccountKind::Dr)? {
                     if !account.erc20_approved {
                         let changeset = UpdateAccount {
@@ -227,7 +228,11 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
 
         let mut idx = 0;
         for to_dr_account in matched_dr_accounts {
-            let Account { address: to_dr_address, currency: to_dr_currency, .. } = to_dr_account.clone();
+            let Account {
+                address: to_dr_address,
+                currency: to_dr_currency,
+                ..
+            } = to_dr_account.clone();
             let to_entry = blockchain_tx
                 .to
                 .iter()
@@ -485,7 +490,8 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                     .blockchain_client
                     .post_ethereum_transaction(approve_raw_tx)
                     .map_err(ectx!(ErrorKind::Internal => eth_approve_blockchain_tx_clone))
-            }).and_then(move |approve_tx_id| {
+            })
+            .and_then(move |approve_tx_id| {
                 // logs from blockchain gw erc20 comes with log number in hash
                 let approve_tx_id = BlockchainTransactionId::new(format!("{}:0", approve_tx_id.inner()));
                 let new_pending_approve = (eth_approve_blockchain_tx_clone2, approve_tx_id.clone()).into();

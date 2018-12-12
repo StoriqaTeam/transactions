@@ -47,7 +47,8 @@ pub fn get_users_transactions(ctx: &Context, user_id: UserId) -> ControllerFutur
                     let e = format_err!("{}", e);
                     ectx!(err e, ErrorContext::RequestQueryParams, ErrorKind::BadRequest => path_and_query_clone)
                 })
-            }).into_future()
+            })
+            .into_future()
             .and_then(move |input| {
                 maybe_token
                     .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
@@ -58,7 +59,8 @@ pub fn get_users_transactions(ctx: &Context, user_id: UserId) -> ControllerFutur
                             .get_transactions_for_user(token, user_id, input.offset, input.limit)
                             .map_err(ectx!(convert => input_clone))
                     })
-            }).and_then(|transactions| {
+            })
+            .and_then(|transactions| {
                 let transactions: Vec<TransactionsResponse> = transactions.into_iter().map(From::from).collect();
                 response_with_model(&transactions)
             }),
@@ -95,7 +97,8 @@ pub fn get_accounts_transactions(ctx: &Context, account_id: AccountId) -> Contro
                     let e = format_err!("{}", e);
                     ectx!(err e, ErrorContext::RequestQueryParams, ErrorKind::BadRequest => path_and_query_clone)
                 })
-            }).into_future()
+            })
+            .into_future()
             .and_then(move |input| {
                 maybe_token
                     .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
@@ -105,7 +108,8 @@ pub fn get_accounts_transactions(ctx: &Context, account_id: AccountId) -> Contro
                             .get_account_transactions(token, account_id, input.offset, input.limit)
                             .map_err(ectx!(convert))
                     })
-            }).and_then(|transactions| {
+            })
+            .and_then(|transactions| {
                 let transactions: Vec<TransactionsResponse> = transactions.into_iter().map(From::from).collect();
                 response_with_model(&transactions)
             }),

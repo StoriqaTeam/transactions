@@ -116,7 +116,8 @@ impl RabbitConnectionManager {
                         }
                     }),
                     connection_timeout,
-                ).map_err(move |e| {
+                )
+                .map_err(move |e| {
                     let e: failure::Error = e.into_inner().map(|e| e.into()).unwrap_or(format_err!("Timeout error"));
                     ectx!(err e, ErrorSource::Timeout, ErrorContext::ConnectionTimeout, ErrorKind::Internal => connection_timeout)
                 })
@@ -188,7 +189,8 @@ impl RabbitConnectionManager {
                         let mut self_hearbeat_handle = self_hearbeat_handle.lock().unwrap();
                         *self_hearbeat_handle = hearbeat_handle;
                     }
-                }).map_err(move |e| {
+                })
+                .map_err(move |e| {
                     info!("Failed to reset tcp connection to rabbit.");
                     log_error(&e);
                     let cli = self_client2.lock().unwrap();
@@ -212,7 +214,8 @@ impl RabbitConnectionManager {
                 info!("TCP connection established. Handshake with rabbit...");
                 Client::connect(stream, options)
                     .map_err(ectx!(ErrorSource::Io, ErrorContext::RabbitConnection, ErrorKind::Internal => address_clone2))
-            }).and_then(move |(client, mut heartbeat)| {
+            })
+            .and_then(move |(client, mut heartbeat)| {
                 info!("Connected to rabbit");
                 let handle = heartbeat.handle();
                 let client_clone = client.clone();
@@ -272,7 +275,8 @@ impl ManageConnection for RabbitConnectionManager {
             .basic_qos(BasicQosOptions {
                 prefetch_count: CONSUMER_PREFETCH_COUNT,
                 ..Default::default()
-            }).wait()
+            })
+            .wait()
             .map_err(ectx!(ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))
             .map_err(|e: failure::Error| e.compat())?;
         trace!("Rabbit channel is created");
