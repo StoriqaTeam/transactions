@@ -52,9 +52,11 @@ impl ClassifierServiceImpl {
     }
 
     fn check_account_daily_limit(&self, input: &CreateTransactionInput, account: &Account) -> Result<(), Error> {
+        let (acct_id, acct_kind, limit_period) = (account.id.clone(), account.kind.clone(), self.limit_period.clone());
         let spending = self
             .transactions_repo
-            .get_account_spending(account.id, account.kind, self.limit_period)?;
+            .get_account_spending(acct_id.clone(), acct_kind.clone(), limit_period.clone())
+            .map_err(ectx!(try ErrorKind::Internal => acct_id, acct_kind, limit_period))?;
         let from_currency = account.currency;
         let to_currency = input.to_currency;
         let from_value = match input.value_currency {
@@ -152,7 +154,10 @@ impl ClassifierServiceImpl {
                 // check that we don't own any other accounts with this address
                 // eg a user accidentially put ether address to receive stq tokens
                 let to_address = input.to.clone().to_account_address();
-                let accounts = self.accounts_repo.filter_by_address(to_address.clone())?;
+                let accounts = self.accounts_repo.filter_by_address(to_address.clone()).map_err({
+                    let to_address = to_address.clone();
+                    ectx!(try convert => to_address)
+                })?;
                 if accounts.len() != 0 {
                     return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::MalformedInput => input.clone()));
                 }

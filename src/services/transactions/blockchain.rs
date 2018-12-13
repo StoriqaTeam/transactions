@@ -149,13 +149,13 @@ impl BlockchainService for BlockchainServiceImpl {
         let raw_tx = self
             .keys_client
             .sign_transaction(create_blockchain_input.clone(), Role::User)
-            .map_err(ectx!(try convert => create_blockchain_input_clone))
+            .map_err(ectx!(try convert => create_blockchain_input_clone, Role::User))
             .wait()?;
 
         let blockchain_tx_id = self
             .blockchain_client
-            .post_bitcoin_transaction(raw_tx)
-            .map_err(ectx!(try convert))
+            .post_bitcoin_transaction(raw_tx.clone())
+            .map_err(ectx!(try convert => raw_tx))
             .wait()?;
 
         let new_pending = (create_blockchain_input, blockchain_tx_id.clone()).into();
@@ -181,16 +181,23 @@ impl BlockchainService for BlockchainServiceImpl {
         match currency {
             Currency::Eth => (),
             Currency::Stq => (),
-            _ => return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal)),
+            _ => return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::InvalidInput(currency.to_string()))),
         };
         let tx_initiator = match currency {
-            Currency::Stq => self.system_service.get_system_fees_account(Currency::Eth)?.address,
+            Currency::Stq => {
+                self.system_service
+                    .get_system_fees_account(Currency::Eth)
+                    .map_err(ectx!(try ErrorKind::Internal => Currency::Eth))?
+                    .address
+            }
             _ => from.clone(),
         };
+
+        let tx_initiator_ = tx_initiator.clone();
         let maybe_db_nonce = match currency {
             Currency::Stq | Currency::Eth => self
                 .key_values_repo
-                .get_nonce(tx_initiator.clone())
+                .get_nonce(tx_initiator_.clone())
                 .map_err(ectx!(try ErrorKind::Internal))?,
             _ => None,
         };
@@ -211,7 +218,7 @@ impl BlockchainService for BlockchainServiceImpl {
         let _ = self
             .key_values_repo
             .set_nonce(tx_initiator.clone(), nonce + 1)
-            .map_err(ectx!(try ErrorKind::Internal))?;
+            .map_err(ectx!(try ErrorKind::Internal => tx_initiator, nonce + 1))?;
 
         // TODO, at this stage transaction is dropped if there's another tx in progress
         // but this needs to be additionally verified
@@ -235,8 +242,8 @@ impl BlockchainService for BlockchainServiceImpl {
             .wait()?;
         let tx_id = self
             .blockchain_client
-            .post_ethereum_transaction(raw_tx)
-            .map_err(ectx!(try convert))
+            .post_ethereum_transaction(raw_tx.clone())
+            .map_err(ectx!(try convert => raw_tx))
             .wait()?;
 
         let tx_id = match currency {

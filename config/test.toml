@@ -2,16 +2,65 @@
 host = "0.0.0.0"
 port = 8000
 
-[auth]
-storiqa_jwt_public_key_base64 = "MIIBCgKCAQEAt3TQPCbcWM/Fba2s6V/WRuQv8SlEQp4F56fSY4LQ+yW2xY3f2fLOw/SurObHMQF7QpnQ7x/2zhGqe11Ad0MHbWG+OARR/B/76X8QhA3xEneZpgc8aykagl0Tr616tazEKr0JxGuUo3qHy+e/dqSQ9T04EjGqccfr3+gfmVZlzml2/kN2EmaFa28Q8NseY5a2TVL9XcEDHHpGHVpoRQI8ibfa92i2Lwo7E33Iz8hpbp+GgeyReua2z341nxSNqk0VSYa6KtNUk03G5YYmsrsoE+ECC69GAD07R4YcGqF4NRKSA0T3L8jY8rVbl5HUCIFuZynZEHWWpFvyMYW+9ffMfwIDAQAB"
-storiqa_jwt_valid_secs = 86400
-
 [client]
 dns_threads = 4
-storiqa_url = "https://stable.stq.cloud/graphql"
+keys_url = "http://keystore:8000/v1"
+blockchain_url = "http://blockchain-gateway:8000/v1"
+exchange_gateway_url = "http://exchange-gateway:8000/v1"
 
 [database]
-url = "postgresql://transactions:transactions@db-postgresql/transactions"
+url = "postgresql://transactions:transactions@db-postgresql:5432/transactions"
 
 [cpu_pool]
-size = 1
+size = 2
+
+[auth]
+keys_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
+keys_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
+exchange_gateway_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
+exchange_gateway_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
+
+[rabbit]
+url = "amqp://guest:guest@localhost:5672//?heartbeat=3&frame_max=131072"
+thread_pool_size = 2
+connection_timeout_secs = 10
+connection_pool_size = 10
+restart_subscription_secs = 30
+
+[system]
+system_user_id = "00000000-0000-4000-8000-010000000000"
+btc_transfer_account_id = "00000000-0000-4000-8000-010000000000"
+eth_transfer_account_id = "00000000-0000-4000-8000-020000000000"
+stq_transfer_account_id = "00000000-0000-4000-8000-030000000000"
+btc_liquidity_account_id = "00000000-0000-4000-8000-0a0000000000"
+eth_liquidity_account_id = "00000000-0000-4000-8000-0b0000000000"
+stq_liquidity_account_id = "00000000-0000-4000-8000-0c0000000000"
+btc_fees_account_id = "00000000-0000-4000-8000-a00000000000"
+eth_fees_account_id = "00000000-0000-4000-8000-b00000000000"
+stq_fees_account_id = "00000000-0000-4000-8000-c00000000000"
+keys_system_user_id = "0746caa0-7a41-45e2-8c7c-fa76ca5336b7"
+keys_system_user_token = "bURPpnBOGnBvj8fuAOR+q+cSPAw1Lf6zND06E+r0OYo="
+exchange_gateway_system_user_id = "0746caa0-7a41-45e2-8c7c-fa76ca5336b7"
+exchange_gateway_system_user_token = "bURPpnBOGnBvj8fuAOR+q+cSPAw1Lf6zND06E+r0OYo="
+approve_gas_price = 20_000_000_000
+approve_gas_limit = 60_000
+approve_delay_secs = 45
+
+[limits]
+period_secs = 86400
+# this limits are in stq/eth/btc rather than wei/satoshis since there are problems with u128 for config crate
+stq_limit = 125000
+eth_limit = 1
+btc_limit = 0.05
+
+[fee_price]
+ethereum = 18000000000
+bitcoin = 4
+
+[fees_options]
+btc_fees_collect_url = "https://bitcoinfees.earn.com/api/v1/fees/recommended"
+eth_fees_collect_url = "https://www.etherchain.org/api/gasPriceOracle"
+btc_transaction_size = 280
+eth_gas_limit = 21000
+stq_gas_limit = 60000
+fee_upside = 2
