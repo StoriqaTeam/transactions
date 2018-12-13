@@ -122,7 +122,7 @@ impl ClassifierServiceImpl {
                 let to_address = input.to.clone().to_account_address();
                 self.accounts_repo
                     .get_by_address(to_address.clone(), input.to_currency, AccountKind::Cr)
-                    .map_err(ectx!(convert => to_address, input.to_currency ))
+                    .map_err(ectx!(convert => to_address, input.to_currency))
             }
         }
     }

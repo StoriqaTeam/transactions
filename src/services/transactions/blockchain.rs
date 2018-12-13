@@ -262,3 +262,85 @@ impl BlockchainService for BlockchainServiceImpl {
         Ok(tx_id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use client::*;
+    use config::Config;
+    use repos::*;
+    use services::*;
+
+    fn create_blockchain_service() -> BlockchainServiceImpl {
+        let config = Arc::new(Config::new().unwrap());
+        let keys_client = Arc::new(KeysClientMock::default());
+        let blockchain_client = Arc::new(BlockchainClientMock::default());
+        let exchange_client = Arc::new(ExchangeClientMock::default());
+        let pending_blockchain_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoMock::default());
+        let key_values_repo = Arc::new(KeyValuesRepoMock::default());
+        let transfer_accounts: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let liquidity_accounts: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let fees_accounts: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let fees_accounts_dr: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let system_service = Arc::new(SystemServiceMock::new(transfer_accounts, liquidity_accounts, fees_accounts, fees_accounts_dr));
+        BlockchainServiceImpl::new(
+            config,
+            keys_client,
+            blockchain_client,
+            exchange_client,
+            pending_blockchain_transactions_repo,
+            key_values_repo,
+            system_service,
+        )
+
+    }
+
+    #[test]
+    fn test_blockchain_create_btc_happy() {
+        let service = create_blockchain_service();
+        let res = service.create_bitcoin_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(0),
+            0f64
+        );
+        assert!(res.is_ok());
+    }
+    
+    #[test]
+    fn test_blockchain_create_eth_happy() {
+        let service = create_blockchain_service();
+        let res = service.create_ethereum_tx(
+                  BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(0),
+            0f64,
+        Currency::Eth);
+        assert!(res.is_ok());
+    }
+    
+    #[test]
+    fn test_blockchain_create_stq_happy() {
+        let service = create_blockchain_service();
+        let res = service.create_ethereum_tx(
+                  BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(0),
+            0f64,
+        Currency::Stq);
+        assert!(res.is_ok());
+    }
+    
+    #[test]
+    fn test_blockchain_create_estimate_withdrawal_fee_stq_happy() {
+        let service = create_blockchain_service();
+        let res = service.estimate_withdrawal_fee(
+            Amount::new(0),
+            Currency::Stq,
+            Currency::Eth,
+        );
+        assert!(res.is_ok());
+    }
+
+    
+}
