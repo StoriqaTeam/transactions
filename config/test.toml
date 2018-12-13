@@ -9,7 +9,7 @@ blockchain_url = "http://blockchain-gateway:8000/v1"
 exchange_gateway_url = "http://exchange-gateway:8000/v1"
 
 [database]
-url = "postgresql://transactions:transactions@transactions-pg:5432/transactions"
+url = "postgresql://transactions:transactions@transactions:5432/transactions"
 
 [cpu_pool]
 size = 2
