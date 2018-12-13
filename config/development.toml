@@ -6,6 +6,7 @@ port = 8000
 dns_threads = 4
 keys_url = "http://keystore:8000/v1"
 blockchain_url = "http://blockchain-gateway:8000/v1"
+exchange_gateway_url = "http://exchange-gateway:8000/v1"
 
 [database]
 url = "postgresql://transactions:transactions@transactions-pg:5432/transactions"
@@ -18,7 +19,6 @@ keys_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
 keys_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
 exchange_gateway_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
 exchange_gateway_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
-
 
 [rabbit]
 url = "amqp://guest:guest@localhost:5672//?heartbeat=3&frame_max=131072"

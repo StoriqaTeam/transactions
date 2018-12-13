@@ -238,7 +238,7 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
                 let account = self
                     .accounts_repo
                     .get(account_id)
-                    .map_err(ectx!(try ErrorKind::Internal))?
+                    .map_err(ectx!(try ErrorKind::Internal => account_id))?
                     .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
                 if metrics
                     .negative_balances
