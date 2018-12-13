@@ -94,7 +94,7 @@ impl From<ReposError> for Error {
 impl From<ReposErrorKind> for ErrorKind {
     fn from(e: ReposErrorKind) -> ErrorKind {
         match e {
-            ReposErrorKind::Internal => ErrorKind::Internal,
+            ReposErrorKind::AlreadyInTransaction | ReposErrorKind::Internal => ErrorKind::Internal,
             ReposErrorKind::Unauthorized => ErrorKind::Unauthorized,
             ReposErrorKind::Constraints(validation_errors) => {
                 ErrorKind::InvalidInput(serde_json::to_string(&validation_errors).unwrap_or_default())
