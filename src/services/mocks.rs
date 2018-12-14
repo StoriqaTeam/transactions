@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use super::auth::AuthService;
-use super::system::SystemService;
 use super::error::*;
+use super::system::SystemService;
 use super::ServiceFuture;
 use models::*;
 use prelude::*;
@@ -43,7 +43,12 @@ pub struct SystemServiceMock {
 }
 
 impl SystemServiceMock {
-    pub fn new(transfer_accounts: [Account; 3], liquidity_accounts: [Account; 3], fees_accounts: [Account; 3], fees_accounts_dr: [Account; 3]) -> Self {
+    pub fn new(
+        transfer_accounts: [Account; 3],
+        liquidity_accounts: [Account; 3],
+        fees_accounts: [Account; 3],
+        fees_accounts_dr: [Account; 3],
+    ) -> Self {
         let mut accounts = HashMap::new();
         accounts.insert("btc_transfer_account_id".to_string(), transfer_accounts[0].clone());
         accounts.insert("eth_transfer_account_id".to_string(), transfer_accounts[1].clone());
