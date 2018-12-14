@@ -485,3 +485,48 @@ impl ConverterService for ConverterServiceImpl {
         // panic!("Unsupported transactions sequence: {:#?}", transactions)
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use repos::*;
+    use services::*;
+
+    fn create_converter_service(accounts_repo: Arc<dyn AccountsRepo>, blockchain_transactions_repo: Arc<dyn BlockchainTransactionsRepo>) -> ConverterServiceImpl {
+        let pending_blockchain_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoMock::default());
+        let transfer_accounts: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let liquidity_accounts: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let fees_accounts: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let fees_accounts_dr: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let system_service = Arc::new(SystemServiceMock::new(
+            transfer_accounts,
+            liquidity_accounts,
+            fees_accounts,
+            fees_accounts_dr,
+        ));
+
+        ConverterServiceImpl::new(
+            accounts_repo,
+            pending_blockchain_transactions_repo,
+            blockchain_transactions_repo,
+            system_service,
+        )
+    }
+
+    #[test]
+    fn test_converter_deposit_happy() {
+        let accounts_repo = Arc::new(AccountsRepoMock::default());
+        let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoMock::default());
+        let service = create_converter_service(accounts_repo.clone(), blockchain_transactions_repo.clone());
+        let new_account = NewAccount::default();
+        let acc1 = accounts_repo.create(new_account.clone()).unwrap();
+        let blockchain = blockchain_transactions_repo.create(NewBlockchainTransactionDB::default()).unwrap();
+        let mut transactions = vec![];
+        let mut transaction = Transaction::default();
+        transaction.blockchain_tx_id = Some(blockchain.hash);
+        transaction.cr_account_id = acc1.id;
+        transactions.push(transaction);
+        let res = service.convert_transaction(transactions);
+        assert!(res.is_ok());
+    }
+
+}
