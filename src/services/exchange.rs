@@ -7,6 +7,8 @@ use prelude::*;
 
 pub trait ExchangeService: Send + Sync + 'static {
     fn rate(&self, token: AuthenticationToken, input: RateInput) -> Box<Future<Item = Rate, Error = Error> + Send>;
+
+    fn refresh_rate(&self, input: RateRefreshInput) -> Box<Future<Item = RateRefresh, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -24,5 +26,14 @@ impl ExchangeService for ExchangeServiceImpl {
     fn rate(&self, _token: AuthenticationToken, input: RateInput) -> Box<Future<Item = Rate, Error = Error> + Send> {
         let input_clone = input.clone();
         Box::new(self.exchange_client.rate(input, Role::User).map_err(ectx!(convert => input_clone)))
+    }
+
+    fn refresh_rate(&self, input: RateRefreshInput) -> Box<Future<Item = RateRefresh, Error = Error> + Send> {
+        let input_clone = input.clone();
+        Box::new(
+            self.exchange_client
+                .refresh_rate(input, Role::User)
+                .map_err(ectx!(convert => input_clone)),
+        )
     }
 }
