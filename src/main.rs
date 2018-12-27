@@ -16,6 +16,9 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("create_user") {
         let name = matches.value_of("name").unwrap();
         transactions_lib::create_user(&name);
+    } else if let Some(matches) = matches.subcommand_matches("repair_approval_pending_transaction") {
+        let id = matches.value_of("id").unwrap();
+        transactions_lib::repair_approval_pending_transaction(&id);
     } else {
         let _ = app.print_help();
         println!("\n")

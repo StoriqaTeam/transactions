@@ -73,6 +73,7 @@ pub struct NewTransaction {
     pub kind: TransactionKind,
     pub group_kind: TransactionGroupKind,
     pub related_tx: Option<TransactionId>,
+    pub meta: Option<Value>,
 }
 
 impl Default for NewTransaction {
@@ -91,6 +92,7 @@ impl Default for NewTransaction {
             kind: TransactionKind::Internal,
             group_kind: TransactionGroupKind::Internal,
             related_tx: None,
+            meta: None,
         }
     }
 }
