@@ -122,6 +122,7 @@ impl Service for ApiService {
                         POST /v1/transactions => post_transactions,
                         GET /v1/transactions/{transaction_id: TransactionId} => get_transactions,
                         POST /v1/rate => post_rate,
+                        POST /v1/rate/refresh => post_rate_refresh,
                         POST /v1/fees => post_fees,
                         GET /v1/metrics => get_metrics,
                         _ => not_found,

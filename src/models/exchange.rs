@@ -91,3 +91,16 @@ pub struct Rate {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RateRefreshInput {
+    pub exchange_id: ExchangeId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RateRefresh {
+    pub exchange: Rate,
+    pub is_new_rate: bool,
+}
