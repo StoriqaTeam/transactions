@@ -11,12 +11,21 @@ pub trait UsersRepo: Send + Sync + 'static {
     fn find_user_by_authentication_token(&self, token: AuthenticationToken) -> RepoResult<Option<User>>;
     fn create(&self, payload: NewUser) -> RepoResult<User>;
     fn get(&self, user_id: UserId) -> RepoResult<Option<User>>;
+    fn get_all(&self) -> RepoResult<Vec<User>>;
     fn update(&self, user_id: UserId, payload: UpdateUser) -> RepoResult<User>;
     fn delete(&self, user_id: UserId) -> RepoResult<User>;
 }
 
 #[derive(Clone, Default)]
-pub struct UsersRepoImpl;
+pub struct UsersRepoImpl {
+    system_user_id: UserId,
+}
+
+impl UsersRepoImpl {
+    pub fn new(system_user_id: UserId) -> Self {
+        Self { system_user_id }
+    }
+}
 
 impl<'a> UsersRepo for UsersRepoImpl {
     fn find_user_by_authentication_token(&self, token: AuthenticationToken) -> RepoResult<Option<User>> {
@@ -57,6 +66,16 @@ impl<'a> UsersRepo for UsersRepoImpl {
                     let kind = ErrorKind::from(&e);
                     ectx!(err e, kind => user_id_arg)
                 })
+        })
+    }
+
+    fn get_all(&self) -> RepoResult<Vec<User>> {
+        let system_user_id = self.system_user_id;
+        with_tls_connection(|conn| {
+            users.filter(id.ne(system_user_id)).get_results(conn).map_err(move |e| {
+                let kind = ErrorKind::from(&e);
+                ectx!(err e, kind)
+            })
         })
     }
     fn update(&self, user_id_arg: UserId, payload: UpdateUser) -> RepoResult<User> {

@@ -1,6 +1,6 @@
 mod blockchain;
 mod classifier;
-mod converter;
+pub mod converter;
 
 use std::collections::HashMap;
 use std::sync::Arc;

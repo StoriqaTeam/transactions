@@ -212,9 +212,10 @@ impl Default for BitcoinUtxos {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TransactionOut {
     pub id: TransactionId,
+    pub user_id: UserId,
     pub from: Vec<TransactionAddressInfo>,
     pub to: TransactionAddressInfo,
     pub from_value: Amount,

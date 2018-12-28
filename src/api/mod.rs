@@ -128,8 +128,14 @@ impl Service for ApiService {
                         _ => not_found,
                     };
 
-                    let auth_service = Arc::new(AuthServiceImpl::new(Arc::new(UsersRepoImpl), db_executor.clone()));
-                    let users_service = Arc::new(UsersServiceImpl::new(Arc::new(UsersRepoImpl), db_executor.clone()));
+                    let auth_service = Arc::new(AuthServiceImpl::new(
+                        Arc::new(UsersRepoImpl::new(config.system.system_user_id)),
+                        db_executor.clone(),
+                    ));
+                    let users_service = Arc::new(UsersServiceImpl::new(
+                        Arc::new(UsersRepoImpl::new(config.system.system_user_id)),
+                        db_executor.clone(),
+                    ));
 
                     let accounts_service = Arc::new(AccountsServiceImpl::new(
                         auth_service.clone(),

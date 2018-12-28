@@ -1,12 +1,16 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use futures::future::{self, Either};
+
 use super::error::*;
 use super::system::{SystemService, SystemServiceImpl};
+use super::transactions::converter::{ConverterService, ConverterServiceImpl};
 use client::{BlockchainClient, KeysClient};
 use config::Config;
 use models::*;
 use prelude::*;
+use rabbit::TransactionPublisher;
 use repos::{
     AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, KeyValuesRepo, PendingBlockchainTransactionsRepo, SeenHashesRepo,
     StrangeBlockchainTransactionsRepo, TransactionsRepo,
@@ -32,9 +36,11 @@ pub struct BlockchainFetcher<E: DbExecutor> {
     pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
     key_values_repo: Arc<KeyValuesRepo>,
     system_service: Arc<SystemService>,
+    converter_service: Arc<ConverterService>,
     blockchain_client: Arc<BlockchainClient>,
     keys_client: Arc<KeysClient>,
     db_executor: E,
+    publisher: Arc<dyn TransactionPublisher>,
 }
 
 impl<E: DbExecutor> BlockchainFetcher<E> {
@@ -50,8 +56,15 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         blockchain_client: Arc<BlockchainClient>,
         keys_client: Arc<KeysClient>,
         db_executor: E,
+        publisher: Arc<dyn TransactionPublisher>,
     ) -> Self {
         let system_service = Arc::new(SystemServiceImpl::new(accounts_repo.clone(), config.clone()));
+        let converter_service = Arc::new(ConverterServiceImpl::new(
+            accounts_repo.clone(),
+            pending_blockchain_transactions_repo.clone(),
+            blockchain_transactions_repo.clone(),
+            system_service.clone(),
+        ));
         BlockchainFetcher {
             config,
             transactions_repo,
@@ -62,9 +75,11 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             pending_blockchain_transactions_repo,
             key_values_repo,
             system_service,
+            converter_service,
             blockchain_client,
             keys_client,
             db_executor,
+            publisher,
         }
     }
 }
@@ -95,19 +110,41 @@ pub enum InvariantViolation {
 impl<E: DbExecutor> BlockchainFetcher<E> {
     pub fn handle_message(&self, data: Vec<u8>) -> impl Future<Item = (), Error = Error> + Send {
         let db_executor = self.db_executor.clone();
+        let converter = self.converter_service.clone();
+        let publisher = self.publisher.clone();
         let self_clone = self.clone();
-        parse_transaction(data).into_future().and_then(move |tx| {
-            db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || self_clone.handle_transaction(&tx))
-        })
+        parse_transaction(data)
+            .into_future()
+            .and_then(move |tx| {
+                db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || self_clone.handle_transaction(&tx))
+            })
+            .and_then(move |txs| {
+                if !txs.is_empty() {
+                    Either::A(converter.convert_transaction(txs).into_future().and_then(move |tx_out| {
+                        publisher
+                            .publish(tx_out.clone())
+                            .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal => tx_out))
+                            .then(|r: Result<(), Error>| match r {
+                                Err(e) => {
+                                    log_error(&e);
+                                    Ok(())
+                                }
+                                Ok(_) => Ok(()),
+                            })
+                    }))
+                } else {
+                    Either::B(future::ok(()))
+                }
+            })
     }
 
-    fn handle_transaction(&self, blockchain_tx: &BlockchainTransaction) -> Result<(), Error> {
+    fn handle_transaction(&self, blockchain_tx: &BlockchainTransaction) -> Result<Vec<Transaction>, Error> {
         let normalized_tx = blockchain_tx
             .normalized()
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => blockchain_tx))?;
         // already processed this transaction - skipping
         if let Some(_) = self.seen_hashes_repo.get(normalized_tx.hash.clone(), normalized_tx.currency)? {
-            return Ok(());
+            return Ok(vec![]);
         }
 
         if let Some(erc20_op) = blockchain_tx.erc20_operation_kind {
@@ -144,7 +181,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                         })?;
                     }
                     // don't need to collect fees, etc. - see the comment in that send_erc20_approval
-                    return Ok(());
+                    return Ok(vec![]);
                 }
             }
         }
@@ -156,13 +193,13 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => tx.clone()))?;
             if required_confirmations(normalized_tx.currency, total_tx_value) > normalized_tx.confirmations as u64 {
                 // skipping tx, waiting for more confirms
-                return Ok(());
+                return Ok(vec![]);
             }
             if let Some(violation) = self.verify_withdrawal_tx(&tx, &normalized_tx)? {
                 // Here the tx itself is ok, but violates our internal invariants. We just log it here and put it into strange blockchain transactions table
                 // If we instead returned error - it would nack the rabbit message and return it to queue - smth we don't want here
                 self.handle_violation(violation, &blockchain_tx)?;
-                return Ok(());
+                return Ok(vec![]);
             }
             let fees_currency = match blockchain_tx.currency {
                 Currency::Btc => Currency::Btc,
@@ -206,7 +243,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 block_number: blockchain_tx.block_number as i64,
                 currency: blockchain_tx.currency,
             })?;
-            return Ok(());
+            return Ok(vec![]);
         };
 
         let to_addresses: Vec<_> = normalized_tx.to.iter().map(|entry| entry.address.clone()).collect();
@@ -219,13 +256,15 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 block_number: blockchain_tx.block_number as i64,
                 currency: blockchain_tx.currency,
             })?;
-            return Ok(());
+            return Ok(vec![]);
         }
 
         if let Some(violation) = self.verify_deposit_tx(&normalized_tx)? {
             self.handle_violation(violation, &blockchain_tx)?;
-            return Ok(());
+            return Ok(vec![]);
         }
+
+        let mut transactions_out = vec![];
 
         let mut idx = 0;
         for to_dr_account in matched_dr_accounts {
@@ -259,7 +298,8 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 related_tx: None,
                 meta: None,
             };
-            self.transactions_repo.create(new_tx)?;
+            let dr_transaction = self.transactions_repo.create(new_tx)?;
+            transactions_out.push(dr_transaction);
             // don't need to create these more than one time, or conflict will be o/w
             if idx == 0 {
                 self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
@@ -284,7 +324,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             }
             idx += 1;
         }
-        Ok(())
+        Ok(transactions_out)
     }
 
     fn handle_violation(&self, violation: InvariantViolation, blockchain_tx: &BlockchainTransaction) -> Result<(), Error> {

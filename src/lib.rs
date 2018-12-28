@@ -81,7 +81,7 @@ use self::repos::{
 };
 use client::{BlockchainClientImpl, KeysClient, KeysClientImpl};
 use config::{Config, System};
-use rabbit::{ConnectionHooks, R2D2ErrorHandler, RabbitConnectionManager, TransactionConsumerImpl};
+use rabbit::{ConnectionHooks, R2D2ErrorHandler, RabbitConnectionManager, TransactionConsumerImpl, TransactionPublisherImpl};
 use rabbit::{ErrorKind, ErrorSource};
 use services::BlockchainFetcher;
 use utils::log_error;
@@ -104,51 +104,73 @@ pub fn start_server() {
     logger::init(&config);
     upsert_system_accounts();
     let config_clone = config.clone();
-    thread::spawn(move || {
-        let mut core = tokio_core::reactor::Core::new().unwrap();
-        let db_pool = create_db_pool(&config_clone);
-        let cpu_pool = CpuPool::new(config_clone.rabbit.thread_pool_size);
-        let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
-        let transactions_repo = Arc::new(TransactionsRepoImpl::new(config_clone.system.system_user_id));
-        let accounts_repo = Arc::new(AccountsRepoImpl);
-        let seen_hashes_repo = Arc::new(SeenHashesRepoImpl);
-        let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoImpl);
-        let strange_blockchain_transactions_repo = Arc::new(StrangeBlockchainTransactionsRepoImpl);
-        let pending_blockchain_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoImpl);
-        let client = HttpClientImpl::new(&config_clone);
-        let blockchain_client = Arc::new(BlockchainClientImpl::new(&config_clone, client.clone()));
-        let keys_client = Arc::new(KeysClientImpl::new(&config_clone, client.clone()));
-        let keys_values_repo = Arc::new(KeyValuesRepoImpl);
-        let fetcher = BlockchainFetcher::new(
-            Arc::new(config_clone.clone()),
-            transactions_repo,
-            accounts_repo,
-            seen_hashes_repo,
-            blockchain_transactions_repo,
-            strange_blockchain_transactions_repo,
-            pending_blockchain_transactions_repo,
-            keys_values_repo,
-            blockchain_client,
-            keys_client,
-            db_executor,
-        );
-        debug!("Started creating rabbit connection pool");
 
-        let rabbit_thread_pool = futures_cpupool::CpuPool::new(config_clone.rabbit.thread_pool_size);
-        let rabbit_connection_manager = core
-            .run(RabbitConnectionManager::create(&config_clone))
+    let db_pool = create_db_pool(&config_clone);
+    let cpu_pool = CpuPool::new(config_clone.rabbit.thread_pool_size);
+    let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
+    let transactions_repo = Arc::new(TransactionsRepoImpl::new(config_clone.system.system_user_id));
+    let accounts_repo = Arc::new(AccountsRepoImpl);
+    let seen_hashes_repo = Arc::new(SeenHashesRepoImpl);
+    let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoImpl);
+    let users_repo = UsersRepoImpl::new(config.system.system_user_id);
+    let strange_blockchain_transactions_repo = Arc::new(StrangeBlockchainTransactionsRepoImpl);
+    let pending_blockchain_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoImpl);
+    let key_values_repo = Arc::new(KeyValuesRepoImpl);
+    let client = HttpClientImpl::new(&config_clone);
+    let blockchain_client = Arc::new(BlockchainClientImpl::new(&config_clone, client.clone()));
+    let keys_client = Arc::new(KeysClientImpl::new(&config_clone, client.clone()));
+
+    debug!("Started creating rabbit connection pool");
+
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let rabbit_thread_pool = futures_cpupool::CpuPool::new(config_clone.rabbit.thread_pool_size);
+    let rabbit_connection_manager = core
+        .run(RabbitConnectionManager::create(&config_clone))
+        .map_err(|e| {
+            log_error(&e);
+        })
+        .unwrap();
+    let rabbit_connection_pool = r2d2::Pool::builder()
+        .max_size(config_clone.rabbit.connection_pool_size as u32)
+        .connection_customizer(Box::new(ConnectionHooks))
+        .error_handler(Box::new(R2D2ErrorHandler))
+        .build(rabbit_connection_manager)
+        .expect("Cannot build rabbit connection pool");
+    debug!("Finished creating rabbit connection pool");
+    let publisher = Arc::new(TransactionPublisherImpl::new(
+        rabbit_connection_pool.clone(),
+        rabbit_thread_pool.clone(),
+    ));
+    core.run(
+        db_executor
+            .execute(move || -> Result<Vec<UserId>, ReposError> { users_repo.get_all().map(|u| u.into_iter().map(|u| u.id).collect()) })
             .map_err(|e| {
                 log_error(&e);
             })
-            .unwrap();
-        let rabbit_connection_pool = r2d2::Pool::builder()
-            .max_size(config_clone.rabbit.connection_pool_size as u32)
-            .connection_customizer(Box::new(ConnectionHooks))
-            .error_handler(Box::new(R2D2ErrorHandler))
-            .build(rabbit_connection_manager)
-            .expect("Cannot build rabbit connection pool");
-        debug!("Finished creating rabbit connection pool");
-        let publisher = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
+            .and_then(|users| {
+                publisher.init(users).map_err(|e| {
+                    log_error(&e);
+                })
+            }),
+    )
+    .unwrap();
+    let fetcher = BlockchainFetcher::new(
+        Arc::new(config_clone.clone()),
+        transactions_repo,
+        accounts_repo,
+        seen_hashes_repo,
+        blockchain_transactions_repo,
+        strange_blockchain_transactions_repo,
+        pending_blockchain_transactions_repo,
+        key_values_repo,
+        blockchain_client,
+        keys_client,
+        db_executor,
+        publisher,
+    );
+    let consumer = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
+    thread::spawn(move || {
+        let mut core = tokio_core::reactor::Core::new().unwrap();
         loop {
             info!("Subscribing to rabbit");
             let counters = Arc::new(Mutex::new((0usize, 0usize, 0usize, 0usize, 0usize)));
@@ -157,7 +179,7 @@ pub fn start_server() {
             let consumers_to_close_clone = consumers_to_close.clone();
             let fetcher_clone = fetcher.clone();
             let resubscribe_duration = Duration::from_secs(config_clone.rabbit.restart_subscription_secs as u64);
-            let subscription = publisher
+            let subscription = consumer
                 .subscribe()
                 .and_then(move |consumer_and_chans| {
                     let counters_clone = counters.clone();
@@ -259,7 +281,7 @@ pub fn create_user(name: &str) {
     let config = get_config();
     let db_pool = create_db_pool(&config);
     let cpu_pool = CpuPool::new(1);
-    let users_repo = UsersRepoImpl;
+    let users_repo = UsersRepoImpl::new(config.system.system_user_id);
     let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
     let mut new_user: NewUser = Default::default();
     new_user.name = name.to_string();

@@ -43,6 +43,11 @@ impl UsersRepo for UsersRepoMock {
         let data = self.data.lock().unwrap();
         Ok(data.iter().filter(|x| x.id == user_id).nth(0).cloned())
     }
+    fn get_all(&self) -> RepoResult<Vec<User>> {
+        let data = self.data.lock().unwrap();
+        Ok(data.clone())
+    }
+
     fn update(&self, user_id: UserId, payload: UpdateUser) -> RepoResult<User> {
         let mut data = self.data.lock().unwrap();
         let u = data
