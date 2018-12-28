@@ -20,7 +20,27 @@ pub fn post_rate(ctx: &Context) -> ControllerFuture {
                     .and_then(move |input| {
                         let input_clone = input.clone();
                         exchange_service.rate(token, input).map_err(ectx!(convert => input_clone))
-                    }).and_then(|rate| response_with_model(&rate))
+                    })
+                    .and_then(|rate| response_with_model(&rate))
+            }),
+    )
+}
+
+pub fn post_rate_refresh(ctx: &Context) -> ControllerFuture {
+    let exchange_service = ctx.exchange_service.clone();
+    let maybe_token = ctx.get_auth_token();
+    let body = ctx.body.clone();
+    Box::new(
+        maybe_token
+            .ok_or_else(|| ectx!(err ErrorContext::Token, ErrorKind::Unauthorized))
+            .into_future()
+            .and_then(move |_token| {
+                parse_body::<RateRefreshInput>(body)
+                    .and_then(move |input| {
+                        let input_clone = input.clone();
+                        exchange_service.refresh_rate(input).map_err(ectx!(convert => input_clone))
+                    })
+                    .and_then(|rate| response_with_model(&rate))
             }),
     )
 }

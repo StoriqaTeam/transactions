@@ -11,7 +11,7 @@ pub struct Error {
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Debug, Fail)]
+#[derive(Clone, Debug, Fail, PartialEq)]
 pub enum ErrorKind {
     #[fail(display = "repo error - unauthorized")]
     Unauthorized,
@@ -19,6 +19,8 @@ pub enum ErrorKind {
     Constraints(ValidationErrors),
     #[fail(display = "repo error - internal error")]
     Internal,
+    #[fail(display = "repo error - already in transaction")]
+    AlreadyInTransaction,
 }
 
 #[allow(dead_code)]
@@ -60,6 +62,7 @@ impl<'a> From<&'a DieselError> for ErrorKind {
                 errors.add("database", error);
                 ErrorKind::Constraints(errors)
             }
+            DieselError::AlreadyInTransaction => ErrorKind::AlreadyInTransaction,
             _ => ErrorKind::Internal,
         }
     }

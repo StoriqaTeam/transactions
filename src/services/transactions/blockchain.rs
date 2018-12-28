@@ -81,12 +81,6 @@ impl BlockchainService for BlockchainServiceImpl {
         input_fee_currency: Currency,
         withdrawal_currency: Currency,
     ) -> Result<FeeEstimate, Error> {
-        let base = match withdrawal_currency {
-            Currency::Btc => self.config.fees_options.btc_transaction_size,
-            Currency::Eth => self.config.fees_options.eth_gas_limit,
-            Currency::Stq => self.config.fees_options.stq_gas_limit,
-        };
-        let base = Amount::new(base as u128);
         let total_blockchain_fee_native_currency = input_gross_fee
             .checked_div(Amount::new(self.config.fees_options.fee_upside as u128))
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
@@ -113,9 +107,19 @@ impl BlockchainService for BlockchainServiceImpl {
                 .map_err(ectx!(try ErrorKind::Internal => input_rate))?;
             total_blockchain_fee_native_currency.convert(input_fee_currency, estimate_currency, rate)
         };
+
+        let base = match withdrawal_currency {
+            Currency::Btc => self.config.fees_options.btc_transaction_size,
+            Currency::Eth => self.config.fees_options.eth_gas_limit,
+            Currency::Stq => self.config.fees_options.stq_gas_limit,
+        };
+        let base = Amount::new(base as u128);
         let fee_price_int = total_blockchain_fee_esitmate_currency
             .checked_div(base)
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+
+        // Because of bad accuracy of u128 division in low bits
+        // we use f64 division if result is lower then 1000
         let fee_price = if fee_price_int < Amount::new(1000) {
             (total_blockchain_fee_esitmate_currency.raw() as f64) / (base.raw() as f64)
         } else {
@@ -148,13 +152,13 @@ impl BlockchainService for BlockchainServiceImpl {
         let raw_tx = self
             .keys_client
             .sign_transaction(create_blockchain_input.clone(), Role::User)
-            .map_err(ectx!(try convert => create_blockchain_input_clone))
+            .map_err(ectx!(try convert => create_blockchain_input_clone, Role::User))
             .wait()?;
 
         let blockchain_tx_id = self
             .blockchain_client
-            .post_bitcoin_transaction(raw_tx)
-            .map_err(ectx!(try convert))
+            .post_bitcoin_transaction(raw_tx.clone())
+            .map_err(ectx!(try convert => raw_tx))
             .wait()?;
 
         let new_pending = (create_blockchain_input, blockchain_tx_id.clone()).into();
@@ -180,16 +184,23 @@ impl BlockchainService for BlockchainServiceImpl {
         match currency {
             Currency::Eth => (),
             Currency::Stq => (),
-            _ => return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal)),
+            _ => return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::InvalidInput(currency.to_string()))),
         };
         let tx_initiator = match currency {
-            Currency::Stq => self.system_service.get_system_fees_account(Currency::Eth)?.address,
+            Currency::Stq => {
+                self.system_service
+                    .get_system_fees_account(Currency::Eth)
+                    .map_err(ectx!(try ErrorKind::Internal => Currency::Eth))?
+                    .address
+            }
             _ => from.clone(),
         };
+
+        let tx_initiator_ = tx_initiator.clone();
         let maybe_db_nonce = match currency {
             Currency::Stq | Currency::Eth => self
                 .key_values_repo
-                .get_nonce(tx_initiator.clone())
+                .get_nonce(tx_initiator_.clone())
                 .map_err(ectx!(try ErrorKind::Internal))?,
             _ => None,
         };
@@ -210,7 +221,7 @@ impl BlockchainService for BlockchainServiceImpl {
         let _ = self
             .key_values_repo
             .set_nonce(tx_initiator.clone(), nonce + 1)
-            .map_err(ectx!(try ErrorKind::Internal))?;
+            .map_err(ectx!(try ErrorKind::Internal => tx_initiator, nonce + 1))?;
 
         // TODO, at this stage transaction is dropped if there's another tx in progress
         // but this needs to be additionally verified
@@ -234,8 +245,8 @@ impl BlockchainService for BlockchainServiceImpl {
             .wait()?;
         let tx_id = self
             .blockchain_client
-            .post_ethereum_transaction(raw_tx)
-            .map_err(ectx!(try convert))
+            .post_ethereum_transaction(raw_tx.clone())
+            .map_err(ectx!(try convert => raw_tx))
             .wait()?;
 
         let tx_id = match currency {
@@ -252,5 +263,206 @@ impl BlockchainService for BlockchainServiceImpl {
             _ => (),
         };
         Ok(tx_id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use client::*;
+    use config::Config;
+    use repos::*;
+    use services::*;
+
+    fn create_blockchain_service() -> BlockchainServiceImpl {
+        let config = Arc::new(Config::new().unwrap());
+        let keys_client = Arc::new(KeysClientMock::default());
+        let blockchain_client = Arc::new(BlockchainClientMock::default());
+        let exchange_client = Arc::new(ExchangeClientMock::default());
+        let pending_blockchain_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoMock::default());
+        let key_values_repo = Arc::new(KeyValuesRepoMock::default());
+        let transfer_accounts: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let liquidity_accounts: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let fees_accounts: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let fees_accounts_dr: [Account; 3] = [Account::default(), Account::default(), Account::default()];
+        let system_service = Arc::new(SystemServiceMock::new(
+            transfer_accounts,
+            liquidity_accounts,
+            fees_accounts,
+            fees_accounts_dr,
+        ));
+        BlockchainServiceImpl::new(
+            config,
+            keys_client,
+            blockchain_client,
+            exchange_client,
+            pending_blockchain_transactions_repo,
+            key_values_repo,
+            system_service,
+        )
+    }
+
+    #[test]
+    fn test_blockchain_create_btc_happy() {
+        let service = create_blockchain_service();
+        let res = service.create_bitcoin_tx(BlockchainAddress::default(), BlockchainAddress::default(), Amount::new(0), 0f64);
+        assert!(res.is_ok());
+        let res = service.create_bitcoin_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(100500),
+            0f64,
+        );
+        assert!(res.is_ok());
+        let res = service.create_bitcoin_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(0),
+            100500f64,
+        );
+        assert!(res.is_ok());
+        let res = service.create_bitcoin_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(1005000),
+            100500f64,
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_blockchain_create_eth_happy() {
+        let service = create_blockchain_service();
+        let res = service.create_ethereum_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(0),
+            0f64,
+            Currency::Eth,
+        );
+        assert!(res.is_ok());
+
+        let res = service.create_ethereum_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(100500000000),
+            0f64,
+            Currency::Eth,
+        );
+        assert!(res.is_ok());
+
+        let res = service.create_ethereum_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(0),
+            100500f64,
+            Currency::Eth,
+        );
+        assert!(res.is_ok());
+
+        let res = service.create_ethereum_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(100500),
+            100500f64,
+            Currency::Eth,
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_blockchain_create_stq_happy() {
+        let service = create_blockchain_service();
+        let res = service.create_ethereum_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(0),
+            0f64,
+            Currency::Stq,
+        );
+        assert!(res.is_ok());
+
+        let res = service.create_ethereum_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(100500000000),
+            0f64,
+            Currency::Stq,
+        );
+        assert!(res.is_ok());
+
+        let res = service.create_ethereum_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(0),
+            100500f64,
+            Currency::Stq,
+        );
+        assert!(res.is_ok());
+
+        let res = service.create_ethereum_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(100500),
+            100500f64,
+            Currency::Stq,
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_blockchain_create_estimate_withdrawal_fee_happy() {
+        let service = create_blockchain_service();
+        let res = service.estimate_withdrawal_fee(Amount::new(0), Currency::Stq, Currency::Stq);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(100500000), Currency::Stq, Currency::Stq);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(0), Currency::Stq, Currency::Eth);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(100500000), Currency::Stq, Currency::Eth);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(0), Currency::Stq, Currency::Btc);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(100500000), Currency::Stq, Currency::Btc);
+        assert!(res.is_ok());
+
+        let res = service.estimate_withdrawal_fee(Amount::new(0), Currency::Eth, Currency::Stq);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(100500000), Currency::Eth, Currency::Stq);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(0), Currency::Eth, Currency::Eth);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(100500000), Currency::Eth, Currency::Eth);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(0), Currency::Eth, Currency::Btc);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(100500000), Currency::Eth, Currency::Btc);
+        assert!(res.is_ok());
+
+        let res = service.estimate_withdrawal_fee(Amount::new(0), Currency::Btc, Currency::Stq);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(100500000), Currency::Btc, Currency::Stq);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(0), Currency::Btc, Currency::Eth);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(100500000), Currency::Btc, Currency::Eth);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(0), Currency::Btc, Currency::Btc);
+        assert!(res.is_ok());
+        let res = service.estimate_withdrawal_fee(Amount::new(100500000), Currency::Btc, Currency::Btc);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_blockchain_create_eth_wrong_currency() {
+        let service = create_blockchain_service();
+        let res = service.create_ethereum_tx(
+            BlockchainAddress::default(),
+            BlockchainAddress::default(),
+            Amount::new(0),
+            0f64,
+            Currency::Btc,
+        );
+        assert!(res.is_err());
     }
 }

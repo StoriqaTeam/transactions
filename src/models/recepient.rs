@@ -13,6 +13,10 @@ pub enum RecepientType {
 pub struct Recepient(String);
 
 impl Recepient {
+    #[cfg(test)]
+    pub fn new(rec: String) -> Self {
+        Recepient(rec)
+    }
     pub fn to_account_id(&self) -> Result<AccountId, ()> {
         AccountId::from_str(&self.0).map_err(|_| ())
     }

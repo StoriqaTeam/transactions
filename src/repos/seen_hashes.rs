@@ -9,6 +9,7 @@ use schema::seen_hashes::dsl::*;
 
 pub trait SeenHashesRepo: Send + Sync + 'static {
     fn create(&self, payload: NewSeenHashes) -> RepoResult<SeenHashes>;
+    fn upsert(&self, payload: NewSeenHashes) -> RepoResult<SeenHashes>;
     fn get(&self, hash_: BlockchainTransactionId, currency_: Currency) -> RepoResult<Option<SeenHashes>>;
 }
 
@@ -27,6 +28,22 @@ impl SeenHashesRepo for SeenHashesRepoImpl {
                 })
         })
     }
+    fn upsert(&self, payload: NewSeenHashes) -> RepoResult<SeenHashes> {
+        with_tls_connection(|conn| {
+            diesel::insert_into(seen_hashes)
+                .values(payload.clone())
+                .on_conflict((hash, currency))
+                .do_update()
+                // this will guarantee that tx is returned, unlike do_nothing case
+                .set(hash.eq(payload.hash.clone()))
+                .get_result::<SeenHashes>(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => payload)
+                })
+        })
+    }
+
     fn get(&self, hash_: BlockchainTransactionId, currency_: Currency) -> RepoResult<Option<SeenHashes>> {
         with_tls_connection(|conn| {
             seen_hashes

@@ -1,0 +1,2 @@
+ALTER TABLE transactions
+  ADD COLUMN meta JSONB NOT NULL DEFAULT '{}';

@@ -16,3 +16,12 @@ subcommands:
                 help: name of a user
                 required: true
                 takes_value: true
+    - repair_approval_pending_transaction:
+        about: Creates reversal transaction and removes old one from pending, sets `done` state 
+        args:
+            - id:
+                short: id
+                long: transaction_id
+                help: transaction id from transactions table
+                required: true
+                takes_value: true

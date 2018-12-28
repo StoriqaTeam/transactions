@@ -2,7 +2,8 @@ use chrono::NaiveDateTime;
 
 use diesel::sql_types::Numeric;
 use diesel::sql_types::Uuid as SqlUuid;
-use validator::Validate;
+use serde_json::Value;
+use validator::{Validate, ValidationError};
 
 use models::*;
 use schema::transactions;
@@ -23,6 +24,7 @@ pub struct Transaction {
     pub kind: TransactionKind,
     pub group_kind: TransactionGroupKind,
     pub related_tx: Option<TransactionId>,
+    pub meta: Value,
 }
 
 #[derive(Debug, Queryable, Clone, QueryableByName)]
@@ -51,6 +53,7 @@ impl Default for Transaction {
             kind: TransactionKind::Internal,
             group_kind: TransactionGroupKind::Internal,
             related_tx: None,
+            meta: json!({}),
         }
     }
 }
@@ -70,6 +73,7 @@ pub struct NewTransaction {
     pub kind: TransactionKind,
     pub group_kind: TransactionGroupKind,
     pub related_tx: Option<TransactionId>,
+    pub meta: Option<Value>,
 }
 
 impl Default for NewTransaction {
@@ -88,11 +92,42 @@ impl Default for NewTransaction {
             kind: TransactionKind::Internal,
             group_kind: TransactionGroupKind::Internal,
             related_tx: None,
+            meta: None,
         }
     }
 }
 
+fn valid_rate(input: f64) -> Result<(), ValidationError> {
+    if input > 0f64 {
+        Ok(())
+    } else {
+        let mut error = ValidationError::new("le_zero");
+        error.message = Some("Value is less or equal zero".into());
+        error.add_param("value".into(), &input.to_string());
+        Err(error)
+    }
+}
+
+fn valid_exchange(input: &CreateTransactionInput) -> Result<(), ValidationError> {
+    if input.exchange_id.is_some() {
+        if input.exchange_rate.is_some() {
+            Ok(())
+        } else {
+            let mut error = ValidationError::new("not_present");
+            error.message = Some("Exchange id presents, but exchange rate doesn't".into());
+            Err(error)
+        }
+    } else if input.exchange_rate.is_some() {
+        let mut error = ValidationError::new("not_present");
+        error.message = Some("Exchange rate presents, but exchange id doesn't".into());
+        Err(error)
+    } else {
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Validate)]
+#[validate(schema(function = "valid_exchange", skip_on_field_errors = "false"))]
 pub struct CreateTransactionInput {
     pub id: TransactionId,
     pub user_id: UserId,
@@ -104,6 +139,7 @@ pub struct CreateTransactionInput {
     pub value_currency: Currency,
     pub fee: Amount,
     pub exchange_id: Option<ExchangeId>,
+    #[validate(custom = "valid_rate")]
     pub exchange_rate: Option<f64>,
 }
 

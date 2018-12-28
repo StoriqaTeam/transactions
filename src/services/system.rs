@@ -34,7 +34,8 @@ impl SystemService for SystemServiceImpl {
         };
         let acc = self
             .accounts_repo
-            .get(acc_id)?
+            .get(acc_id.clone())
+            .map_err(ectx!(try ErrorKind::Internal => acc_id))?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
         Ok(acc)
     }
@@ -47,7 +48,8 @@ impl SystemService for SystemServiceImpl {
         };
         let acc = self
             .accounts_repo
-            .get(acc_id)?
+            .get(acc_id.clone())
+            .map_err(ectx!(try ErrorKind::Internal => acc_id))?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
         Ok(acc)
     }
@@ -60,7 +62,8 @@ impl SystemService for SystemServiceImpl {
         };
         let acc = self
             .accounts_repo
-            .get(acc_id)?
+            .get(acc_id.clone())
+            .map_err(ectx!(try ErrorKind::Internal => acc_id))?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound => currency))?;
         Ok(acc)
     }
@@ -74,7 +77,8 @@ impl SystemService for SystemServiceImpl {
         let dr_acc_id = acc_id.derive_system_dr_id();
         let acc = self
             .accounts_repo
-            .get(dr_acc_id)?
+            .get(dr_acc_id.clone())
+            .map_err(ectx!(try ErrorKind::Internal => dr_acc_id))?
             .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
         Ok(acc)
     }

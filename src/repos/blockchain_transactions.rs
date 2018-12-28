@@ -9,6 +9,7 @@ use schema::blockchain_transactions::dsl::*;
 
 pub trait BlockchainTransactionsRepo: Send + Sync + 'static {
     fn create(&self, payload: NewBlockchainTransactionDB) -> RepoResult<BlockchainTransactionDB>;
+    fn upsert(&self, payload: NewBlockchainTransactionDB) -> RepoResult<BlockchainTransactionDB>;
     fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<BlockchainTransactionDB>>;
 }
 
@@ -27,6 +28,22 @@ impl BlockchainTransactionsRepo for BlockchainTransactionsRepoImpl {
                 })
         })
     }
+    fn upsert(&self, payload: NewBlockchainTransactionDB) -> RepoResult<BlockchainTransactionDB> {
+        with_tls_connection(|conn| {
+            diesel::insert_into(blockchain_transactions)
+                .values(payload.clone())
+                .on_conflict(hash)
+                .do_update()
+                // this will guarantee that tx is returned, unlike do_nothing case
+                .set(hash.eq(payload.hash.clone()))
+                .get_result::<BlockchainTransactionDB>(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(err e, error_kind => payload)
+                })
+        })
+    }
+
     fn get(&self, hash_: BlockchainTransactionId) -> RepoResult<Option<BlockchainTransactionDB>> {
         with_tls_connection(|conn| {
             blockchain_transactions

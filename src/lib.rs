@@ -55,6 +55,7 @@ mod services;
 mod utils;
 
 use std::io;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -73,8 +74,9 @@ use self::client::HttpClientImpl;
 use self::models::*;
 use self::prelude::*;
 use self::repos::{
-    AccountsRepo, AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError,
-    ErrorKind as ReposErrorKind, PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl, StrangeBlockchainTransactionsRepoImpl,
+    AccountsRepo, AccountsRepoImpl, BlockchainTransactionsRepo, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl,
+    Error as ReposError, ErrorKind as ReposErrorKind, Isolation, KeyValuesRepoImpl, PendingBlockchainTransactionsRepo,
+    PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl, StrangeBlockchainTransactionsRepoImpl, TransactionsRepo,
     TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
 };
 use client::{BlockchainClientImpl, KeysClient, KeysClientImpl};
@@ -110,9 +112,10 @@ pub fn start_server() {
     let accounts_repo = Arc::new(AccountsRepoImpl);
     let seen_hashes_repo = Arc::new(SeenHashesRepoImpl);
     let blockchain_transactions_repo = Arc::new(BlockchainTransactionsRepoImpl);
-    let users_repo = Arc::new(UsersRepoImpl::new(config.system.system_user_id));
+    let users_repo = UsersRepoImpl::new(config.system.system_user_id);
     let strange_blockchain_transactions_repo = Arc::new(StrangeBlockchainTransactionsRepoImpl);
     let pending_blockchain_transactions_repo = Arc::new(PendingBlockchainTransactionsRepoImpl);
+    let key_values_repo = Arc::new(KeyValuesRepoImpl);
     let client = HttpClientImpl::new(&config_clone);
     let blockchain_client = Arc::new(BlockchainClientImpl::new(&config_clone, client.clone()));
     let keys_client = Arc::new(KeysClientImpl::new(&config_clone, client.clone()));
@@ -156,6 +159,7 @@ pub fn start_server() {
         blockchain_transactions_repo,
         strange_blockchain_transactions_repo,
         pending_blockchain_transactions_repo,
+        key_values_repo,
         blockchain_client,
         keys_client,
         db_executor,
@@ -225,10 +229,12 @@ pub fn start_server() {
                                         Either::B(future::ok(()))
                                     }
                                 })
-                            }).map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
+                            })
+                            .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
                     });
                     future::join_all(futures)
-                }).map_err(|e| {
+                })
+                .map_err(|e| {
                     log_error(&e);
                 });
             let _ = core
@@ -250,9 +256,11 @@ pub fn start_server() {
                             channel
                                 .cancel_consumer(consumer_tag.to_string())
                                 .and_then(move |_| channel.close(0, "Cancelled on consumer resubscribe"))
-                        }).collect();
+                        })
+                        .collect();
                     future::join_all(fs)
-                })).map(|_| ())
+                }))
+                .map(|_| ())
                 .map_err(|e: io::Error| {
                     error!("Error closing consumer {}", e);
                 });
@@ -277,6 +285,60 @@ pub fn create_user(name: &str) {
     let fut = db_executor.execute(move || -> Result<(), ReposError> {
         let user = users_repo.create(new_user).expect("Failed to create user");
         println!("{}", user.authentication_token.raw());
+        Ok(())
+    });
+    hyper::rt::run(fut.map(|_| ()).map_err(|_| ()));
+}
+
+pub fn repair_approval_pending_transaction(id: &str) {
+    let config = get_config();
+    let db_pool = create_db_pool(&config);
+    let cpu_pool = CpuPool::new(1);
+    let transactions_repo = TransactionsRepoImpl::new(config.system.system_user_id);
+    let blockchain_transactions_repo = BlockchainTransactionsRepoImpl;
+    let pending_blockchain_transactions_repo = PendingBlockchainTransactionsRepoImpl;
+    let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
+    let id = TransactionId::from_str(id).expect("Failed to parse transaction id");
+    let fut = db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || -> Result<(), ReposError> {
+        let transaction = transactions_repo.get(id).expect("Failed to get transaction");
+        let transaction = transaction.expect("Failed to find transaction");
+        if transaction.kind != TransactionKind::ApprovalTransfer {
+            panic!("Transaction kind is not approval");
+        }
+        if transaction.status != TransactionStatus::Pending {
+            panic!("Transaction status is not pending");
+        }
+        let hash = transaction.blockchain_tx_id.expect("Failed to get blockchain tx hash");
+        let pending_transaction = pending_blockchain_transactions_repo
+            .delete(hash.clone())
+            .expect("Failed to delete pending blockchain transaction");
+        let pending_transaction = pending_transaction.expect("Failed to find pending blockchain transaction");
+        let payload: NewBlockchainTransactionDB = pending_transaction.into();
+        blockchain_transactions_repo
+            .create(payload)
+            .expect("Failed to create blockchain transaction");
+        let payload = NewTransaction {
+            id: TransactionId::generate(),
+            gid: transaction.gid,
+            user_id: transaction.user_id,
+            dr_account_id: transaction.cr_account_id,
+            cr_account_id: transaction.dr_account_id,
+            currency: transaction.currency,
+            value: transaction.value,
+            status: TransactionStatus::Done,
+            blockchain_tx_id: Some(hash.clone()),
+            kind: TransactionKind::Reversal,
+            group_kind: TransactionGroupKind::Internal,
+            related_tx: Some(id),
+            meta: Some(serde_json::Value::String(format!(
+                "revers of approval transaction with id {}",
+                transaction.id
+            ))),
+        };
+        transactions_repo.create(payload).expect("Failed to create transaction");
+        transactions_repo
+            .update_status(hash, TransactionStatus::Done)
+            .expect("Failed to create transaction");
         Ok(())
     });
     hyper::rt::run(fut.map(|_| ()).map_err(|_| ()));
@@ -319,9 +381,11 @@ pub fn upsert_system_accounts() {
                     users_repo.create(new_user)
                 }
             }
-        }).map_err(|e| {
+        })
+        .map_err(|e| {
             log_error(&e.compat());
-        }).and_then(move |user| {
+        })
+        .and_then(move |user| {
             let keys_client = keys_client.clone();
             let inputs = [
                 (btc_transfer_account_id, user.id, Currency::Btc, "btc_transfer_account"),
@@ -341,7 +405,8 @@ pub fn upsert_system_accounts() {
                     let db_executor = db_executor.clone();
 
                     upsert_system_account(*account_id, *user_id, *currency, name, keys_client, db_executor)
-                }).collect();
+                })
+                .collect();
             futures::future::join_all(fs)
         });
 
@@ -401,7 +466,8 @@ fn upsert_system_account(
                     Ok(())
                 }
             }
-        }).map(|_| ())
+        })
+        .map(|_| ())
         .map_err(|e| log_error(&e))
 }
 

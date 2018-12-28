@@ -6,6 +6,7 @@ use futures_cpupool::CpuPool;
 
 use super::error::*;
 use prelude::*;
+use utils::log_error;
 
 thread_local! {
     pub static DB_CONN: RefCell<Option<PgPooledConnection>> = RefCell::new(None)
@@ -116,12 +117,19 @@ impl DbExecutor for DbExecutorImpl {
                                     *err_ref = Some(e);
                                     DieselError::RollbackTransaction
                                 })
-                            }).map_err(ectx!(ErrorSource::Diesel, ErrorKind::Internal))
+                            })
+                            .map_err(|e: DieselError| match e {
+                                DieselError::AlreadyInTransaction => ectx!(err ErrorSource::Diesel, ErrorKind::AlreadyInTransaction),
+                                _ => ectx!(err ErrorSource::Diesel, ErrorKind::Internal),
+                            })
                     })
                 };
                 res.map_err(|e| {
-                    let e: E = err.unwrap_or_else(|| e.into());
+                    if e.kind() == ErrorKind::AlreadyInTransaction {
+                        rollback_transaction(tls_conn_cell);
+                    }
                     remove_connection_from_tls_if_broken(tls_conn_cell);
+                    let e: E = err.unwrap_or_else(|| e.into());
                     e
                 })
             })
@@ -189,4 +197,15 @@ fn remove_connection_from_tls_if_broken(tls_conn_cell: &RefCell<Option<PgPooledC
     if is_broken {
         *maybe_conn = None;
     }
+}
+
+/// Rollback transaction
+fn rollback_transaction(tls_conn_cell: &RefCell<Option<PgPooledConnection>>) {
+    let maybe_conn = tls_conn_cell.borrow_mut();
+    if let Some(ref conn) = *maybe_conn {
+        let result = conn.execute("ROLLBACK");
+        if let Err(ref e) = result {
+            log_error(e);
+        }
+    };
 }

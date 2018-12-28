@@ -18,6 +18,7 @@ use utils::read_body;
 pub trait ExchangeClient: Send + Sync + 'static {
     fn exchange(&self, exchange: ExchangeInput, role: Role) -> Box<Future<Item = Exchange, Error = Error> + Send>;
     fn rate(&self, exchange: RateInput, role: Role) -> Box<Future<Item = Rate, Error = Error> + Send>;
+    fn refresh_rate(&self, exchange: RateRefreshInput, role: Role) -> Box<Future<Item = RateRefresh, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -71,7 +72,8 @@ impl ExchangeClientImpl {
             .and_then(|bytes| {
                 let bytes_clone = bytes.clone();
                 String::from_utf8(bytes).map_err(ectx!(ErrorSource::Utf8, ErrorKind::Internal => bytes_clone))
-            }).and_then(|string| serde_json::from_str::<T>(&string).map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => string)))
+            })
+            .and_then(|string| serde_json::from_str::<T>(&string).map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => string)))
     }
 }
 
@@ -101,6 +103,19 @@ impl ExchangeClient for ExchangeClientImpl {
                 }),
         )
     }
+
+    fn refresh_rate(&self, input: RateRefreshInput, role: Role) -> Box<Future<Item = RateRefresh, Error = Error> + Send> {
+        let client = self.clone();
+        Box::new(
+            serde_json::to_string(&input)
+                .map_err(ectx!(ErrorSource::Json, ErrorKind::Internal => input))
+                .into_future()
+                .and_then(move |body| {
+                    let url = "/rate/refresh";
+                    client.exec_query::<RateRefresh>(&url, body, Method::POST, role)
+                }),
+        )
+    }
 }
 
 #[derive(Default)]
@@ -110,6 +125,7 @@ impl ExchangeClient for ExchangeClientMock {
     fn exchange(&self, _exchange: ExchangeInput, _role: Role) -> Box<Future<Item = Exchange, Error = Error> + Send> {
         Box::new(Ok(Exchange::default()).into_future())
     }
+
     fn rate(&self, _exchange: RateInput, _role: Role) -> Box<Future<Item = Rate, Error = Error> + Send> {
         Box::new(
             Ok(Rate {
@@ -122,7 +138,28 @@ impl ExchangeClient for ExchangeClientMock {
                 to: Default::default(),
                 amount: Default::default(),
                 rate: Default::default(),
-            }).into_future(),
+            })
+            .into_future(),
+        )
+    }
+
+    fn refresh_rate(&self, _input: RateRefreshInput, _role: Role) -> Box<Future<Item = RateRefresh, Error = Error> + Send> {
+        Box::new(
+            Ok(RateRefresh {
+                exchange: Rate {
+                    expiration: ::chrono::Utc::now().naive_utc(),
+                    created_at: ::chrono::Utc::now().naive_utc(),
+                    updated_at: ::chrono::Utc::now().naive_utc(),
+                    amount_currency: Default::default(),
+                    id: Default::default(),
+                    from: Default::default(),
+                    to: Default::default(),
+                    amount: Default::default(),
+                    rate: Default::default(),
+                },
+                is_new_rate: false,
+            })
+            .into_future(),
         )
     }
 }

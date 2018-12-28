@@ -64,7 +64,8 @@ pub fn init(config: &Config) {
         .format(|formatter, record| {
             let now = Utc::now();
             writeln!(formatter, "{} - {:5} - {}", now.to_rfc3339(), record.level(), record.args())
-        }).filter(None, LogLevelFilter::Info);
+        })
+        .filter(None, LogLevelFilter::Info);
 
     if let Ok(v) = env::var("RUST_LOG") {
         builder.parse(&v);

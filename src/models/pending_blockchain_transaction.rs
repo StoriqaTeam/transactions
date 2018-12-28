@@ -87,3 +87,10 @@ impl Default for NewPendingBlockchainTransactionDB {
         }
     }
 }
+
+impl From<PendingBlockchainTransactionDB> for NewBlockchainTransactionDB {
+    fn from(transaction: PendingBlockchainTransactionDB) -> Self {
+        let bl: BlockchainTransaction = transaction.into();
+        bl.into()
+    }
+}

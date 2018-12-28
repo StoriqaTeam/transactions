@@ -12,7 +12,7 @@ use models::*;
 use prelude::*;
 use rabbit::TransactionPublisher;
 use repos::{
-    AccountsRepo, BlockchainTransactionsRepo, DbExecutor, PendingBlockchainTransactionsRepo, SeenHashesRepo,
+    AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, KeyValuesRepo, PendingBlockchainTransactionsRepo, SeenHashesRepo,
     StrangeBlockchainTransactionsRepo, TransactionsRepo,
 };
 use serde_json;
@@ -34,6 +34,7 @@ pub struct BlockchainFetcher<E: DbExecutor> {
     blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
     strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
     pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+    key_values_repo: Arc<KeyValuesRepo>,
     system_service: Arc<SystemService>,
     converter_service: Arc<ConverterService>,
     blockchain_client: Arc<BlockchainClient>,
@@ -51,6 +52,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         blockchain_transactions_repo: Arc<BlockchainTransactionsRepo>,
         strange_blockchain_transactions_repo: Arc<StrangeBlockchainTransactionsRepo>,
         pending_blockchain_transactions_repo: Arc<PendingBlockchainTransactionsRepo>,
+        key_values_repo: Arc<KeyValuesRepo>,
         blockchain_client: Arc<BlockchainClient>,
         keys_client: Arc<KeysClient>,
         db_executor: E,
@@ -71,6 +73,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             blockchain_transactions_repo,
             strange_blockchain_transactions_repo,
             pending_blockchain_transactions_repo,
+            key_values_repo,
             system_service,
             converter_service,
             blockchain_client,
@@ -112,7 +115,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let self_clone = self.clone();
         parse_transaction(data)
             .into_future()
-            .and_then(move |tx| db_executor.execute_transaction(move || self_clone.handle_transaction(&tx)))
+            .and_then(move |tx| db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || self_clone.handle_transaction(&tx)))
             .and_then(move |txs| {
                 if !txs.is_empty() {
                     Either::A(converter.convert_transaction(txs).into_future().and_then(move |tx_out| {
@@ -136,7 +139,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
     fn handle_transaction(&self, blockchain_tx: &BlockchainTransaction) -> Result<Vec<Transaction>, Error> {
         let normalized_tx = blockchain_tx
             .normalized()
-            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => blockchain_tx))?;
         // already processed this transaction - skipping
         if let Some(_) = self.seen_hashes_repo.get(normalized_tx.hash.clone(), normalized_tx.currency)? {
             return Ok(vec![]);
@@ -154,7 +157,8 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                     .get(0)
                     .ok_or(
                         ectx!(try err ErrorContext::InvalidBlockchainTransactionStructure, ErrorKind::Internal => blockchain_tx.clone()),
-                    )?.clone();
+                    )?
+                    .clone();
                 if let Some(account) = self.accounts_repo.get_by_address(from.clone(), Currency::Stq, AccountKind::Dr)? {
                     if !account.erc20_approved {
                         let changeset = UpdateAccount {
@@ -229,6 +233,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 kind: TransactionKind::BlockchainFee,
                 group_kind: tx.group_kind,
                 related_tx: None,
+                meta: None,
             };
             self.transactions_repo.create(fee_tx)?;
             self.seen_hashes_repo.create(NewSeenHashes {
@@ -259,16 +264,22 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
 
         let mut transactions_out = vec![];
 
+        let mut idx = 0;
         for to_dr_account in matched_dr_accounts {
+            let Account {
+                address: to_dr_address,
+                currency: to_dr_currency,
+                ..
+            } = to_dr_account.clone();
             let to_entry = blockchain_tx
                 .to
                 .iter()
-                .find(|entry| entry.address == to_dr_account.address)
-                .unwrap();
+                .find(|entry| entry.address == to_dr_address.clone())
+                .ok_or(ectx!(try err ErrorContext::MissingAddressInTx, ErrorKind::Internal => to_dr_address.clone()))?;
             let to_cr_account = self
                 .accounts_repo
-                .get_by_address(to_dr_account.address.clone(), to_dr_account.currency, AccountKind::Cr)?
-                .unwrap();
+                .get_by_address(to_dr_address.clone(), to_dr_currency.clone(), AccountKind::Cr)?
+                .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => to_dr_address, to_dr_currency, AccountKind::Cr))?;
             let tx_id = TransactionId::generate();
             let new_tx = NewTransaction {
                 id: tx_id,
@@ -283,11 +294,19 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 kind: TransactionKind::Deposit,
                 group_kind: TransactionGroupKind::Deposit,
                 related_tx: None,
+                meta: None,
             };
             let dr_transaction = self.transactions_repo.create(new_tx)?;
             transactions_out.push(dr_transaction);
-
-            self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
+            // don't need to create these more than one time, or conflict will be o/w
+            if idx == 0 {
+                self.blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
+                self.seen_hashes_repo.create(NewSeenHashes {
+                    hash: blockchain_tx.hash.clone(),
+                    block_number: blockchain_tx.block_number as i64,
+                    currency: blockchain_tx.currency,
+                })?;
+            };
             // approve account if balance has passed threshold
             if (to_dr_account.currency == Currency::Stq) && !to_dr_account.erc20_approved {
                 let balance = self
@@ -301,12 +320,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                     });
                 }
             }
-
-            self.seen_hashes_repo.create(NewSeenHashes {
-                hash: blockchain_tx.hash.clone(),
-                block_number: blockchain_tx.block_number as i64,
-                currency: blockchain_tx.currency,
-            })?;
+            idx += 1;
         }
         Ok(transactions_out)
     }
@@ -400,9 +414,30 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let eth_fees_cr_account = self.system_service.get_system_fees_account(Currency::Eth)?;
         let eth_fees_dr_account = self.system_service.get_system_fees_account_dr(Currency::Eth)?;
 
-        let eth_fees_account_nonce = core
-            .run(self.blockchain_client.get_ethereum_nonce(eth_fees_dr_account.address.clone()))
-            .map_err(ectx!(try ErrorKind::Internal => account.clone()))?;
+        let tx_initiator = eth_fees_dr_account.address.clone();
+
+        let maybe_db_nonce = self
+            .key_values_repo
+            .get_nonce(tx_initiator.clone())
+            .map_err(ectx!(try ErrorKind::Internal))?;
+
+        let tx_initiator_ = tx_initiator.clone();
+        let ethereum_nonce = core.run(
+            self.blockchain_client
+                .get_ethereum_nonce(tx_initiator.clone())
+                .map_err(ectx!(try convert => tx_initiator_)),
+        )?;
+
+        let eth_fees_account_nonce = match (maybe_db_nonce, ethereum_nonce) {
+            (None, ethereum_nonce) => ethereum_nonce,
+            // if for some reason we missed blockchain nonce
+            (Some(db_nonce), ethereum_nonce) => db_nonce.max(ethereum_nonce),
+        };
+
+        let _ = self
+            .key_values_repo
+            .set_nonce(tx_initiator.clone(), eth_fees_account_nonce + 1)
+            .map_err(ectx!(try ErrorKind::Internal))?;
 
         let id = TransactionId::generate();
         let next_id = id.next();
@@ -445,6 +480,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             kind: TransactionKind::ApprovalTransfer,
             group_kind: TransactionGroupKind::Approval,
             related_tx: None,
+            meta: None,
         };
         let new_pending_eth = (eth_transfer_blockchain_tx.clone(), eth_tx_id.clone()).into();
         // Note - we don't rollback here, because the tx is already in blockchain. so after that just silently
@@ -495,7 +531,8 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                     .blockchain_client
                     .post_ethereum_transaction(approve_raw_tx)
                     .map_err(ectx!(ErrorKind::Internal => eth_approve_blockchain_tx_clone))
-            }).and_then(move |approve_tx_id| {
+            })
+            .and_then(move |approve_tx_id| {
                 // logs from blockchain gw erc20 comes with log number in hash
                 let approve_tx_id = BlockchainTransactionId::new(format!("{}:0", approve_tx_id.inner()));
                 let new_pending_approve = (eth_approve_blockchain_tx_clone2, approve_tx_id.clone()).into();

@@ -44,6 +44,30 @@ paths:
             schema:
               $ref: '#/components/schemas/RateInput'
 
+  /rate/refresh:
+    post:
+      summary: Refreshes the expiration date of the exchange rate if it didn't change much. Otherwise creates a new exchange rate
+      security: 
+        - Bearer: []
+      tags:
+        - exchange
+      responses:
+        200:
+          description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateRefreshResponse'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/Internal'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RateRefreshInput'
+
   /accounts/{accountId}/balances:
     get:
       summary: Returns balance of account
@@ -410,6 +434,17 @@ components:
           $ref: '#/components/schemas/TimeStamp'
         updatedAt:
           $ref: '#/components/schemas/TimeStamp'
+    RateRefreshResponse:
+      type: object
+      description: >
+        Refreshed or new current exchange rate.
+      properties:
+        exchange:
+          $ref: '#/components/schemas/RateResponse'
+        isNewRate:
+          type: boolean
+          description: Indicates whether the returned exchange rate is refreshed or newly created
+          example: false
     RateInput:
       type: object
       required:
@@ -426,6 +461,13 @@ components:
           $ref: '#/components/schemas/Currency'
         amount:
           $ref: '#/components/schemas/Value'
+    RateRefreshInput:
+      type: object
+      required:
+        - exchangeId
+      properties:
+        exchangeId:
+          $ref: '#/components/schemas/Uuid'
     Currency:
       type: string
       description: >-

@@ -19,7 +19,7 @@ use schema::transactions::dsl::*;
 const MIN_SIGNIFICANT_SATOSHIS: u128 = 1000;
 // 0.0005 ETH
 const MIN_SIGNIFICANT_ETH: u128 = 500_000_000_000_000;
-// 100 STQ
+// 1 STQ
 const MIN_SIGNIFICANT_STQ: u128 = 1_000_000_000_000_000_000;
 
 pub trait TransactionsRepo: Send + Sync + 'static {
@@ -38,13 +38,7 @@ pub trait TransactionsRepo: Send + Sync + 'static {
     fn list_groups_for_user_skip_approval(&self, user_id: UserId, offset: i64, limit: i64) -> RepoResult<Vec<Transaction>>;
     fn get_system_balances(&self) -> RepoResult<HashMap<AccountId, (Amount, Amount)>>;
     fn get_blockchain_balances(&self) -> RepoResult<HashMap<(BlockchainAddress, Currency), (Amount, Amount)>>;
-    fn get_accounts_for_withdrawal(
-        &self,
-        value: Amount,
-        currency: Currency,
-        user_id: UserId,
-        total_fee: Amount,
-    ) -> RepoResult<Vec<AccountWithBalance>>;
+    fn get_accounts_for_withdrawal(&self, value: Amount, currency: Currency, total_fee: Amount) -> RepoResult<Vec<AccountWithBalance>>;
 }
 
 #[derive(Debug, Clone, Queryable, QueryableByName)]
@@ -408,7 +402,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
                         .filter(|tx| match account.kind {
                             AccountKind::Cr => tx.cr_account_id == account.id,
                             AccountKind::Dr => tx.dr_account_id == account.id,
-                        }).fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
+                        })
+                        .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
                         .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
                     let minus = txs_grouped
                         .get(&account.id)
@@ -417,7 +412,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
                         .filter(|tx| match account.kind {
                             AccountKind::Cr => tx.dr_account_id == account.id,
                             AccountKind::Dr => tx.cr_account_id == account.id,
-                        }).fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
+                        })
+                        .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|val| val.checked_add(elem.value)))
                         .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
                     let balance = plus
                         .checked_sub(minus)
@@ -426,7 +422,8 @@ impl TransactionsRepo for TransactionsRepoImpl {
                         account: account.clone(),
                         balance,
                     })
-                }).collect()
+                })
+                .collect()
         })
     }
 
@@ -437,7 +434,6 @@ impl TransactionsRepo for TransactionsRepoImpl {
         &self,
         mut value_: Amount,
         currency_: Currency,
-        user_id_: UserId,
         total_fee: Amount,
     ) -> RepoResult<Vec<AccountWithBalance>> {
         with_tls_connection(|conn| {
@@ -456,16 +452,15 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 Currency::Stq => MIN_SIGNIFICANT_STQ,
             };
             // get all dr accounts
-            let dr_sum_accounts: Vec<TransactionSum> =
-                sql_query(
-                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE currency = $1 AND user_id = $2 GROUP BY dr_account_id")
-                    .bind::<VarChar, _>(currency_)
-                    .bind::<SqlUuid, _>(user_id_)
-                    .get_results(conn)
-                    .map_err(move |e| {
-                        let error_kind = ErrorKind::from(&e);
-                        ectx!(try err e, error_kind)
-                    })?;
+            let dr_sum_accounts: Vec<TransactionSum> = sql_query(
+                "SELECT SUM(value) as sum, dr_account_id as account_id FROM transactions WHERE currency = $1 GROUP BY dr_account_id",
+            )
+            .bind::<VarChar, _>(currency_)
+            .get_results(conn)
+            .map_err(move |e| {
+                let error_kind = ErrorKind::from(&e);
+                ectx!(try err e, error_kind)
+            })?;
             let mut dr_sum_accounts = dr_sum_accounts
                 .into_iter()
                 .map(|r: TransactionSum| (r.account_id, r.sum))
@@ -473,14 +468,14 @@ impl TransactionsRepo for TransactionsRepoImpl {
 
             // get all cr accounts
             let cr_sum_accounts: Vec<TransactionSum> = sql_query(
-                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 AND user_id = $2 GROUP BY cr_account_id")
-                .bind::<VarChar, _>(currency_)
-                .bind::<SqlUuid, _>(user_id_)
-                .get_results(conn)
-                .map_err(move |e| {
-                    let error_kind = ErrorKind::from(&e);
-                    ectx!(try err e, error_kind)
-                })?;
+                "SELECT SUM(value) as sum, cr_account_id as account_id FROM transactions WHERE currency = $1 GROUP BY cr_account_id",
+            )
+            .bind::<VarChar, _>(currency_)
+            .get_results(conn)
+            .map_err(move |e| {
+                let error_kind = ErrorKind::from(&e);
+                ectx!(try err e, error_kind)
+            })?;
 
             // get accounts balance
             for tr in cr_sum_accounts {
@@ -495,13 +490,12 @@ impl TransactionsRepo for TransactionsRepoImpl {
 
             // filtering accounts with pending transactions
             let pending_transactions: Vec<Transaction> = transactions
-                .filter(user_id.eq(&user_id_))
                 .filter(currency.eq(currency_))
                 .filter(status.eq(TransactionStatus::Pending))
                 .get_results(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
-                    ectx!(try err e, error_kind => value_, currency_, user_id_)
+                    ectx!(try err e, error_kind => value_, currency_)
                 })?;
 
             for tx in pending_transactions {
@@ -528,11 +522,13 @@ impl TransactionsRepo for TransactionsRepoImpl {
                 .map(|acc| {
                     let balance = remaining_accounts.get(&acc.id).cloned().unwrap_or_default();
                     (acc, balance)
-                }).collect();
+                })
+                .filter(|(acc, _)| currency_ != Currency::Stq || acc.erc20_approved)
+                .collect();
 
             // calculating accounts to take
             let mut r = vec![];
-            for (acc, balance) in res_accounts {
+            for (acc, balance) in res_accounts.clone() {
                 // Note - it may seem counter intuitive that we subtract total_fee from each account
                 // rather than from only one. But in reality you will incur the fee on each blockchain
                 // transaction.
@@ -553,7 +549,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
             if value_ == Amount::new(0) {
                 Ok(r)
             } else {
-                Err(ectx!(err ErrorContext::InsufficientWithdrawalFunds, ErrorKind::Internal))
+                Err(ectx!(err ErrorContext::InsufficientWithdrawalFunds, ErrorKind::Internal => res_accounts, value_))
             }
         })
     }

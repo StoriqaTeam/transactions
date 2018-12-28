@@ -122,6 +122,7 @@ impl Service for ApiService {
                         POST /v1/transactions => post_transactions,
                         GET /v1/transactions/{transaction_id: TransactionId} => get_transactions,
                         POST /v1/rate => post_rate,
+                        POST /v1/rate/refresh => post_rate_refresh,
                         POST /v1/fees => post_fees,
                         GET /v1/metrics => get_metrics,
                         _ => not_found,
@@ -189,12 +190,14 @@ impl Service for ApiService {
                     debug!("Received request {}", ctx);
 
                     router(ctx, parts.method.into(), parts.uri.path())
-                }).and_then(|resp| {
+                })
+                .and_then(|resp| {
                     let (parts, body) = resp.into_parts();
                     read_body(body)
                         .map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal))
                         .map(|body| (parts, body))
-                }).map(|(parts, body)| {
+                })
+                .map(|(parts, body)| {
                     debug!(
                         "Sent response with status {}, headers: {:#?}, body: {:?}",
                         parts.status.as_u16(),
@@ -202,7 +205,8 @@ impl Service for ApiService {
                         String::from_utf8(body.clone()).ok()
                     );
                     Response::from_parts(parts, body.into())
-                }).or_else(|e| match e.kind() {
+                })
+                .or_else(|e| match e.kind() {
                     ErrorKind::BadRequest => {
                         log_error(&e);
                         Ok(Response::builder()
@@ -264,6 +268,7 @@ pub fn start_server(config: Config) {
                     .map_err(ectx!(ErrorSource::Hyper, ErrorKind::Internal => addr));
                 info!("Listening on http://{}", addr);
                 server
-            }).map_err(|e: Error| log_error(&e))
+            })
+            .map_err(|e: Error| log_error(&e))
     }));
 }

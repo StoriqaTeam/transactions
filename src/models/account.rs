@@ -5,7 +5,7 @@ use validator::Validate;
 use models::*;
 use schema::accounts;
 
-#[derive(Debug, Queryable, Clone, Serialize)]
+#[derive(Debug, Queryable, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub id: AccountId,

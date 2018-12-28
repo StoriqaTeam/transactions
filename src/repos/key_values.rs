@@ -37,7 +37,8 @@ impl KeyValuesRepo for KeyValuesRepoImpl {
                 .values(&NewKeyValue {
                     key: key_,
                     value: json!(nonce),
-                }).on_conflict(key)
+                })
+                .on_conflict(key)
                 .do_update()
                 .set(value.eq(json!(nonce)))
                 .get_result::<KeyValue>(conn)

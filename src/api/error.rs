@@ -56,7 +56,7 @@ impl From<ServiceErrorKind> for ErrorKind {
         match err {
             ServiceErrorKind::Internal => ErrorKind::Internal,
             ServiceErrorKind::Unauthorized => ErrorKind::Unauthorized,
-            ServiceErrorKind::MalformedInput | ServiceErrorKind::Balance => ErrorKind::BadRequest,
+            ServiceErrorKind::MalformedInput => ErrorKind::BadRequest,
             ServiceErrorKind::NotFound => ErrorKind::NotFound,
             ServiceErrorKind::InvalidInput(s) => ErrorKind::UnprocessableEntity(s),
         }
