@@ -135,6 +135,7 @@ impl ConverterServiceImpl {
             id: tx.gid,
             from,
             to,
+            user_id: to_account.user_id,
             from_value: tx.value,
             from_currency: tx.currency,
             to_value: tx.value,

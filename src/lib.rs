@@ -128,7 +128,8 @@ pub fn start_server() {
         .run(RabbitConnectionManager::create(&config_clone))
         .map_err(|e| {
             log_error(&e);
-        }).unwrap();
+        })
+        .unwrap();
     let rabbit_connection_pool = r2d2::Pool::builder()
         .max_size(config_clone.rabbit.connection_pool_size as u32)
         .connection_customizer(Box::new(ConnectionHooks))
@@ -145,12 +146,14 @@ pub fn start_server() {
             .execute(move || -> Result<Vec<UserId>, ReposError> { users_repo.get_all().map(|u| u.into_iter().map(|u| u.id).collect()) })
             .map_err(|e| {
                 log_error(&e);
-            }).and_then(|users| {
+            })
+            .and_then(|users| {
                 publisher.init(users).map_err(|e| {
                     log_error(&e);
                 })
             }),
-    ).unwrap();
+    )
+    .unwrap();
     let fetcher = BlockchainFetcher::new(
         Arc::new(config_clone.clone()),
         transactions_repo,

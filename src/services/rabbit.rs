@@ -115,7 +115,9 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let self_clone = self.clone();
         parse_transaction(data)
             .into_future()
-            .and_then(move |tx| db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || self_clone.handle_transaction(&tx)))
+            .and_then(move |tx| {
+                db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || self_clone.handle_transaction(&tx))
+            })
             .and_then(move |txs| {
                 if !txs.is_empty() {
                     Either::A(converter.convert_transaction(txs).into_future().and_then(move |tx_out| {

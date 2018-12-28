@@ -69,7 +69,8 @@ impl TransactionPublisherImpl {
                             ..Default::default()
                         },
                         Default::default(),
-                    ).map(|_| ()),
+                    )
+                    .map(|_| ()),
             );
             f.push(f2);
             let f3: Box<Future<Item = (), Error = StdIoError>> =
@@ -93,7 +94,8 @@ impl TransactionPublisher for TransactionPublisherImpl {
                         .clone()
                         .basic_publish("transactions", &routing_key, payload, Default::default(), Default::default())
                         .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
-                }).map(|_| ()),
+                })
+                .map(|_| ()),
         )
     }
 }
