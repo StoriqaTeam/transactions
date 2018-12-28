@@ -19,6 +19,9 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("repair_approval_pending_transaction") {
         let id = matches.value_of("id").unwrap();
         transactions_lib::repair_approval_pending_transaction(&id);
+    } else if let Some(matches) = matches.subcommand_matches("repair_withdrawal_pending_transaction") {
+        let id = matches.value_of("id").unwrap();
+        transactions_lib::repair_withdrawal_pending_transaction(&id);
     } else {
         let _ = app.print_help();
         println!("\n")
