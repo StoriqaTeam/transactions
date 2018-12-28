@@ -170,6 +170,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             kind: TransactionKind::Internal,
             group_kind: TransactionGroupKind::Internal,
             related_tx: None,
+            meta: None,
         };
         self.create_base_tx(tx, dr_account, cr_account)
     }
@@ -263,6 +264,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             kind: TransactionKind::Fee,
             group_kind: tx_group_kind.unwrap_or(TransactionGroupKind::Withdrawal),
             related_tx: None,
+            meta: None,
         };
         res.push(self.create_base_tx(fee_tx, from_account.clone(), fees_account.clone())?);
 
@@ -285,6 +287,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 kind: tx_kind.unwrap_or(TransactionKind::Withdrawal),
                 group_kind: tx_group_kind.unwrap_or(TransactionGroupKind::Withdrawal),
                 related_tx: None,
+                meta: None,
             };
             let mut db_tx = self.create_base_tx(new_tx, from_account.clone(), acc.clone())?;
             let to = to_blockchain_address.clone();
@@ -375,6 +378,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             kind: TransactionKind::MultiFrom,
             group_kind: TransactionGroupKind::InternalMulti,
             related_tx: None,
+            meta: None,
         };
         res.push(self.create_base_tx(from_tx, from_account.clone(), from_counterpart_acc)?);
 
@@ -398,6 +402,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             kind: TransactionKind::MultiTo,
             group_kind: TransactionGroupKind::InternalMulti,
             related_tx: None,
+            meta: None,
         };
         res.push(self.create_base_tx(to_tx, to_counterpart_acc, to_account.clone())?);
 

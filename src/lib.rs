@@ -55,6 +55,7 @@ mod services;
 mod utils;
 
 use std::io;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -73,9 +74,10 @@ use self::client::HttpClientImpl;
 use self::models::*;
 use self::prelude::*;
 use self::repos::{
-    AccountsRepo, AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl, Error as ReposError,
-    ErrorKind as ReposErrorKind, KeyValuesRepoImpl, PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl,
-    StrangeBlockchainTransactionsRepoImpl, TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
+    AccountsRepo, AccountsRepoImpl, BlockchainTransactionsRepo, BlockchainTransactionsRepoImpl, DbExecutor, DbExecutorImpl,
+    Error as ReposError, ErrorKind as ReposErrorKind, Isolation, KeyValuesRepoImpl, PendingBlockchainTransactionsRepo,
+    PendingBlockchainTransactionsRepoImpl, SeenHashesRepoImpl, StrangeBlockchainTransactionsRepoImpl, TransactionsRepo,
+    TransactionsRepoImpl, UsersRepo, UsersRepoImpl,
 };
 use client::{BlockchainClientImpl, KeysClient, KeysClientImpl};
 use config::{Config, System};
@@ -264,6 +266,60 @@ pub fn create_user(name: &str) {
     let fut = db_executor.execute(move || -> Result<(), ReposError> {
         let user = users_repo.create(new_user).expect("Failed to create user");
         println!("{}", user.authentication_token.raw());
+        Ok(())
+    });
+    hyper::rt::run(fut.map(|_| ()).map_err(|_| ()));
+}
+
+pub fn repair_approval_pending_transaction(id: &str) {
+    let config = get_config();
+    let db_pool = create_db_pool(&config);
+    let cpu_pool = CpuPool::new(1);
+    let transactions_repo = TransactionsRepoImpl::new(config.system.system_user_id);
+    let blockchain_transactions_repo = BlockchainTransactionsRepoImpl;
+    let pending_blockchain_transactions_repo = PendingBlockchainTransactionsRepoImpl;
+    let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
+    let id = TransactionId::from_str(id).expect("Failed to parse transaction id");
+    let fut = db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || -> Result<(), ReposError> {
+        let transaction = transactions_repo.get(id).expect("Failed to get transaction");
+        let transaction = transaction.expect("Failed to find transaction");
+        if transaction.kind != TransactionKind::ApprovalTransfer {
+            panic!("Transaction kind is not approval");
+        }
+        if transaction.status != TransactionStatus::Pending {
+            panic!("Transaction status is not pending");
+        }
+        let hash = transaction.blockchain_tx_id.expect("Failed to get blockchain tx hash");
+        let pending_transaction = pending_blockchain_transactions_repo
+            .delete(hash.clone())
+            .expect("Failed to delete pending blockchain transaction");
+        let pending_transaction = pending_transaction.expect("Failed to find pending blockchain transaction");
+        let payload: NewBlockchainTransactionDB = pending_transaction.into();
+        blockchain_transactions_repo
+            .create(payload)
+            .expect("Failed to create blockchain transaction");
+        let payload = NewTransaction {
+            id: TransactionId::generate(),
+            gid: transaction.gid,
+            user_id: transaction.user_id,
+            dr_account_id: transaction.cr_account_id,
+            cr_account_id: transaction.dr_account_id,
+            currency: transaction.currency,
+            value: transaction.value,
+            status: TransactionStatus::Done,
+            blockchain_tx_id: Some(hash.clone()),
+            kind: TransactionKind::Reversal,
+            group_kind: TransactionGroupKind::Internal,
+            related_tx: Some(id),
+            meta: Some(serde_json::Value::String(format!(
+                "revers of approval transaction with id {}",
+                transaction.id
+            ))),
+        };
+        transactions_repo.create(payload).expect("Failed to create transaction");
+        transactions_repo
+            .update_status(hash, TransactionStatus::Done)
+            .expect("Failed to create transaction");
         Ok(())
     });
     hyper::rt::run(fut.map(|_| ()).map_err(|_| ()));

@@ -198,6 +198,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 kind: TransactionKind::BlockchainFee,
                 group_kind: tx.group_kind,
                 related_tx: None,
+                meta: None,
             };
             self.transactions_repo.create(fee_tx)?;
             self.seen_hashes_repo.create(NewSeenHashes {
@@ -256,6 +257,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                 kind: TransactionKind::Deposit,
                 group_kind: TransactionGroupKind::Deposit,
                 related_tx: None,
+                meta: None,
             };
             self.transactions_repo.create(new_tx)?;
             // don't need to create these more than one time, or conflict will be o/w
@@ -440,6 +442,7 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             kind: TransactionKind::ApprovalTransfer,
             group_kind: TransactionGroupKind::Approval,
             related_tx: None,
+            meta: None,
         };
         let new_pending_eth = (eth_transfer_blockchain_tx.clone(), eth_tx_id.clone()).into();
         // Note - we don't rollback here, because the tx is already in blockchain. so after that just silently
