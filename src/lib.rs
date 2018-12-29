@@ -127,14 +127,14 @@ pub fn start_server() {
 
     debug!("Started creating rabbit connection pool");
 
-    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let mut core = tokio_core::reactor::Core::new().expect("Can not create tokio core");
     let rabbit_thread_pool = futures_cpupool::CpuPool::new(config_clone.rabbit.thread_pool_size);
     let rabbit_connection_manager = core
         .run(RabbitConnectionManager::create(&config_clone))
         .map_err(|e| {
             log_error(&e);
         })
-        .unwrap();
+        .expect("Can not create rabbit connection manager");
     let rabbit_connection_pool = r2d2::Pool::builder()
         .max_size(config_clone.rabbit.connection_pool_size as u32)
         .connection_customizer(Box::new(ConnectionHooks))
@@ -158,7 +158,7 @@ pub fn start_server() {
                 })
             }),
     )
-    .unwrap();
+    .expect("Can not create queue for transactions in rabbit");
     let fetcher = BlockchainFetcher::new(
         Arc::new(config_clone.clone()),
         transactions_repo,
@@ -175,7 +175,7 @@ pub fn start_server() {
     );
     let consumer = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
     thread::spawn(move || {
-        let mut core = tokio_core::reactor::Core::new().unwrap();
+        let mut core = tokio_core::reactor::Core::new().expect("Can not create tokio core");
         loop {
             info!("Subscribing to rabbit");
             let counters = Arc::new(Mutex::new((0usize, 0usize, 0usize, 0usize, 0usize)));
