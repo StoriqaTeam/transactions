@@ -70,11 +70,15 @@ struct SystemBalanceQuery {
 #[derive(Clone, Default)]
 pub struct TransactionsRepoImpl {
     system_user_id: UserId,
+    system_fees_accounts_ids: Vec<AccountId>,
 }
 
 impl TransactionsRepoImpl {
-    pub fn new(system_user_id: UserId) -> Self {
-        TransactionsRepoImpl { system_user_id }
+    pub fn new(system_user_id: UserId, system_fees_accounts_ids: Vec<AccountId>) -> Self {
+        TransactionsRepoImpl {
+            system_user_id,
+            system_fees_accounts_ids,
+        }
     }
 }
 
@@ -436,6 +440,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
         currency_: Currency,
         total_fee: Amount,
     ) -> RepoResult<Vec<AccountWithBalance>> {
+        let system_fees_accounts_ids = self.system_fees_accounts_ids.clone();
         with_tls_connection(|conn| {
             let total_fee = match currency_ {
                 // we can drain stq account to 0,
@@ -511,6 +516,7 @@ impl TransactionsRepo for TransactionsRepoImpl {
             let res_accounts: Vec<Account> = Accounts::accounts
                 .filter(Accounts::id.eq_any(res_account_ids))
                 .filter(Accounts::kind.eq(AccountKind::Dr))
+                .filter(Accounts::id.ne_all(system_fees_accounts_ids)) // removing fees accounts from result
                 .get_results(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
