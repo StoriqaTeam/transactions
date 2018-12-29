@@ -48,18 +48,18 @@ impl TransactionPublisherImpl {
 
     fn declare(&self, channel: &Channel<TcpStream>, users: Vec<UserId>) -> impl Future<Item = (), Error = Error> {
         let mut f = vec![];
+        let f1: Box<Future<Item = (), Error = StdIoError>> = Box::new(channel.exchange_declare(
+            "transactions",
+            "direct",
+            ExchangeDeclareOptions {
+                durable: true,
+                ..Default::default()
+            },
+            Default::default(),
+        ));
+        f.push(f1);
         for user in users {
             let queue_name = format!("transactions_{}", user);
-            let f1: Box<Future<Item = (), Error = StdIoError>> = Box::new(channel.exchange_declare(
-                &queue_name,
-                "direct",
-                ExchangeDeclareOptions {
-                    durable: true,
-                    ..Default::default()
-                },
-                Default::default(),
-            ));
-            f.push(f1);
             let f2: Box<Future<Item = (), Error = StdIoError>> = Box::new(
                 channel
                     .queue_declare(
