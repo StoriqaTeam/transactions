@@ -150,10 +150,15 @@ impl Service for ApiService {
                         exchange_client.clone(),
                         fees_client,
                     ));
+                    let fees_accounts_ids = vec![
+                        config.system.btc_fees_account_id,
+                        config.system.eth_fees_account_id,
+                        config.system.stq_fees_account_id,
+                    ];
                     let transactions_service = Arc::new(TransactionsServiceImpl::new(
                         config.clone(),
                         auth_service.clone(),
-                        Arc::new(TransactionsRepoImpl::new(config.system.system_user_id)),
+                        Arc::new(TransactionsRepoImpl::new(config.system.system_user_id, fees_accounts_ids.clone())),
                         Arc::new(PendingBlockchainTransactionsRepoImpl),
                         Arc::new(BlockchainTransactionsRepoImpl),
                         Arc::new(AccountsRepoImpl),
@@ -167,7 +172,7 @@ impl Service for ApiService {
                     let metrics_service = Arc::new(MetricsServiceImpl::new(
                         Arc::new(config.clone()),
                         Arc::new(AccountsRepoImpl),
-                        Arc::new(TransactionsRepoImpl::new(config.system.system_user_id)),
+                        Arc::new(TransactionsRepoImpl::new(config.system.system_user_id, fees_accounts_ids)),
                         Arc::new(PendingBlockchainTransactionsRepoImpl),
                         Arc::new(StrangeBlockchainTransactionsRepoImpl),
                         db_executor.clone(),
