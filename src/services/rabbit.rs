@@ -115,23 +115,30 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
         let self_clone = self.clone();
         parse_transaction(data)
             .into_future()
-            .and_then(move |tx| {
-                db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || self_clone.handle_transaction(&tx))
+            .and_then({
+                let db_executor = db_executor.clone();
+                move |tx| {
+                    db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || self_clone.handle_transaction(&tx))
+                }
             })
             .and_then(move |txs| {
                 if !txs.is_empty() {
-                    Either::A(converter.convert_transaction(txs).into_future().and_then(move |tx_out| {
-                        publisher
-                            .publish(tx_out.clone())
-                            .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal => tx_out))
-                            .then(|r: Result<(), Error>| match r {
-                                Err(e) => {
-                                    log_error(&e);
-                                    Ok(())
-                                }
-                                Ok(_) => Ok(()),
-                            })
-                    }))
+                    Either::A(
+                        db_executor
+                            .execute(move || converter.convert_transaction(txs))
+                            .and_then(move |tx_out| {
+                                publisher
+                                    .publish(tx_out.clone())
+                                    .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal => tx_out))
+                                    .then(|r: Result<(), Error>| match r {
+                                        Err(e) => {
+                                            log_error(&e);
+                                            Ok(())
+                                        }
+                                        Ok(_) => Ok(()),
+                                    })
+                            }),
+                    )
                 } else {
                     Either::B(future::ok(()))
                 }
