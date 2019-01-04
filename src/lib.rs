@@ -357,6 +357,138 @@ pub fn repair_approval_pending_transaction(id: &str) {
     hyper::rt::run(fut.map(|_| ()).map_err(|_| ()));
 }
 
+pub fn repair_withdrawal_pending_transaction(id: &str) {
+    let config = get_config();
+    let db_pool = create_db_pool(&config);
+    let cpu_pool = CpuPool::new(1);
+    let fees_accounts_ids = vec![
+        config.system.btc_fees_account_id,
+        config.system.eth_fees_account_id,
+        config.system.stq_fees_account_id,
+    ];
+    let transactions_repo = Arc::new(TransactionsRepoImpl::new(config.system.system_user_id, fees_accounts_ids));
+    let blockchain_transactions_repo = BlockchainTransactionsRepoImpl;
+    let pending_blockchain_transactions_repo = PendingBlockchainTransactionsRepoImpl;
+    let db_executor = DbExecutorImpl::new(db_pool, cpu_pool);
+    let id = TransactionId::from_str(id).expect("Failed to parse transaction id");
+    let fut = db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || -> Result<(), ReposError> {
+        let transaction = transactions_repo.get(id).expect("Failed to get transaction");
+        let transaction = transaction.expect("Failed to find transaction");
+        if transaction.kind != TransactionKind::Withdrawal {
+            panic!("Transaction kind is not approval");
+        }
+        if transaction.status != TransactionStatus::Pending {
+            panic!("Transaction status is not pending");
+        }
+
+        // get all group transactions
+        let all_withdrawal_transactions = transactions_repo
+            .get_by_gid(transaction.gid)
+            .expect("Failed to find transactions by gid");
+
+        // get fee group transactions
+        let fee_transaction = all_withdrawal_transactions
+            .iter()
+            .filter(|t| t.kind == TransactionKind::Fee)
+            .next()
+            .cloned()
+            .expect("Failed to get fee transaction from gid");
+
+        // get withdrawal transactions in group
+        let withdrawal_transactions: Vec<Transaction> = all_withdrawal_transactions
+            .into_iter()
+            .filter(|t| t.kind == TransactionKind::Withdrawal)
+            .collect();
+
+        // get withdrawal transactions total amount
+        let total_amount = withdrawal_transactions.iter().fold(Amount::new(0), |acc, elem| {
+            acc.checked_add(elem.value).expect("Overflow on collecting total amount")
+        });
+
+        // get pending withdrawal transactions in group
+        let pending_withdrawal_transactions: Vec<Transaction> = withdrawal_transactions
+            .clone()
+            .into_iter()
+            .filter(|t| t.status == TransactionStatus::Pending)
+            .collect();
+
+        // get pending withdrawal transactions total amount
+        let pending_total_amount = pending_withdrawal_transactions.iter().fold(Amount::new(0), |acc, elem| {
+            acc.checked_add(elem.value).expect("Overflow on collecting pending total amount")
+        });
+
+        // get fee reversal amount
+        let fee_reversal_amount = if pending_total_amount == total_amount {
+            fee_transaction.value
+        } else {
+            let value = (fee_transaction.value.raw() as f64) * (pending_total_amount.raw() as f64 / total_amount.raw() as f64);
+            Amount::new(value as u128)
+        };
+
+        let reversal_gid = TransactionId::generate();
+
+        // reverse of withdrawal transactions
+        for transaction in pending_withdrawal_transactions {
+            let hash = transaction.blockchain_tx_id.expect("Failed to get blockchain tx hash");
+            let payload = NewTransaction {
+                id: TransactionId::generate(),
+                gid: reversal_gid,
+                user_id: transaction.user_id,
+                dr_account_id: transaction.cr_account_id,
+                cr_account_id: transaction.dr_account_id,
+                currency: transaction.currency,
+                value: transaction.value,
+                status: TransactionStatus::Done,
+                blockchain_tx_id: Some(hash.clone()),
+                kind: TransactionKind::Reversal,
+                group_kind: TransactionGroupKind::Internal,
+                related_tx: Some(transaction.id),
+                meta: Some(serde_json::Value::String(format!(
+                    "revers of approval transaction with id {}",
+                    transaction.id
+                ))),
+            };
+            transactions_repo.create(payload).expect("Failed to create transaction");
+            transactions_repo
+                .update_status(hash.clone(), TransactionStatus::Done)
+                .expect("Failed to create transaction");
+
+            let pending_transaction = pending_blockchain_transactions_repo
+                .delete(hash.clone())
+                .expect("Failed to delete pending blockchain transaction");
+            let pending_transaction = pending_transaction.expect("Failed to find pending blockchain transaction");
+            let payload: NewBlockchainTransactionDB = pending_transaction.into();
+            blockchain_transactions_repo
+                .create(payload)
+                .expect("Failed to create blockchain transaction");
+        }
+
+        // reverse of fee transactions
+        let payload = NewTransaction {
+            id: TransactionId::generate(),
+            gid: reversal_gid,
+            user_id: fee_transaction.user_id,
+            dr_account_id: fee_transaction.cr_account_id,
+            cr_account_id: fee_transaction.dr_account_id,
+            currency: fee_transaction.currency,
+            value: fee_reversal_amount,
+            status: TransactionStatus::Done,
+            blockchain_tx_id: fee_transaction.blockchain_tx_id,
+            kind: TransactionKind::Reversal,
+            group_kind: TransactionGroupKind::Internal,
+            related_tx: Some(fee_transaction.id),
+            meta: Some(serde_json::Value::String(format!(
+                "revers of approval fee_transaction with id {}",
+                fee_transaction.id
+            ))),
+        };
+        transactions_repo.create(payload).expect("Failed to create transaction");
+
+        Ok(())
+    });
+    hyper::rt::run(fut.map(|_| ()).map_err(|_| ()));
+}
+
 pub fn upsert_system_accounts() {
     let config = get_config();
     let client = HttpClientImpl::new(&config);
