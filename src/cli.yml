@@ -25,3 +25,13 @@ subcommands:
                 help: transaction id from transactions table
                 required: true
                 takes_value: true
+    - repair_withdrawal_pending_transaction:
+        about: Gets transactions group and creates reversal transactions for pending ones, then removes old from pending and sets `done` state 
+        args:
+            - id:
+                short: id
+                long: transaction_id
+                help: transaction id from transactions table
+                required: true
+                takes_value: true
+                
