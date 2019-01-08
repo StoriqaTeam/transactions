@@ -87,6 +87,7 @@ use services::BlockchainFetcher;
 use utils::log_error;
 
 pub const DELAY_BEFORE_NACK: u64 = 1000;
+pub const DELAY_BEFORE_RECONNECT: u64 = 1000;
 
 pub fn hello() {
     println!("Hello world");
@@ -266,7 +267,8 @@ pub fn start_server() {
                                 .and_then(move |_| channel.close(0, "Cancelled on consumer resubscribe"))
                         })
                         .collect();
-                    future::join_all(fs)
+                    let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_RECONNECT);
+                    Delay::new(when).then(move |_| future::join_all(fs))
                 }))
                 .map(|_| ())
                 .map_err(|e: io::Error| {
