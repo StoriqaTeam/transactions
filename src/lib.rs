@@ -246,34 +246,40 @@ pub fn start_server() {
                 .map_err(|e| {
                     log_error(&e);
                 });
-            let _ = core
-                .run(Timeout::new(subscription, resubscribe_duration).then(move |_| {
-                    let counters = counters_clone.lock().unwrap();
-                    info!(
-                        "Total messages: {}, tried to ack: {}, acked: {}, tried to nack: {}, nacked: {}",
-                        counters.0, counters.1, counters.2, counters.3, counters.4
-                    );
-                    drop(counters);
-                    let fs: Vec<_> = consumers_to_close_clone
-                        .lock()
-                        .unwrap()
-                        .iter_mut()
-                        .map(|(channel, consumer_tag)| {
-                            let mut channel = channel.clone();
-                            let consumer_tag = consumer_tag.clone();
-                            trace!("Canceling {} with channel `{}`", consumer_tag, channel.id);
-                            channel
-                                .cancel_consumer(consumer_tag.to_string())
-                                .and_then(move |_| channel.close(0, "Cancelled on consumer resubscribe"))
-                        })
-                        .collect();
-                    let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_RECONNECT);
-                    Delay::new(when).then(move |_| future::join_all(fs))
-                }))
-                .map(|_| ())
-                .map_err(|e: io::Error| {
-                    error!("Error closing consumer {}", e);
-                });
+            let _ = core.run(
+                Timeout::new(subscription, resubscribe_duration)
+                    .then(move |_| {
+                        let counters = counters_clone.lock().unwrap();
+                        info!(
+                            "Total messages: {}, tried to ack: {}, acked: {}, tried to nack: {}, nacked: {}",
+                            counters.0, counters.1, counters.2, counters.3, counters.4
+                        );
+                        drop(counters);
+                        let fs: Vec<_> = consumers_to_close_clone
+                            .lock()
+                            .unwrap()
+                            .iter_mut()
+                            .map(|(channel, consumer_tag)| {
+                                let mut channel = channel.clone();
+                                let consumer_tag = consumer_tag.clone();
+                                trace!("Canceling {} with channel `{}`", consumer_tag, channel.id);
+                                channel
+                                    .cancel_consumer(consumer_tag.to_string())
+                                    .and_then(move |_| channel.close(0, "Cancelled on consumer resubscribe"))
+                            })
+                            .collect();
+
+                        future::join_all(fs)
+                    })
+                    .map(|_| ())
+                    .map_err(|e: io::Error| {
+                        error!("Error closing consumer {}", e);
+                    })
+                    .then(move |_| {
+                        let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_RECONNECT);
+                        Delay::new(when)
+                    }),
+            );
         }
     });
 
