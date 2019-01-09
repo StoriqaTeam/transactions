@@ -54,9 +54,11 @@ mod sentry_integration;
 mod services;
 mod utils;
 
+use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -179,9 +181,9 @@ pub fn start_server() {
         let mut core = tokio_core::reactor::Core::new().expect("Can not create tokio core");
         loop {
             info!("Subscribing to rabbit");
-            let counters = Arc::new(Mutex::new((0usize, 0usize, 0usize, 0usize, 0usize)));
+            let counters = Rc::new(RefCell::new((0usize, 0usize, 0usize, 0usize, 0usize)));
             let counters_clone = counters.clone();
-            let consumers_to_close: Arc<Mutex<Vec<(Channel<TcpStream>, String)>>> = Arc::new(Mutex::new(Vec::new()));
+            let consumers_to_close: Rc<RefCell<Vec<(Channel<TcpStream>, String)>>> = Rc::new(RefCell::new(Vec::new()));
             let consumers_to_close_clone = consumers_to_close.clone();
             let fetcher_clone = fetcher.clone();
             let resubscribe_duration = Duration::from_secs(config_clone.rabbit.restart_subscription_secs as u64);
@@ -193,43 +195,36 @@ pub fn start_server() {
                         let counters_clone = counters_clone.clone();
                         let fetcher_clone = fetcher_clone.clone();
                         let consumers_to_close = consumers_to_close.clone();
-                        let mut consumers_to_close_lock = consumers_to_close.lock().unwrap();
+                        let mut consumers_to_close_lock = consumers_to_close.borrow_mut();
                         consumers_to_close_lock.push((channel.clone(), stream.consumer_tag.clone()));
-                        drop(consumers_to_close_lock);
                         stream
                             .for_each(move |message| {
                                 trace!("got message: {}", MessageDelivery::new(message.clone()));
                                 let delivery_tag = message.delivery_tag;
-                                let mut counters = counters_clone.lock().unwrap();
+                                let mut counters = counters_clone.borrow_mut();
                                 counters.0 += 1;
-                                drop(counters);
                                 let counters_clone2 = counters_clone.clone();
-
                                 let channel = channel.clone();
                                 fetcher_clone.handle_message(message.data).then(move |res| match res {
                                     Ok(_) => {
-                                        let counters_clone = counters_clone2.clone();
-                                        let mut counters = counters_clone2.lock().unwrap();
+                                        let mut counters_clone = counters_clone2.clone();
+                                        let mut counters = counters_clone.borrow_mut();
                                         counters.1 += 1;
-                                        drop(counters);
                                         Either::A(channel.basic_ack(delivery_tag, false).inspect(move |_| {
-                                            let mut counters = counters_clone.lock().unwrap();
+                                            let counters_clone = counters_clone2.clone();
+                                            let mut counters = counters_clone.borrow_mut();
                                             counters.2 += 1;
-                                            drop(counters);
                                         }))
                                     }
                                     Err(e) => {
-                                        let counters_clone = counters_clone2.clone();
-                                        let mut counters = counters_clone2.lock().unwrap();
+                                        let mut counters_clone = counters_clone2.clone();
+                                        let mut counters = *counters_clone.borrow_mut();
                                         counters.3 += 1;
-                                        drop(counters);
                                         log_error(&e);
                                         let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
                                         let f = Delay::new(when).then(move |_| {
                                             channel.basic_nack(delivery_tag, false, true).inspect(move |_| {
-                                                let mut counters = counters_clone.lock().unwrap();
                                                 counters.4 += 1;
-                                                drop(counters);
                                             })
                                         });
                                         tokio::spawn(f.map_err(|e| {
@@ -249,15 +244,13 @@ pub fn start_server() {
             let _ = core.run(
                 Timeout::new(subscription, resubscribe_duration)
                     .then(move |_| {
-                        let counters = counters_clone.lock().unwrap();
+                        let counters = counters_clone.borrow();
                         info!(
                             "Total messages: {}, tried to ack: {}, acked: {}, tried to nack: {}, nacked: {}",
                             counters.0, counters.1, counters.2, counters.3, counters.4
                         );
-                        drop(counters);
-                        let fs: Vec<_> = consumers_to_close_clone
-                            .lock()
-                            .unwrap()
+                        let mut consumers_to_close_lock = consumers_to_close_clone.borrow_mut();
+                        let fs: Vec<_> = consumers_to_close_lock
                             .iter_mut()
                             .map(|(channel, consumer_tag)| {
                                 let mut channel = channel.clone();
