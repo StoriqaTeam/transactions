@@ -5,17 +5,6 @@ clone:
     recursive: true
 
 pipeline:
-  restore-cache:
-    image: plugins/s3-cache:1
-    pull: true
-    secrets: [ aws_access_key_id, aws_secret_access_key ]
-    mount: deps
-    restore: true
-    when:
-      event:
-      - pull_request
-      - push
-      - tag
 
 ###
 # Test PR
@@ -143,16 +132,6 @@ pipeline:
 # Notifications and post deploy ops
 ###
 
-  rebuild-cache:
-    group: package
-    image: plugins/s3-cache:1
-    pull: true
-    secrets: [ aws_access_key_id, aws_secret_access_key ]
-    mount: deps
-    rebuild: true
-    when:
-      event: push
-      branch: master
 
 ###
 # Test services
