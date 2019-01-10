@@ -69,10 +69,20 @@ impl<E: DbExecutor> MetricsService for MetricsServiceImpl<E> {
                 })
                 .and_then(move |(mut metrics, reduced_balances)| {
                     let self_3 = self_2.clone();
-                    self_2.fetch_blockchain_balances(&reduced_balances).map(move |blockchain_balances| {
-                        self_3.update_blockchain_balances(&mut metrics, &reduced_balances, &blockchain_balances);
-                        metrics
-                    })
+                    let self_4 = self_2.clone();
+                    self_2
+                        .fetch_blockchain_balances(&reduced_balances)
+                        .map(move |blockchain_balances| {
+                            self_3.update_blockchain_balances(&mut metrics, &reduced_balances, &blockchain_balances);
+                            (metrics, blockchain_balances)
+                        })
+                        .and_then(move |(mut metrics, blockchain_balances)| {
+                            let self_5 = self_4.clone();
+                            self_4.db_executor.execute(move || {
+                                self_5.get_eth_fee_dr_balance(&mut metrics, &blockchain_balances)?;
+                                Ok(metrics)
+                            })
+                        })
                 }),
         )
     }
@@ -192,6 +202,26 @@ impl<E: DbExecutor> MetricsServiceImpl<E> {
             let res: HashMap<(BlockchainAddress, Currency), Amount> = vec.into_iter().collect();
             res
         })
+    }
+
+    fn get_eth_fee_dr_balance(
+        &self,
+        metrics: &mut Metrics,
+        blockchain_balances: &HashMap<(BlockchainAddress, Currency), Amount>,
+    ) -> Result<(), Error> {
+        let account_id = self.config.system.eth_fees_account_id;
+        let account = self
+            .accounts_repo
+            .get(account_id)
+            .map_err(ectx!(try ErrorKind::Internal => account_id))?
+            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::NotFound))?;
+
+        metrics.eth_fee_account_blockchain_balance = blockchain_balances
+            .get(&(account.address, Currency::Eth))
+            .cloned()
+            .map(|value| value.to_super_unit(Currency::Eth))
+            .unwrap_or(0f64);
+        Ok(())
     }
 
     fn update_fees_and_liquidity_balances(&self, metrics: &mut Metrics) -> Result<(), Error> {

@@ -18,6 +18,7 @@ pub struct Metrics {
     pub diverging_blockchain_balances_count: u64,
     pub pending_blockchain_transactions_count: u64,
     pub invalid_blockchain_transactions_count: u64,
+    pub eth_fee_account_blockchain_balance: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
