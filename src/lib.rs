@@ -342,7 +342,7 @@ pub fn repair_approval_pending_transaction(id: &str) {
             status: TransactionStatus::Done,
             blockchain_tx_id: Some(hash.clone()),
             kind: TransactionKind::Reversal,
-            group_kind: TransactionGroupKind::Internal,
+            group_kind: TransactionGroupKind::Approval,
             related_tx: Some(id),
             meta: Some(serde_json::Value::String(format!(
                 "revers of approval transaction with id {}",
@@ -441,8 +441,8 @@ pub fn repair_withdrawal_pending_transaction(id: &str) {
                 value: transaction.value,
                 status: TransactionStatus::Done,
                 blockchain_tx_id: Some(hash.clone()),
-                kind: TransactionKind::Reversal,
-                group_kind: TransactionGroupKind::Internal,
+                kind: TransactionKind::Withdrawal,
+                group_kind: TransactionGroupKind::Reversal,
                 related_tx: Some(transaction.id),
                 meta: Some(serde_json::Value::String(format!(
                     "revers of approval transaction with id {}",
@@ -475,8 +475,8 @@ pub fn repair_withdrawal_pending_transaction(id: &str) {
             value: fee_reversal_amount,
             status: TransactionStatus::Done,
             blockchain_tx_id: fee_transaction.blockchain_tx_id,
-            kind: TransactionKind::Reversal,
-            group_kind: TransactionGroupKind::Internal,
+            kind: TransactionKind::Fee,
+            group_kind: TransactionGroupKind::Reversal,
             related_tx: Some(fee_transaction.id),
             meta: Some(serde_json::Value::String(format!(
                 "revers of approval fee_transaction with id {}",

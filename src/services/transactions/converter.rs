@@ -148,54 +148,86 @@ impl ConverterServiceImpl {
         })
     }
 
-    // 6) Internal:
-    //   Always 1 tx with status Done
+    // 7) Reversal -
+    //   a) Withdrawal - Done, Fee - Done
     fn convert_reversal_transaction(&self, transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
-        if transactions.len() != 1 {
-            return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
-        }
-        let tx = transactions[0].clone();
-        if tx.kind != TransactionKind::Reversal {
-            return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
-        }
-
-        let from_acct_id = tx.dr_account_id.clone();
-        let from_account = self
+        let fee_tx = transactions
+            .iter()
+            .find(|tx| tx.kind == TransactionKind::Fee)
+            .cloned()
+            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
+        // We take arbitrary first withdrawal tx to extract some data
+        let withdrawal_tx = transactions
+            .iter()
+            .find(|tx| tx.kind == TransactionKind::Withdrawal)
+            .cloned()
+            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
+        let withdrawal_account = self
             .accounts_repo
-            .get(from_acct_id.clone())
-            .map_err(ectx!(try ErrorKind::Internal => from_acct_id))?
-            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => from_acct_id))?;
-
-        let to_acct_id = tx.cr_account_id.clone();
-        let to_account = self
-            .accounts_repo
-            .get(to_acct_id.clone())
-            .map_err(ectx!(try ErrorKind::Internal => to_acct_id))?
-            .ok_or(ectx!(try err ErrorContext::NoAccount, ErrorKind::Internal => to_acct_id))?;
-
-        let from = vec![TransactionAddressInfo {
-            account_id: Some(from_account.id),
-            blockchain_address: from_account.address,
-        }];
+            .get(withdrawal_tx.cr_account_id)?
+            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
+        let blockchain_tx_hash = withdrawal_tx
+            .blockchain_tx_id
+            .clone()
+            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
+        let blockchain_tx_hash_clone = blockchain_tx_hash.clone();
+        let blockchain_tx: BlockchainTransaction = self
+            .blockchain_transactions_repo
+            .get(blockchain_tx_hash_clone.clone())
+            .map_err(ectx!(try ErrorKind::Internal => blockchain_tx_hash_clone))?
+            .map(Into::<BlockchainTransaction>::into)
+            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
+        let blockchain_tx = blockchain_tx
+            .normalized()
+            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
+        let to_address = blockchain_tx
+            .to
+            .get(0)
+            .map(|entry| entry.address.clone())
+            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
         let to = TransactionAddressInfo {
-            account_id: Some(to_account.id),
-            blockchain_address: to_account.address,
+            account_id: Some(withdrawal_account.id),
+            blockchain_address: withdrawal_account.address,
         };
-
+        let from = vec![TransactionAddressInfo {
+            account_id: None,
+            blockchain_address: to_address,
+        }];
+        // now get aggregates
+        let withdrawal_txs: Vec<_> = transactions
+            .iter()
+            .filter(|tx| tx.kind == TransactionKind::Withdrawal)
+            .cloned()
+            .collect();
+        let created_at = withdrawal_txs
+            .iter()
+            .map(|tx| tx.created_at)
+            .min()
+            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
+        let updated_at = withdrawal_txs
+            .iter()
+            .map(|tx| tx.updated_at)
+            .max()
+            .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
+        let value = withdrawal_txs
+            .iter()
+            .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|a| a.checked_add(elem.value)))
+            .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => transactions))?;
+        let blockchain_tx_ids: Vec<_> = withdrawal_txs.into_iter().flat_map(|tx| tx.blockchain_tx_id.into_iter()).collect();
         Ok(TransactionOut {
-            id: tx.gid,
-            user_id: to_account.user_id,
+            id: withdrawal_tx.gid,
+            user_id: withdrawal_account.user_id,
             from,
             to,
-            from_value: tx.value,
-            from_currency: tx.currency,
-            to_value: tx.value,
-            to_currency: tx.currency,
-            fee: Amount::new(0),
-            status: tx.status,
-            blockchain_tx_ids: tx.blockchain_tx_id.iter().cloned().collect(),
-            created_at: tx.created_at,
-            updated_at: tx.updated_at,
+            from_value: value,
+            from_currency: withdrawal_tx.currency,
+            to_value: value,
+            to_currency: withdrawal_tx.currency,
+            fee: fee_tx.value,
+            status: TransactionStatus::Done,
+            blockchain_tx_ids,
+            created_at,
+            updated_at,
         })
     }
 
@@ -397,7 +429,7 @@ impl ConverterService for ConverterServiceImpl {
     //
     // 3) Withdrawal:
     //   a) two txs: Withdrawal - Pending, Fee - Done
-    //   b) three txs: Withdrwal - Done, Fee - Done, BlockchainFee - Done
+    //   b) three txs: Withdrawal - Done, Fee - Done, BlockchainFee - Done
     //
     // 4) InternalMulti:
     //   two txs: MultiFrom - Done, MultiTo - Done
@@ -407,8 +439,8 @@ impl ConverterService for ConverterServiceImpl {
     //   b) MultiFrom - Done, MultiTo - Done, Withdrawal - Done, Fee - Done, BlockchainFee - Done
 
     // 6) Approval - we don't serve this as TransactionOut since it's internal to our system
-    // 7) Reversal
-    //   Always 1 tx with status Done
+    // 7) Reversal -
+    //   a) Withdrawal - Done, Fee - Done
 
     // Input txs should be with len() > 0 and have the same `gid`- this guarantees exactly one TransactionOut
     fn convert_transaction(&self, transactions: Vec<Transaction>) -> Result<TransactionOut, Error> {
