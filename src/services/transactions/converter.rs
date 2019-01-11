@@ -211,7 +211,7 @@ impl ConverterServiceImpl {
             .ok_or(ectx!(try err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))?;
         let value = withdrawal_txs
             .iter()
-            .fold(Some(Amount::new(0)), |acc, elem| acc.and_then(|a| a.checked_add(elem.value)))
+            .try_fold(Amount::new(0), |acc, elem| acc.checked_add(elem.value))
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal => transactions))?;
         let blockchain_tx_ids: Vec<_> = withdrawal_txs.into_iter().flat_map(|tx| tx.blockchain_tx_id.into_iter()).collect();
         Ok(TransactionOut {
