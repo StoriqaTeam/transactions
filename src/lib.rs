@@ -83,8 +83,8 @@ use self::repos::{
 };
 use client::{BlockchainClientImpl, KeysClient, KeysClientImpl};
 use config::{Config, System};
-use rabbit::{ConnectionHooks, R2D2ErrorHandler, RabbitConnectionManager, TransactionConsumerImpl, TransactionPublisherImpl};
 use rabbit::{ErrorKind, ErrorSource};
+use rabbit::{R2D2ErrorHandler, RabbitConnectionManager, TransactionConsumerImpl, TransactionPublisherImpl};
 use services::BlockchainFetcher;
 use utils::log_error;
 
@@ -140,7 +140,6 @@ pub fn start_server() {
         .expect("Can not create rabbit connection manager");
     let rabbit_connection_pool = r2d2::Pool::builder()
         .max_size(config_clone.rabbit.connection_pool_size as u32)
-        .connection_customizer(Box::new(ConnectionHooks))
         .error_handler(Box::new(R2D2ErrorHandler))
         .build(rabbit_connection_manager)
         .expect("Cannot build rabbit connection pool");
@@ -342,7 +341,7 @@ pub fn repair_approval_pending_transaction(id: &str) {
             status: TransactionStatus::Done,
             blockchain_tx_id: Some(hash.clone()),
             kind: TransactionKind::Reversal,
-            group_kind: TransactionGroupKind::Internal,
+            group_kind: TransactionGroupKind::Approval,
             related_tx: Some(id),
             meta: Some(serde_json::Value::String(format!(
                 "revers of approval transaction with id {}",
@@ -441,8 +440,8 @@ pub fn repair_withdrawal_pending_transaction(id: &str) {
                 value: transaction.value,
                 status: TransactionStatus::Done,
                 blockchain_tx_id: Some(hash.clone()),
-                kind: TransactionKind::Reversal,
-                group_kind: TransactionGroupKind::Internal,
+                kind: TransactionKind::Withdrawal,
+                group_kind: TransactionGroupKind::Reversal,
                 related_tx: Some(transaction.id),
                 meta: Some(serde_json::Value::String(format!(
                     "revers of approval transaction with id {}",
@@ -475,8 +474,8 @@ pub fn repair_withdrawal_pending_transaction(id: &str) {
             value: fee_reversal_amount,
             status: TransactionStatus::Done,
             blockchain_tx_id: fee_transaction.blockchain_tx_id,
-            kind: TransactionKind::Reversal,
-            group_kind: TransactionGroupKind::Internal,
+            kind: TransactionKind::Fee,
+            group_kind: TransactionGroupKind::Reversal,
             related_tx: Some(fee_transaction.id),
             meta: Some(serde_json::Value::String(format!(
                 "revers of approval fee_transaction with id {}",
