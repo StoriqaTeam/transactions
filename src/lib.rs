@@ -55,6 +55,7 @@ mod services;
 mod utils;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -184,6 +185,8 @@ pub fn start_server() {
             let counters_clone = counters.clone();
             let consumers_to_close: Rc<RefCell<Vec<(Channel<TcpStream>, String)>>> = Rc::new(RefCell::new(Vec::new()));
             let consumers_to_close_clone = consumers_to_close.clone();
+            let last_delivery_tag: Rc<RefCell<HashMap<String, u64>>> = Rc::new(RefCell::new(HashMap::new()));
+            let last_delivery_tag_clone = last_delivery_tag.clone();
             let fetcher_clone = fetcher.clone();
             let resubscribe_duration = Duration::from_secs(config_clone.rabbit.restart_subscription_secs as u64);
             let subscription = consumer
@@ -192,18 +195,23 @@ pub fn start_server() {
                     let counters_clone = counters.clone();
                     let futures = consumer_and_chans.into_iter().map(move |(stream, channel)| {
                         let counters_clone = counters_clone.clone();
+                        let last_delivery_tag_clone = last_delivery_tag.clone();
                         let fetcher_clone = fetcher_clone.clone();
                         let consumers_to_close = consumers_to_close.clone();
+                        let counsumer_tag = stream.consumer_tag.clone();
                         let mut consumers_to_close_lock = consumers_to_close.borrow_mut();
-                        consumers_to_close_lock.push((channel.clone(), stream.consumer_tag.clone()));
+                        consumers_to_close_lock.push((channel.clone(), counsumer_tag.clone()));
                         stream
                             .for_each(move |message| {
                                 trace!("got message: {}", MessageDelivery::new(message.clone()));
                                 let delivery_tag = message.delivery_tag;
+                                let counsumer_tag = counsumer_tag.clone();
                                 let mut counters = counters_clone.borrow_mut();
                                 counters.0 += 1;
                                 let counters_clone2 = counters_clone.clone();
                                 let channel = channel.clone();
+                                let mut last_delivery_tag_clone = last_delivery_tag_clone.borrow_mut();
+                                last_delivery_tag_clone.insert(counsumer_tag, delivery_tag);
                                 fetcher_clone.handle_message(message.data).then(move |res| match res {
                                     Ok(_) => {
                                         let mut counters_clone = counters_clone2.clone();
@@ -249,14 +257,22 @@ pub fn start_server() {
                             counters.0, counters.1, counters.2, counters.3, counters.4
                         );
                         let mut consumers_to_close_lock = consumers_to_close_clone.borrow_mut();
+                        let last_delivery_tag_clone2 = last_delivery_tag_clone.clone();
+                        let last_delivery_tag_lock = last_delivery_tag_clone2.borrow_mut();
                         let fs: Vec<_> = consumers_to_close_lock
                             .iter_mut()
-                            .map(|(channel, consumer_tag)| {
+                            .map(move |(channel, consumer_tag)| {
                                 let mut channel = channel.clone();
                                 let consumer_tag = consumer_tag.clone();
+                                let last_delivery_tag = last_delivery_tag_lock.get(&consumer_tag.to_string()).cloned();
                                 trace!("Canceling {} with channel `{}`", consumer_tag, channel.id);
-                                channel
-                                    .cancel_consumer(consumer_tag.to_string())
+                                channel.cancel_consumer(consumer_tag.to_string()).and_then(move |_| {
+                                    if let Some(last_delivery_tag) = last_delivery_tag {
+                                        Either::A(channel.basic_nack(last_delivery_tag, true, true))
+                                    } else {
+                                        Either::B(future::ok(()))
+                                    }
+                                })
                             })
                             .collect();
 
