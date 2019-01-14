@@ -1,8 +1,7 @@
-use std::io::Error as StdIoError;
-
 use futures::future;
 use futures_cpupool::CpuPool;
 use lapin_futures::channel::{Channel, ExchangeDeclareOptions, QueueDeclareOptions};
+use lapin_futures::error::Error as LapinError;
 use r2d2::PooledConnection;
 use serde_json;
 use tokio::net::tcp::TcpStream;
@@ -48,7 +47,7 @@ impl TransactionPublisherImpl {
 
     fn declare(&self, channel: &Channel<TcpStream>, users: Vec<UserId>) -> impl Future<Item = (), Error = Error> {
         let mut f = vec![];
-        let f1: Box<Future<Item = (), Error = StdIoError>> = Box::new(channel.exchange_declare(
+        let f1: Box<Future<Item = (), Error = LapinError>> = Box::new(channel.exchange_declare(
             "transactions",
             "direct",
             ExchangeDeclareOptions {
@@ -60,7 +59,7 @@ impl TransactionPublisherImpl {
         f.push(f1);
         for user in users {
             let queue_name = format!("transactions_{}", user);
-            let f2: Box<Future<Item = (), Error = StdIoError>> = Box::new(
+            let f2: Box<Future<Item = (), Error = LapinError>> = Box::new(
                 channel
                     .queue_declare(
                         &queue_name,
@@ -73,7 +72,7 @@ impl TransactionPublisherImpl {
                     .map(|_| ()),
             );
             f.push(f2);
-            let f3: Box<Future<Item = (), Error = StdIoError>> =
+            let f3: Box<Future<Item = (), Error = LapinError>> =
                 Box::new(channel.queue_bind(&queue_name, "transactions", &queue_name, Default::default(), Default::default()));
             f.push(f3);
         }
