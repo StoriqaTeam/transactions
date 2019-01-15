@@ -210,34 +210,39 @@ pub fn start_server() {
                                 counters.0 += 1;
                                 let counters_clone2 = counters_clone.clone();
                                 let channel = channel.clone();
+                                let last_delivery_tag_clone2 = last_delivery_tag_clone.clone();
                                 let mut last_delivery_tag_clone = last_delivery_tag_clone.borrow_mut();
-                                last_delivery_tag_clone.insert(counsumer_tag, delivery_tag);
-                                fetcher_clone.handle_message(message.data).then(move |res| match res {
-                                    Ok(_) => {
-                                        let mut counters_clone = counters_clone2.clone();
-                                        let mut counters = counters_clone.borrow_mut();
-                                        counters.1 += 1;
-                                        Either::A(channel.basic_ack(delivery_tag, false).inspect(move |_| {
-                                            let counters_clone = counters_clone2.clone();
+                                last_delivery_tag_clone.insert(counsumer_tag.clone(), delivery_tag);
+                                fetcher_clone.handle_message(message.data).then(move |res| {
+                                    let mut last_delivery_tag_clone = last_delivery_tag_clone2.borrow_mut();
+                                    last_delivery_tag_clone.remove(&counsumer_tag);
+                                    match res {
+                                        Ok(_) => {
+                                            let mut counters_clone = counters_clone2.clone();
                                             let mut counters = counters_clone.borrow_mut();
-                                            counters.2 += 1;
-                                        }))
-                                    }
-                                    Err(e) => {
-                                        let mut counters_clone = counters_clone2.clone();
-                                        let mut counters = *counters_clone.borrow_mut();
-                                        counters.3 += 1;
-                                        log_error(&e);
-                                        let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
-                                        let f = Delay::new(when).then(move |_| {
-                                            channel.basic_nack(delivery_tag, false, true).inspect(move |_| {
-                                                counters.4 += 1;
-                                            })
-                                        });
-                                        tokio::spawn(f.map_err(|e| {
-                                            error!("Error sending nack: {}", e);
-                                        }));
-                                        Either::B(future::ok(()))
+                                            counters.1 += 1;
+                                            Either::A(channel.basic_ack(delivery_tag, false).inspect(move |_| {
+                                                let counters_clone = counters_clone2.clone();
+                                                let mut counters = counters_clone.borrow_mut();
+                                                counters.2 += 1;
+                                            }))
+                                        }
+                                        Err(e) => {
+                                            let mut counters_clone = counters_clone2.clone();
+                                            let mut counters = *counters_clone.borrow_mut();
+                                            counters.3 += 1;
+                                            log_error(&e);
+                                            let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
+                                            let f = Delay::new(when).then(move |_| {
+                                                channel.basic_nack(delivery_tag, false, true).inspect(move |_| {
+                                                    counters.4 += 1;
+                                                })
+                                            });
+                                            tokio::spawn(f.map_err(|e| {
+                                                error!("Error sending nack: {}", e);
+                                            }));
+                                            Either::B(future::ok(()))
+                                        }
                                     }
                                 })
                             })
@@ -266,13 +271,12 @@ pub fn start_server() {
                                 let consumer_tag = consumer_tag.clone();
                                 let last_delivery_tag = last_delivery_tag_lock.get(&consumer_tag.to_string()).cloned();
                                 trace!("Canceling {} with channel `{}`", consumer_tag, channel.id);
-                                channel.cancel_consumer(consumer_tag.to_string()).and_then(move |_| {
-                                    if let Some(last_delivery_tag) = last_delivery_tag {
-                                        Either::A(channel.basic_nack(last_delivery_tag, true, true))
-                                    } else {
-                                        Either::B(future::ok(()))
-                                    }
-                                })
+                                if let Some(last_delivery_tag) = last_delivery_tag {
+                                    Either::A(channel.basic_nack(last_delivery_tag, true, true))
+                                } else {
+                                    Either::B(future::ok(()))
+                                }
+                                .and_then(move |_| channel.cancel_consumer(consumer_tag.to_string()))
                             })
                             .collect();
 
