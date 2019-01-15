@@ -64,10 +64,10 @@ use std::time::{Duration, Instant};
 
 use diesel::pg::PgConnection;
 use diesel::r2d2::ConnectionManager;
+use failure::Error as FailureError;
 use futures::future::{self, Either};
 use futures_cpupool::CpuPool;
 use lapin_futures::channel::Channel;
-use lapin_futures::error::Error as LapinError;
 use tokio::net::tcp::TcpStream;
 use tokio::prelude::*;
 use tokio::timer::{Delay, Timeout};
@@ -268,6 +268,7 @@ pub fn start_server() {
                             .iter_mut()
                             .map(move |(channel, consumer_tag)| {
                                 let mut channel = channel.clone();
+                                let channel_clone = channel.clone();
                                 let consumer_tag = consumer_tag.clone();
                                 let last_delivery_tag = last_delivery_tag_lock.get(&consumer_tag.to_string()).cloned();
                                 trace!("Canceling {} with channel `{}`", consumer_tag, channel.id);
@@ -276,14 +277,19 @@ pub fn start_server() {
                                 } else {
                                     Either::B(future::ok(()))
                                 }
-                                .and_then(move |_| channel.cancel_consumer(consumer_tag.to_string()))
+                                .map_err(From::from)
+                                .and_then(move |_| channel.cancel_consumer(consumer_tag.to_string()).map_err(From::from))
+                                .and_then(move |_| {
+                                    let mut transport = channel_clone.transport.lock().unwrap();
+                                    transport.conn.basic_recover(channel_clone.id, true).map_err(From::from)
+                                })
                             })
                             .collect();
 
                         future::join_all(fs)
                     })
                     .map(|_| ())
-                    .map_err(|e: LapinError| {
+                    .map_err(|e: FailureError| {
                         error!("Error closing consumer {}", e);
                     })
                     .then(move |_| {
