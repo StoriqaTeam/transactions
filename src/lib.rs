@@ -162,6 +162,7 @@ pub fn start_server() {
             }),
     )
     .expect("Can not create queue for transactions in rabbit");
+    let publisher_clone = publisher.clone();
     let fetcher = BlockchainFetcher::new(
         Arc::new(config_clone.clone()),
         transactions_repo,
@@ -300,7 +301,7 @@ pub fn start_server() {
         }
     });
 
-    api::start_server(config);
+    api::start_server(config, publisher_clone);
 }
 
 fn get_config() -> Config {

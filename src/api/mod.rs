@@ -30,6 +30,7 @@ use client::{
 };
 use models::*;
 use prelude::*;
+use rabbit::TransactionPublisher;
 use repos::{
     AccountsRepoImpl, BlockchainTransactionsRepoImpl, DbExecutorImpl, KeyValuesRepoImpl, PendingBlockchainTransactionsRepoImpl,
     StrangeBlockchainTransactionsRepoImpl, TransactionsRepoImpl, UsersRepoImpl,
@@ -49,10 +50,11 @@ pub struct ApiService {
     blockchain_client: Arc<dyn BlockchainClient>,
     exchange_client: Arc<dyn ExchangeClient>,
     fees_client: Arc<dyn FeesClient>,
+    publisher: Arc<dyn TransactionPublisher>,
 }
 
 impl ApiService {
-    fn from_config(config: &Config) -> Result<Self, Error> {
+    fn from_config(config: &Config, publisher: Arc<dyn TransactionPublisher>) -> Result<Self, Error> {
         let server_address = format!("{}:{}", config.server.host, config.server.port)
             .parse::<SocketAddr>()
             .map_err(ectx!(try
@@ -84,6 +86,7 @@ impl ApiService {
             blockchain_client: Arc::new(blockchain_client),
             exchange_client: Arc::new(exchange_client),
             fees_client: Arc::new(fees_client),
+            publisher,
         })
     }
 }
@@ -101,6 +104,7 @@ impl Service for ApiService {
         let keys_client = self.keys_client.clone();
         let blockchain_client = self.blockchain_client.clone();
         let exchange_client = self.exchange_client.clone();
+        let publisher = self.publisher.clone();
         let fees_client = self.fees_client.clone();
         let db_executor = DbExecutorImpl::new(db_pool.clone(), cpu_pool.clone());
         let config = self.config.clone();
@@ -167,6 +171,7 @@ impl Service for ApiService {
                         keys_client,
                         blockchain_client.clone(),
                         exchange_client.clone(),
+                        publisher.clone(),
                     ));
                     let exchange_service = Arc::new(ExchangeServiceImpl::new(exchange_client));
                     let metrics_service = Arc::new(MetricsServiceImpl::new(
@@ -257,9 +262,9 @@ impl Service for ApiService {
     }
 }
 
-pub fn start_server(config: Config) {
+pub fn start_server(config: Config, publisher: Arc<dyn TransactionPublisher>) {
     hyper::rt::run(future::lazy(move || {
-        ApiService::from_config(&config)
+        ApiService::from_config(&config, publisher)
             .into_future()
             .and_then(move |api| {
                 let api_clone = api.clone();

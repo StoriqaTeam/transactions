@@ -5,6 +5,7 @@ pub mod converter;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use future::Either;
 use futures::future;
 use futures::prelude::*;
 use validator::{ValidationError, ValidationErrors};
@@ -21,11 +22,12 @@ use client::KeysClient;
 use config::Config;
 use models::*;
 use prelude::*;
+use rabbit::TransactionPublisher;
 use repos::{
     AccountsRepo, BlockchainTransactionsRepo, DbExecutor, Isolation, KeyValuesRepo, PendingBlockchainTransactionsRepo, TransactionsRepo,
 };
 use tokio_core::reactor::Core;
-use utils::log_and_capture_error;
+use utils::{log_and_capture_error, log_error};
 
 #[derive(Clone)]
 pub struct TransactionsServiceImpl<E: DbExecutor> {
@@ -40,6 +42,7 @@ pub struct TransactionsServiceImpl<E: DbExecutor> {
     accounts_repo: Arc<dyn AccountsRepo>,
     db_executor: E,
     exchange_client: Arc<dyn ExchangeClient>,
+    publisher: Arc<dyn TransactionPublisher>,
 }
 
 pub trait TransactionsService: Send + Sync + 'static {
@@ -87,6 +90,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         keys_client: Arc<dyn KeysClient>,
         blockchain_client: Arc<dyn BlockchainClient>,
         exchange_client: Arc<dyn ExchangeClient>,
+        publisher: Arc<dyn TransactionPublisher>,
     ) -> Self {
         let config = Arc::new(config);
         let classifier_service = Arc::new(ClassifierServiceImpl::new(
@@ -122,6 +126,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             db_executor,
             converter_service,
             exchange_client,
+            publisher,
         }
     }
 
@@ -477,6 +482,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         input: CreateTransactionInput,
     ) -> Box<Future<Item = TransactionOut, Error = Error> + Send> {
         let db_executor = self.db_executor.clone();
+        let publisher = self.publisher.clone();
         let self_clone = self.clone();
         let self_clone2 = self.clone();
         Box::new(
@@ -488,7 +494,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                         let mut core = Core::new().unwrap();
                         let tx_type = self_clone.classifier_service.validate_and_classify_transaction(&input)?;
                         let f = future::lazy(|| {
-                            let tx_group = match tx_type {
+                            let tx_group = match tx_type.clone() {
                                 TransactionType::Internal(from_account, to_account) => self_clone
                                     .create_internal_mono_currency_tx(input, from_account, to_account)
                                     .map(|tx| vec![tx]),
@@ -521,18 +527,41 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                                     Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput))
                                 }
                             }?;
-                            Ok(tx_group)
+                            Ok((tx_group, tx_type))
                         });
                         core.run(f)
                     })
                 })
-                .and_then(|tx_group| {
+                .and_then(|(tx_group, tx_type)| {
                     // this point we already wrote transactions, incl to blockchain
                     // so if smth fails here, we need not corrupt our data
                     let db_executor = self_clone2.db_executor.clone();
-                    db_executor.execute_transaction_with_isolation(Isolation::RepeatableRead, move || {
-                        self_clone2.converter_service.convert_transaction(tx_group)
-                    })
+                    db_executor
+                        .execute_transaction_with_isolation(Isolation::RepeatableRead, move || {
+                            self_clone2.converter_service.convert_transaction(tx_group)
+                        })
+                        .and_then(move |tx| {
+                            // if transaction is internal - we need to publish it
+                            // because it will never appear in blockchain 
+                            // so gateway will never know about it
+                            if let TransactionType::Internal(_, _) = tx_type {
+                                let tx_out = tx.clone();
+                                Either::A(
+                                    publisher
+                                        .publish(tx.clone())
+                                        .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal => tx_out))
+                                        .then(|r: Result<(), Error>| match r {
+                                            Err(e) => {
+                                                log_error(&e);
+                                                Ok(tx)
+                                            }
+                                            Ok(_) => Ok(tx),
+                                        }),
+                                )
+                            } else {
+                                Either::B(future::ok(tx))
+                            }
+                        })
                 }),
         )
     }
