@@ -180,7 +180,7 @@ pub fn start_server() {
     thread::spawn(move || {
         let mut core = tokio_core::reactor::Core::new().expect("Can not create tokio core");
         loop {
-            info!("Subscribing to rabbit");
+            debug!("Subscribing to rabbit");
             let counters = Rc::new(RefCell::new((0usize, 0usize, 0usize, 0usize, 0usize)));
             let counters_clone = counters.clone();
             let consumers_to_close: Rc<RefCell<Vec<(Channel<TcpStream>, String)>>> = Rc::new(RefCell::new(Vec::new()));
@@ -257,7 +257,7 @@ pub fn start_server() {
                 Timeout::new(subscription, resubscribe_duration)
                     .then(move |_| {
                         let counters = counters_clone.borrow();
-                        info!(
+                        debug!(
                             "Total messages: {}, tried to ack: {}, acked: {}, tried to nack: {}, nacked: {}",
                             counters.0, counters.1, counters.2, counters.3, counters.4
                         );

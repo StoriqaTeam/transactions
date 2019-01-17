@@ -123,10 +123,12 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
             })
             .and_then(move |txs| {
                 if !txs.is_empty() {
+                    info!("Sending txs: {:?}", txs);
                     Either::A(
                         db_executor
                             .execute(move || converter.convert_transaction(txs))
                             .and_then(move |tx_out| {
+                                info!("Sending tx after conversion: {:?}", tx_out);
                                 publisher
                                     .publish(tx_out.clone())
                                     .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal => tx_out))
