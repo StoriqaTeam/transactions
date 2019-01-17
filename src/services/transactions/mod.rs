@@ -544,8 +544,10 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             // if transaction is internal - we need to publish it
                             // because it will never appear in blockchain 
                             // so gateway will never know about it
+                            info!("Checking for sending needed tx type: {:?}, tx: {:?}", tx_type, tx);
                             if let TransactionType::Internal(_, _) = tx_type {
                                 let tx_out = tx.clone();
+                                info!("Sending internal tx: {:?}", tx_out);
                                 Either::A(
                                     publisher
                                         .publish(tx.clone())
