@@ -144,10 +144,7 @@ pub fn start_server() {
         .build(rabbit_connection_manager)
         .expect("Cannot build rabbit connection pool");
     debug!("Finished creating rabbit connection pool");
-    let publisher = Arc::new(TransactionPublisherImpl::new(
-        rabbit_connection_pool.clone(),
-        rabbit_thread_pool.clone(),
-    ));
+    let mut publisher = TransactionPublisherImpl::new(rabbit_connection_pool.clone(), rabbit_thread_pool.clone());
     core.run(
         db_executor
             .execute(move || -> Result<Vec<UserId>, ReposError> { users_repo.get_all().map(|u| u.into_iter().map(|u| u.id).collect()) })
@@ -161,6 +158,7 @@ pub fn start_server() {
             }),
     )
     .expect("Can not create queue for transactions in rabbit");
+    let publisher = Arc::new(publisher);
     let publisher_clone = publisher.clone();
     let fetcher = BlockchainFetcher::new(
         Arc::new(config_clone.clone()),
