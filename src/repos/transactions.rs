@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{Duration, Utc};
 use diesel;
@@ -512,11 +512,21 @@ impl TransactionsRepo for TransactionsRepoImpl {
 
             let res_account_ids: Vec<AccountId> = remaining_accounts.keys().cloned().collect();
 
+            let fees_accounts: Vec<Account> = Accounts::accounts
+                .filter(Accounts::id.eq_any(system_fees_accounts_ids))
+                .get_results(conn)
+                .map_err(move |e| {
+                    let error_kind = ErrorKind::from(&e);
+                    ectx!(try err e, error_kind)
+                })?;
+
+            let fees_accounts_addresses: HashSet<BlockchainAddress> = fees_accounts.into_iter().map(|acc| acc.address).collect();
+
             // filtering accounts only DR
             let res_accounts: Vec<Account> = Accounts::accounts
                 .filter(Accounts::id.eq_any(res_account_ids))
                 .filter(Accounts::kind.eq(AccountKind::Dr))
-                .filter(Accounts::id.ne_all(system_fees_accounts_ids)) // removing fees accounts from result
+                .filter(Accounts::address.ne_all(fees_accounts_addresses)) // removing fees accounts from result
                 .get_results(conn)
                 .map_err(move |e| {
                     let error_kind = ErrorKind::from(&e);
