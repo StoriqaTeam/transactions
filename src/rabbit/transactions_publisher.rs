@@ -85,3 +85,12 @@ impl TransactionPublisher for TransactionPublisherImpl {
         )
     }
 }
+
+#[derive(Clone, Default)]
+pub struct TransactionPublisherMock;
+
+impl TransactionPublisher for TransactionPublisherMock {
+    fn publish(&self, _tx: TransactionOut) -> Box<Future<Item = (), Error = Error> + Send> {
+        Box::new(future::ok(()))
+    }
+}

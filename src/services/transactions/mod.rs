@@ -701,6 +701,7 @@ mod tests {
     use super::*;
     use client::*;
     use config::Config;
+    use rabbit::*;
     use repos::*;
     use services::*;
     use tokio_core::reactor::Core;
@@ -717,6 +718,7 @@ mod tests {
         let blockchain_client = Arc::new(BlockchainClientMock::default());
         let exchange_client = Arc::new(ExchangeClientMock::default());
         let db_executor = DbExecutorMock::default();
+        let publisher = Arc::new(TransactionPublisherMock::default());
         TransactionsServiceImpl::new(
             config,
             auth_service,
@@ -729,6 +731,7 @@ mod tests {
             keys_client,
             blockchain_client,
             exchange_client,
+            publisher,
         )
     }
 }
