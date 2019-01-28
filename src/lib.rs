@@ -54,8 +54,6 @@ mod sentry_integration;
 mod services;
 mod utils;
 
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
@@ -63,12 +61,10 @@ use std::time::{Duration, Instant};
 
 use diesel::pg::PgConnection;
 use diesel::r2d2::ConnectionManager;
-use failure::Error as FailureError;
 use futures::future::{self, Either};
 use futures_cpupool::CpuPool;
-use lapin_futures::channel::Channel;
-use tokio::net::tcp::TcpStream;
 use tokio::prelude::*;
+use tokio::runtime::Runtime;
 use tokio::timer::{Delay, Timeout};
 use tokio_core::reactor::Core;
 
@@ -83,8 +79,8 @@ use self::repos::{
 };
 use client::{BlockchainClientImpl, KeysClient, KeysClientImpl};
 use config::{Config, System};
-use rabbit::{ErrorKind, ErrorSource};
-use rabbit::{R2D2ErrorHandler, RabbitConnectionManager, TransactionConsumerImpl, TransactionPublisherImpl};
+use rabbit::{Error, ErrorKind};
+use rabbit::{RabbitConnectionManager, TransactionConsumerImpl, TransactionPublisherImpl};
 use services::BlockchainFetcher;
 use utils::log_error;
 
@@ -140,7 +136,9 @@ pub fn start_server() {
         .expect("Can not create rabbit connection manager");
     let rabbit_connection_pool = r2d2::Pool::builder()
         .max_size(config_clone.rabbit.connection_pool_size as u32)
-        .error_handler(Box::new(R2D2ErrorHandler))
+        .test_on_check_out(false)
+        .max_lifetime(None)
+        .idle_timeout(None)
         .build(rabbit_connection_manager)
         .expect("Cannot build rabbit connection pool");
     debug!("Finished creating rabbit connection pool");
@@ -176,108 +174,50 @@ pub fn start_server() {
     );
     let consumer = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
     thread::spawn(move || {
-        let mut core = tokio_core::reactor::Core::new().expect("Can not create tokio core");
-        loop {
-            debug!("Subscribing to rabbit");
-            let counters = Rc::new(RefCell::new((0usize, 0usize, 0usize, 0usize, 0usize)));
-            let counters_clone = counters.clone();
-            let consumers_to_close: Rc<RefCell<Vec<(Channel<TcpStream>, String)>>> = Rc::new(RefCell::new(Vec::new()));
-            let consumers_to_close_clone = consumers_to_close.clone();
-            let fetcher_clone = fetcher.clone();
-            let resubscribe_duration = Duration::from_secs(config_clone.rabbit.restart_subscription_secs as u64);
-            let subscription = consumer
-                .subscribe()
-                .and_then(move |consumer_and_chans| {
-                    let counters_clone = counters.clone();
-                    let futures = consumer_and_chans.into_iter().map(move |(stream, channel)| {
-                        let counters_clone = counters_clone.clone();
-                        let fetcher_clone = fetcher_clone.clone();
-                        let consumers_to_close = consumers_to_close.clone();
-                        let counsumer_tag = stream.consumer_tag.clone();
-                        let mut consumers_to_close_lock = consumers_to_close.borrow_mut();
-                        consumers_to_close_lock.push((channel.clone(), counsumer_tag.clone()));
-                        stream
-                            .for_each(move |message| {
-                                trace!("got message: {}", MessageDelivery::new(message.clone()));
-                                let delivery_tag = message.delivery_tag;
-                                let mut counters = counters_clone.borrow_mut();
-                                counters.0 += 1;
-                                let counters_clone2 = counters_clone.clone();
-                                let channel = channel.clone();
-                                fetcher_clone.handle_message(message.data).then(move |res| match res {
-                                    Ok(_) => {
-                                        let mut counters_clone = counters_clone2.clone();
-                                        let mut counters = counters_clone.borrow_mut();
-                                        counters.1 += 1;
-                                        Either::A(channel.basic_ack(delivery_tag, false).inspect(move |_| {
-                                            let counters_clone = counters_clone2.clone();
-                                            let mut counters = counters_clone.borrow_mut();
-                                            counters.2 += 1;
-                                        }))
-                                    }
-                                    Err(e) => {
-                                        let mut counters_clone = counters_clone2.clone();
-                                        let mut counters = *counters_clone.borrow_mut();
-                                        counters.3 += 1;
-                                        log_error(&e);
-                                        let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK);
-                                        let f = Delay::new(when).then(move |_| {
-                                            channel.basic_nack(delivery_tag, false, true).inspect(move |_| {
-                                                counters.4 += 1;
-                                            })
-                                        });
-                                        tokio::spawn(f.map_err(|e| {
-                                            error!("Error sending nack: {}", e);
-                                        }));
-                                        Either::B(future::ok(()))
-                                    }
-                                })
-                            })
-                            .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
-                    });
-                    future::join_all(futures)
-                })
-                .map_err(|e| {
-                    log_error(&e);
-                });
-            let _ = core.run(
-                Timeout::new(subscription, resubscribe_duration)
-                    .then(move |_| {
-                        let counters = counters_clone.borrow();
-                        debug!(
-                            "Total messages: {}, tried to ack: {}, acked: {}, tried to nack: {}, nacked: {}",
-                            counters.0, counters.1, counters.2, counters.3, counters.4
-                        );
-                        let mut consumers_to_close_lock = consumers_to_close_clone.borrow_mut();
-                        let fs: Vec<_> = consumers_to_close_lock
-                            .iter_mut()
-                            .map(move |(channel, consumer_tag)| {
-                                let mut channel = channel.clone();
-                                let channel_clone = channel.clone();
-                                let consumer_tag = consumer_tag.clone();
-                                trace!("Canceling {} with channel `{}`", consumer_tag, channel.id);
-                                channel
-                                    .cancel_consumer(consumer_tag.to_string())
-                                    .map_err(From::from)
-                                    .and_then(move |_| {
-                                        let mut transport = channel_clone.transport.lock().unwrap();
-                                        transport.conn.basic_recover(channel_clone.id, true).map_err(From::from)
+        let mut core = Runtime::new().expect("Can not create tokio core");
+        let consumer_and_chans = core
+            .block_on(consumer.subscribe())
+            .expect("Can not create subscribers for transactions in rabbit");
+        debug!("Subscribing to rabbit");
+        let fetcher_clone = fetcher.clone();
+        let timeout = config_clone.rabbit.restart_subscription_secs as u64;
+        let futures = consumer_and_chans.into_iter().map(move |(stream, channel)| {
+            let fetcher_clone = fetcher_clone.clone();
+            stream
+                .for_each(move |message| {
+                    trace!("got message: {}", MessageDelivery::new(message.clone()));
+                    let delivery_tag = message.delivery_tag;
+                    let channel = channel.clone();
+                    let fetcher_future = fetcher_clone.handle_message(message.data);
+                    let timeout = Duration::from_secs(timeout);
+                    Timeout::new(fetcher_future, timeout).then(move |res| {
+                        trace!("send result: {:?}", res);
+                        match res {
+                            Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
+                            Err(e) => {
+                                let when = if let Some(inner) = e.into_inner() {
+                                    log_error(&inner);
+                                    Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK)
+                                } else {
+                                    let err: Error = ectx!(err format_err!("Timeout occured"), ErrorKind::Internal);
+                                    log_error(&err);
+                                    Instant::now() + Duration::from_millis(0)
+                                };
+                                Either::B(Delay::new(when).then(move |_| {
+                                    channel.basic_nack(delivery_tag, false, true).map_err(|e| {
+                                        error!("Error sending nack: {}", e);
+                                        e
                                     })
-                            })
-                            .collect();
+                                }))
+                            }
+                        }
+                    })
+                })
+                .map_err(|_| ())
+        });
 
-                        future::join_all(fs)
-                    })
-                    .map(|_| ())
-                    .map_err(|e: FailureError| {
-                        error!("Error closing consumer {}", e);
-                    })
-                    .then(move |_| {
-                        let when = Instant::now() + Duration::from_millis(DELAY_BEFORE_RECONNECT);
-                        Delay::new(when)
-                    }),
-            );
-        }
+        let subscription = future::join_all(futures);
+        let _ = core.block_on(subscription);
     });
 
     api::start_server(config, publisher_clone);
