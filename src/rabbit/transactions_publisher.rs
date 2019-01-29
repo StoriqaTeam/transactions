@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
 use futures::future;
-use futures_cpupool::CpuPool;
-use lapin_futures::channel::{ExchangeDeclareOptions, QueueDeclareOptions};
+use lapin_futures::channel::{Channel, ExchangeDeclareOptions, QueueDeclareOptions};
 use lapin_futures::error::Error as LapinError;
-use r2d2::PooledConnection;
 use serde_json;
+use tokio::net::tcp::TcpStream;
 
 use super::error::*;
 use super::r2d2::RabbitConnectionManager;
-use super::r2d2::RabbitPool;
 use models::*;
 use prelude::*;
 
@@ -19,19 +17,13 @@ pub trait TransactionPublisher: Send + Sync + 'static {
 
 #[derive(Clone)]
 pub struct TransactionPublisherImpl {
-    rabbit_pool: RabbitPool,
-    thread_pool: CpuPool,
-    channel: Arc<PooledConnection<RabbitConnectionManager>>,
+    channel: Arc<Channel<TcpStream>>,
 }
 
 impl TransactionPublisherImpl {
-    pub fn new(rabbit_pool: RabbitPool, thread_pool: CpuPool) -> Self {
-        let channel = Arc::new(rabbit_pool.get().expect("Can not get channel from pool"));
-        Self {
-            rabbit_pool,
-            thread_pool,
-            channel,
-        }
+    pub fn new(rabbit_pool: RabbitConnectionManager) -> Self {
+        let channel = Arc::new(rabbit_pool.get_channel().expect("Can not get channel from pool"));
+        Self { channel }
     }
 
     pub fn init(&mut self, users: Vec<UserId>) -> impl Future<Item = (), Error = Error> {

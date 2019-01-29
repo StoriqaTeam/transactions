@@ -1,28 +1,22 @@
 use futures::future;
-use futures_cpupool::CpuPool;
-use lapin_futures::channel::BasicConsumeOptions;
-use lapin_futures::channel::Channel;
-use lapin_futures::channel::QueueDeclareOptions;
+use lapin_futures::channel::{BasicConsumeOptions, Channel, QueueDeclareOptions};
 use lapin_futures::consumer::Consumer;
 use lapin_futures::types::FieldTable;
-use r2d2::PooledConnection;
 use tokio::net::tcp::TcpStream;
 
 use super::error::*;
 use super::r2d2::RabbitConnectionManager;
-use super::r2d2::RabbitPool;
 use models::*;
 use prelude::*;
 
 #[derive(Clone)]
 pub struct TransactionConsumerImpl {
-    rabbit_pool: RabbitPool,
-    thread_pool: CpuPool,
+    rabbit_pool: RabbitConnectionManager,
 }
 
 impl TransactionConsumerImpl {
-    pub fn new(rabbit_pool: RabbitPool, thread_pool: CpuPool) -> Self {
-        Self { rabbit_pool, thread_pool }
+    pub fn new(rabbit_pool: RabbitConnectionManager) -> Self {
+        Self { rabbit_pool }
     }
 
     pub fn subscribe(&self) -> impl Future<Item = Vec<(Consumer<TcpStream>, Channel<TcpStream>)>, Error = Error> {
@@ -36,15 +30,9 @@ impl TransactionConsumerImpl {
         future::join_all(fs)
     }
 
-    fn get_channel(&self) -> impl Future<Item = PooledConnection<RabbitConnectionManager>, Error = Error> {
-        // unresolved at the moment - ideally we want to call get on other thread, since it's blocking
-        // on the other hand doing so we escape from the thread that has tokio core reference and
-        // therefore cannot do spawns
-        // let rabbit_pool = self.rabbit_pool.clone();
-        // self.thread_pool
-        //     .spawn_fn(move || rabbit_pool.get().map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal)))
+    fn get_channel(&self) -> impl Future<Item = Channel<TcpStream>, Error = Error> {
         self.rabbit_pool
-            .get()
+            .get_channel()
             .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
             .into_future()
     }

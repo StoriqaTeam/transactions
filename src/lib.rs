@@ -127,22 +127,14 @@ pub fn start_server() {
     debug!("Started creating rabbit connection pool");
 
     let mut core = tokio_core::reactor::Core::new().expect("Can not create tokio core");
-    let rabbit_thread_pool = futures_cpupool::CpuPool::new(config_clone.rabbit.thread_pool_size);
     let rabbit_connection_manager = core
         .run(RabbitConnectionManager::create(&config_clone))
         .map_err(|e| {
             log_error(&e);
         })
         .expect("Can not create rabbit connection manager");
-    let rabbit_connection_pool = r2d2::Pool::builder()
-        .max_size(config_clone.rabbit.connection_pool_size as u32)
-        .test_on_check_out(false)
-        .max_lifetime(None)
-        .idle_timeout(None)
-        .build(rabbit_connection_manager)
-        .expect("Cannot build rabbit connection pool");
-    debug!("Finished creating rabbit connection pool");
-    let mut publisher = TransactionPublisherImpl::new(rabbit_connection_pool.clone(), rabbit_thread_pool.clone());
+    debug!("Finished creating rabbit connection manager");
+    let mut publisher = TransactionPublisherImpl::new(rabbit_connection_manager.clone());
     core.run(
         db_executor
             .execute(move || -> Result<Vec<UserId>, ReposError> { users_repo.get_all().map(|u| u.into_iter().map(|u| u.id).collect()) })
@@ -172,7 +164,7 @@ pub fn start_server() {
         db_executor,
         publisher,
     );
-    let consumer = TransactionConsumerImpl::new(rabbit_connection_pool, rabbit_thread_pool);
+    let consumer = TransactionConsumerImpl::new(rabbit_connection_manager);
     thread::spawn(move || {
         let mut core = Runtime::new().expect("Can not create tokio core");
         let consumer_and_chans = core

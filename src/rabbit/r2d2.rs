@@ -4,26 +4,22 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use failure;
-use failure::Compat;
 use lapin_async::connection::ConnectionState;
 use lapin_futures::channel::{BasicQosOptions, Channel, ConfirmSelectOptions};
 use lapin_futures::client::{Client, ConnectionOptions, HeartbeatHandle};
 
 use prelude::*;
-use r2d2::{ManageConnection, Pool};
 use regex::Regex;
 use tokio::net::tcp::TcpStream;
 use tokio::timer::timeout::Timeout;
 
 use super::error::*;
 use config::Config;
-use utils::{format_error, log_error};
+use utils::log_error;
 
 // large limits may force RabbitMQ to close connection
 // (in case of socket buffer overflow)
-const CONSUMER_PREFETCH_COUNT: u16 = 10;
-const CHANNEL_IS_NOT_CONNECTED_MESSAGE: &'static str = "Channel is not connected";
-pub type RabbitPool = Pool<RabbitConnectionManager>;
+const CONSUMER_PREFETCH_COUNT: u16 = 3;
 
 #[derive(Clone)]
 pub struct RabbitConnectionManager {
@@ -140,72 +136,21 @@ impl RabbitConnectionManager {
             })
     }
 
-    fn is_broken_conn(&self) -> bool {
-        let cli = self.client.lock().unwrap();
-        let transport = cli.transport.lock().unwrap();
-        trace!("transport.conn.state: {:?}", transport.conn.state);
-        match transport.conn.state {
-            ConnectionState::Closing(_) | ConnectionState::Closed | ConnectionState::Error => true,
-            _ => false,
-        }
-    }
-
-    fn is_connecting_conn(&self) -> bool {
-        let cli = self.client.lock().unwrap();
-        let transport = cli.transport.lock().unwrap();
-        match transport.conn.state {
-            ConnectionState::Connecting(_) => true,
-            _ => false,
-        }
-    }
-}
-
-impl ManageConnection for RabbitConnectionManager {
-    type Connection = Channel<TcpStream>;
-    type Error = Compat<failure::Error>;
-    fn connect(&self) -> Result<Self::Connection, Self::Error> {
+    pub fn get_channel(&self) -> Result<Channel<TcpStream>, Error> {
         trace!("Creating rabbit channel...");
         let cli = self.client.lock().unwrap();
         let ch = cli
             .create_confirm_channel(ConfirmSelectOptions::default())
             .wait()
-            .map_err(ectx!(ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))
-            .map_err(|e: failure::Error| e.compat())?;
+            .map_err(ectx!(try ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))?;
         let _ = ch
             .basic_qos(BasicQosOptions {
                 prefetch_count: CONSUMER_PREFETCH_COUNT,
                 ..Default::default()
             })
             .wait()
-            .map_err(ectx!(ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))
-            .map_err(|e: failure::Error| e.compat())?;
+            .map_err(ectx!(try ErrorSource::Io, ErrorContext::RabbitChannel, ErrorKind::Internal))?;
         trace!("Rabbit channel is created");
         Ok(ch)
-    }
-    fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
-        trace!("Checking connection is valid");
-        if self.is_broken_conn() {
-            let e: Error = ectx!(err format_err!("Connection is broken"), ErrorKind::Internal);
-            let e: failure::Error = format_err!("{}", format_error(&e));
-            trace!("Connection is broken");
-            return Err(e.compat());
-        }
-        if self.is_connecting_conn() {
-            let e: Error = ectx!(err format_err!("Connection is in process of connecting"), ErrorKind::Internal);
-            let e: failure::Error = format_err!("{}", format_error(&e));
-            trace!("Connection is in process of connecting");
-            return Err(e.compat());
-        }
-        if !conn.is_connected() {
-            trace!("Connection is not connected");
-            let e: failure::Error = format_err!("{}", CHANNEL_IS_NOT_CONNECTED_MESSAGE);
-            return Err(e.compat());
-        }
-        trace!("Channel is ok");
-        Ok(())
-    }
-    fn has_broken(&self, conn: &mut Self::Connection) -> bool {
-        trace!("Connection is broken?");
-        self.is_valid(conn).is_err()
     }
 }
