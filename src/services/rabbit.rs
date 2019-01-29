@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use chrono::{Duration as ChronoDuration, Utc};
 use futures::future::{self, Either};
 
 use super::error::*;
@@ -441,8 +442,19 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
 
         let eth_fees_account_nonce = match (maybe_db_nonce, ethereum_nonce) {
             (None, ethereum_nonce) => ethereum_nonce,
-            // if for some reason we missed blockchain nonce
-            (Some(db_nonce), ethereum_nonce) => db_nonce.max(ethereum_nonce),
+            (Some(db_nonce), ethereum_nonce) => {
+                // if db nonce was updated more than a minute ago
+                // and it is not equal to blockchain nonce we use blockchain value
+                if Utc::now().naive_utc() - db_nonce.updated_at > ChronoDuration::seconds(60) {
+                    self.key_values_repo
+                        .set_nonce(tx_initiator.clone(), ethereum_nonce)
+                        .map_err(ectx!(try ErrorKind::Internal))?;
+                    ethereum_nonce
+                } else {
+                    // if for some reason we missed blockchain nonce (for example, new transaction was send wright before)
+                    db_nonce.value.as_u64().unwrap_or_default().max(ethereum_nonce)
+                }
+            }
         };
 
         let _ = self

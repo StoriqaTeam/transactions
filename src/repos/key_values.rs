@@ -8,7 +8,7 @@ use prelude::*;
 use schema::key_values::dsl::*;
 
 pub trait KeyValuesRepo: Send + Sync + 'static {
-    fn get_nonce(&self, address: BlockchainAddress) -> RepoResult<Option<u64>>;
+    fn get_nonce(&self, address: BlockchainAddress) -> RepoResult<Option<KeyValue>>;
     fn set_nonce(&self, address: BlockchainAddress, nonce: u64) -> RepoResult<u64>;
 }
 
@@ -16,18 +16,13 @@ pub trait KeyValuesRepo: Send + Sync + 'static {
 pub struct KeyValuesRepoImpl;
 
 impl KeyValuesRepo for KeyValuesRepoImpl {
-    fn get_nonce(&self, address: BlockchainAddress) -> RepoResult<Option<u64>> {
+    fn get_nonce(&self, address: BlockchainAddress) -> RepoResult<Option<KeyValue>> {
         with_tls_connection(|conn| {
             let key_ = format!("nonce:{}", address);
-            key_values
-                .filter(key.eq(key_))
-                .first(conn)
-                .optional()
-                .map(|maybe_kv: Option<KeyValue>| maybe_kv.and_then(|kv| kv.value.as_u64()))
-                .map_err(move |e| {
-                    let error_kind = ErrorKind::from(&e);
-                    ectx!(err e, error_kind => address)
-                })
+            key_values.filter(key.eq(key_)).first(conn).optional().map_err(move |e| {
+                let error_kind = ErrorKind::from(&e);
+                ectx!(err e, error_kind => address)
+            })
         })
     }
     fn set_nonce(&self, address: BlockchainAddress, nonce: u64) -> RepoResult<u64> {

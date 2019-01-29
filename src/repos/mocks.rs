@@ -429,10 +429,10 @@ pub struct KeyValuesRepoMock {
 }
 
 impl KeyValuesRepo for KeyValuesRepoMock {
-    fn get_nonce(&self, address: BlockchainAddress) -> RepoResult<Option<u64>> {
+    fn get_nonce(&self, address: BlockchainAddress) -> RepoResult<Option<KeyValue>> {
         let data = self.data.lock().unwrap();
         let key = format!("nonce:{}", address);
-        Ok(data.iter().filter(|x| x.key == key).nth(0).map(|kv| kv.value.as_u64().unwrap()))
+        Ok(data.iter().filter(|x| x.key == key).nth(0).cloned())
     }
     fn set_nonce(&self, address: BlockchainAddress, nonce: u64) -> RepoResult<u64> {
         let mut data = self.data.lock().unwrap();
