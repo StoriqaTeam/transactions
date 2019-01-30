@@ -7,7 +7,6 @@ use serde_json;
 use tokio::net::tcp::TcpStream;
 
 use super::error::*;
-use super::r2d2::RabbitConnectionManager;
 use models::*;
 use prelude::*;
 
@@ -21,15 +20,9 @@ pub struct TransactionPublisherImpl {
 }
 
 impl TransactionPublisherImpl {
-    pub fn new(rabbit_pool: RabbitConnectionManager) -> Self {
-        let channel = Arc::new(rabbit_pool.get_channel().expect("Can not get channel from pool"));
-        Self { channel }
-    }
-
-    pub fn init(&mut self, users: Vec<UserId>) -> impl Future<Item = (), Error = Error> {
+    pub fn init(channel: Arc<Channel<TcpStream>>, users: Vec<UserId>) -> impl Future<Item = Self, Error = Error> + Send {
         let mut f = vec![];
-        let channel = self.channel.clone();
-        let f1: Box<Future<Item = (), Error = LapinError>> = Box::new(channel.exchange_declare(
+        let f1: Box<Future<Item = (), Error = LapinError> + Send> = Box::new(channel.exchange_declare(
             "transactions",
             "direct",
             ExchangeDeclareOptions {
@@ -41,7 +34,7 @@ impl TransactionPublisherImpl {
         f.push(f1);
         for user in users {
             let queue_name = format!("transactions_{}", user);
-            let f2: Box<Future<Item = (), Error = LapinError>> = Box::new(
+            let f2: Box<Future<Item = (), Error = LapinError> + Send> = Box::new(
                 channel
                     .queue_declare(
                         &queue_name,
@@ -54,12 +47,12 @@ impl TransactionPublisherImpl {
                     .map(|_| ()),
             );
             f.push(f2);
-            let f3: Box<Future<Item = (), Error = LapinError>> =
+            let f3: Box<Future<Item = (), Error = LapinError> + Send> =
                 Box::new(channel.queue_bind(&queue_name, "transactions", &queue_name, Default::default(), Default::default()));
             f.push(f3);
         }
         future::join_all(f)
-            .map(|_| ())
+            .map(|_| Self { channel })
             .map_err(ectx!(ErrorSource::Lapin, ErrorKind::Internal))
     }
 }

@@ -56,7 +56,6 @@ mod utils;
 
 use std::str::FromStr;
 use std::sync::Arc;
-use std::thread;
 use std::time::{Duration, Instant};
 
 use diesel::pg::PgConnection;
@@ -64,7 +63,6 @@ use diesel::r2d2::ConnectionManager;
 use futures::future::{self, Either};
 use futures_cpupool::CpuPool;
 use tokio::prelude::*;
-use tokio::runtime::Runtime;
 use tokio::timer::{Delay, Timeout};
 use tokio_core::reactor::Core;
 
@@ -79,7 +77,6 @@ use self::repos::{
 };
 use client::{BlockchainClientImpl, KeysClient, KeysClientImpl};
 use config::{Config, System};
-use rabbit::{Error, ErrorKind};
 use rabbit::{RabbitConnectionManager, TransactionConsumerImpl, TransactionPublisherImpl};
 use services::BlockchainFetcher;
 use utils::log_error;
@@ -126,7 +123,7 @@ pub fn start_server() {
 
     debug!("Started creating rabbit connection pool");
 
-    let mut core = tokio_core::reactor::Core::new().expect("Can not create tokio core");
+    let mut core = Core::new().expect("Can not create tokio core");
     let rabbit_connection_manager = core
         .run(RabbitConnectionManager::create(&config_clone))
         .map_err(|e| {
@@ -134,22 +131,24 @@ pub fn start_server() {
         })
         .expect("Can not create rabbit connection manager");
     debug!("Finished creating rabbit connection manager");
-    let mut publisher = TransactionPublisherImpl::new(rabbit_connection_manager.clone());
-    core.run(
-        db_executor
-            .execute(move || -> Result<Vec<UserId>, ReposError> { users_repo.get_all().map(|u| u.into_iter().map(|u| u.id).collect()) })
-            .map_err(|e| {
-                log_error(&e);
-            })
-            .and_then(|users| {
-                publisher.init(users).map_err(|e| {
+    let channel = Arc::new(rabbit_connection_manager.get_channel().expect("Can not get channel from pool"));
+    let publisher = core
+        .run(
+            db_executor
+                .execute(move || -> Result<Vec<UserId>, ReposError> { users_repo.get_all().map(|u| u.into_iter().map(|u| u.id).collect()) })
+                .map_err(|e| {
                     log_error(&e);
                 })
-            }),
-    )
-    .expect("Can not create queue for transactions in rabbit");
+                .and_then(move |users| {
+                    TransactionPublisherImpl::init(channel, users).map_err(|e| {
+                        log_error(&e);
+                    })
+                }),
+        )
+        .expect("Can not create queue for transactions in rabbit");
     let publisher = Arc::new(publisher);
     let publisher_clone = publisher.clone();
+
     let fetcher = BlockchainFetcher::new(
         Arc::new(config_clone.clone()),
         transactions_repo,
@@ -162,57 +161,56 @@ pub fn start_server() {
         blockchain_client,
         keys_client,
         db_executor,
-        publisher,
+        publisher_clone,
     );
     let consumer = TransactionConsumerImpl::new(rabbit_connection_manager);
-    thread::spawn(move || {
-        let mut core = Runtime::new().expect("Can not create tokio core");
-        let consumer_and_chans = core
-            .block_on(consumer.subscribe())
-            .expect("Can not create subscribers for transactions in rabbit");
-        debug!("Subscribing to rabbit");
-        let fetcher_clone = fetcher.clone();
-        let timeout = config_clone.rabbit.restart_subscription_secs as u64;
-        let futures = consumer_and_chans.into_iter().map(move |(stream, channel)| {
-            let fetcher_clone = fetcher_clone.clone();
-            stream
-                .for_each(move |message| {
-                    trace!("got message: {}", MessageDelivery::new(message.clone()));
-                    let delivery_tag = message.delivery_tag;
-                    let channel = channel.clone();
-                    let fetcher_future = fetcher_clone.handle_message(message.data);
-                    let timeout = Duration::from_secs(timeout);
-                    Timeout::new(fetcher_future, timeout).then(move |res| {
-                        trace!("send result: {:?}", res);
-                        match res {
-                            Ok(_) => Either::A(channel.basic_ack(delivery_tag, false)),
-                            Err(e) => {
-                                let when = if let Some(inner) = e.into_inner() {
-                                    log_error(&inner);
-                                    Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK)
-                                } else {
-                                    let err: Error = ectx!(err format_err!("Timeout occured"), ErrorKind::Internal);
-                                    log_error(&err);
-                                    Instant::now() + Duration::from_millis(0)
-                                };
-                                Either::B(Delay::new(when).then(move |_| {
-                                    channel.basic_nack(delivery_tag, false, true).map_err(|e| {
-                                        error!("Error sending nack: {}", e);
-                                        e
-                                    })
-                                }))
-                            }
-                        }
-                    })
+    let consumer_and_chans = core
+        .run(consumer.subscribe())
+        .expect("Can not create subscribers for transactions in rabbit");
+    debug!("Subscribing to rabbit");
+    let fetcher_clone = fetcher.clone();
+    let timeout = config_clone.rabbit.restart_subscription_secs as u64;
+    let futures = consumer_and_chans.into_iter().map(move |(stream, channel)| {
+        let fetcher_clone = fetcher_clone.clone();
+        stream
+            .for_each(move |message| {
+                trace!("got message: {}", MessageDelivery::new(message.clone()));
+                let delivery_tag = message.delivery_tag;
+                let channel = channel.clone();
+                let fetcher_future = fetcher_clone.handle_message(message.data).then(move |res| match res {
+                    Ok(_) => Either::A(channel.basic_ack(delivery_tag, false).map_err(|e| {
+                        error!("Error sending ack: {}", e);
+                        e
+                    })),
+                    Err(e) => {
+                        log_error(&e);
+                        Either::B(
+                            Delay::new(Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK)).then(move |_| {
+                                channel.basic_nack(delivery_tag, false, true).map_err(|e| {
+                                    error!("Error sending nack: {}", e);
+                                    e
+                                })
+                            }),
+                        )
+                    }
+                });
+                let timeout = Duration::from_secs(timeout);
+                Timeout::new(fetcher_future, timeout).then(move |res| {
+                    trace!("send result: {:?}", res);
+                    if let Err(e) = res {
+                        error!("Error during message handling {}", e);
+                    }
+                    future::ok(())
                 })
-                .map_err(|_| ())
-        });
-
-        let subscription = future::join_all(futures);
-        let _ = core.block_on(subscription);
+            })
+            .map_err(|e| {
+                error!("stream error: {}", e);
+            })
     });
 
-    api::start_server(config, publisher_clone);
+    let subscription = future::join_all(futures).map(|_| ());
+    core.handle().spawn(subscription);
+    api::start_server(core, config, publisher);
 }
 
 fn get_config() -> Config {
