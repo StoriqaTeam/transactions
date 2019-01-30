@@ -177,6 +177,7 @@ pub fn start_server() {
                 trace!("got message: {}", MessageDelivery::new(message.clone()));
                 let delivery_tag = message.delivery_tag;
                 let channel = channel.clone();
+                let channel_clone = channel.clone();
                 let fetcher_future = fetcher_clone.handle_message(message.data).then(move |res| match res {
                     Ok(_) => Either::A(channel.basic_ack(delivery_tag, false).map_err(|e| {
                         error!("Error sending ack: {}", e);
@@ -199,6 +200,12 @@ pub fn start_server() {
                     trace!("send result: {:?}", res);
                     if let Err(e) = res {
                         error!("Error during message handling {}", e);
+                        // if occured error - we reject all unacknowledged,
+                        // delivered messages up to and including the message specified in the delivery_tag
+                        let _ = channel_clone.basic_nack(delivery_tag, true, true).map_err(|e| {
+                            error!("Error sending nack: {}", e);
+                            e
+                        });
                     }
                     future::ok(())
                 })
