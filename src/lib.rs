@@ -202,12 +202,18 @@ pub fn start_server() {
                         error!("Error during message handling {}", e);
                         // if occured error - we reject all unacknowledged,
                         // delivered messages up to and including the message specified in the delivery_tag
-                        let _ = channel_clone.basic_nack(delivery_tag, true, true).map_err(|e| {
-                            error!("Error sending nack: {}", e);
-                            e
-                        });
+                        Either::A(
+                            channel_clone
+                                .basic_nack(delivery_tag, true, true)
+                                .map_err(|e| {
+                                    error!("Error sending nack: {}", e);
+                                    e
+                                })
+                                .then(|_| Ok(())),
+                        )
+                    } else {
+                        Either::B(future::ok(()))
                     }
-                    future::ok(())
                 })
             })
             .map_err(|e| {
