@@ -202,9 +202,10 @@ pub fn start_server() {
                         error!("Error during message handling {}", e);
                         // if occured error - we reject all unacknowledged,
                         // delivered messages up to and including the message specified in the delivery_tag
+                        // If the multiple field is true, and the delivery tag is zero, this indicates rejection of all outstanding messages.
                         Either::A(
                             channel_clone
-                                .basic_nack(delivery_tag, true, true)
+                                .basic_nack(0, true, true)
                                 .map_err(|e| {
                                     error!("Error sending nack: {}", e);
                                     e
