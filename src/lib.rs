@@ -177,44 +177,30 @@ pub fn start_server() {
                 trace!("got message: {}", MessageDelivery::new(message.clone()));
                 let delivery_tag = message.delivery_tag;
                 let channel = channel.clone();
-                let channel_clone = channel.clone();
-                let fetcher_future = fetcher_clone.handle_message(message.data).then(move |res| match res {
-                    Ok(_) => Either::A(channel.basic_ack(delivery_tag, false).map_err(|e| {
-                        error!("Error sending ack: {}", e);
-                        e
-                    })),
-                    Err(e) => {
-                        log_error(&e);
-                        Either::B(
-                            Delay::new(Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK)).then(move |_| {
-                                channel.basic_nack(delivery_tag, false, true).map_err(|e| {
-                                    error!("Error sending nack: {}", e);
-                                    e
-                                })
-                            }),
-                        )
-                    }
-                });
+                let fetcher_future = fetcher_clone.handle_message(message.data);
                 let timeout = Duration::from_secs(timeout);
-                Timeout::new(fetcher_future, timeout).then(move |res| {
-                    trace!("send result: {:?}", res);
-                    if let Err(e) = res {
-                        error!("Error during message handling {}", e);
-                        // if occured error - we reject all unacknowledged,
-                        // delivered messages up to and including the message specified in the delivery_tag
-                        Either::A(
-                            channel_clone
-                                .basic_nack(delivery_tag, true, true)
-                                .map_err(|e| {
-                                    error!("Error sending nack: {}", e);
-                                    e
-                                })
-                                .then(|_| Ok(())),
-                        )
-                    } else {
-                        Either::B(future::ok(()))
-                    }
-                })
+                Timeout::new(fetcher_future, timeout)
+                    .then(move |res| match res {
+                        Ok(_) => Either::A(channel.basic_ack(delivery_tag, false).map_err(|e| {
+                            error!("Error sending ack: {}", e);
+                            e
+                        })),
+                        Err(e) => {
+                            error!("Error during message handling: {}", e);
+                            Either::B(
+                                Delay::new(Instant::now() + Duration::from_millis(DELAY_BEFORE_NACK)).then(move |_| {
+                                    channel.basic_nack(0, true, true).map_err(|e| {
+                                        error!("Error sending nack: {}", e);
+                                        e
+                                    })
+                                }),
+                            )
+                        }
+                    })
+                    .then(move |res| {
+                        trace!("send result: {:?}", res);
+                        Ok(())
+                    })
             })
             .map_err(|e| {
                 error!("stream error: {}", e);

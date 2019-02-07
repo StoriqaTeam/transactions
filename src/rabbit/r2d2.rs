@@ -19,7 +19,7 @@ use utils::log_error;
 
 // large limits may force RabbitMQ to close connection
 // (in case of socket buffer overflow)
-const CONSUMER_PREFETCH_COUNT: u16 = 10;
+const CONSUMER_PREFETCH_COUNT: u16 = 1;
 
 #[derive(Clone)]
 pub struct RabbitConnectionManager {
@@ -146,6 +146,7 @@ impl RabbitConnectionManager {
         let _ = ch
             .basic_qos(BasicQosOptions {
                 prefetch_count: CONSUMER_PREFETCH_COUNT,
+                global: true,
                 ..Default::default()
             })
             .wait()
