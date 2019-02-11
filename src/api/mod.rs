@@ -278,7 +278,9 @@ pub fn server(config: Config, publisher: Arc<dyn TransactionPublisher>) -> Box<F
             server
         })
         .map(|_| ())
-        .map_err(|e: Error| { log_error(&e); });
+        .map_err(|e: Error| {
+            log_error(&e);
+        });
 
     Box::new(fut)
 }
