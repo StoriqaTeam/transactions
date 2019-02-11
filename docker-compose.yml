@@ -23,6 +23,7 @@ services:
     stdin_open: true
     depends_on:
       - transactions-pg
+      - transactions-rabbitmq
 
   transactions-pg:
     image: postgres:10
@@ -37,8 +38,18 @@ services:
     ports:
       - "5432"
 
+  transactions-rabbitmq:
+    image: rabbitmq:3-management
+    container_name: transactions-rabbitmq
+    volumes:
+      - stq-transactions-rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "5672"
+      - "15672"
+
 volumes:
   stq-transactions-postgres-data:
+  stq-transactions-rabbitmq-data:
 
 networks:
   default:
