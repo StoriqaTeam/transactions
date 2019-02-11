@@ -21,7 +21,7 @@ exchange_gateway_token = "/bFTJb8nn85j1fIAx+eJYiUUzWFMViN/515Y5cD1afU="
 exchange_gateway_user_id = "72034c43-546c-4b1b-b195-41c8c1ba47f4"
 
 [rabbit]
-url = "amqp://guest:guest@localhost:5672//?heartbeat=3&frame_max=131072"
+url = "amqp://guest:guest@transactions-rabbitmq:5672//?heartbeat=3&frame_max=131072"
 thread_pool_size = 2
 connection_timeout_secs = 10
 connection_pool_size = 10

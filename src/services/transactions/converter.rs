@@ -459,7 +459,7 @@ impl ConverterService for ConverterServiceImpl {
             TransactionGroupKind::WithdrawalMulti => self.convert_external_multi_transaction(transactions),
             TransactionGroupKind::Reversal => self.convert_reversal_transaction(transactions),
             TransactionGroupKind::Approval => {
-                return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions))
+                return Err(ectx!(err ErrorContext::InvalidTransactionStructure, ErrorKind::Internal => transactions));
             }
         }
         // // internal + withdrawal tx

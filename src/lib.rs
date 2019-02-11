@@ -63,6 +63,7 @@ use diesel::r2d2::ConnectionManager;
 use futures::future::{self, Either};
 use futures_cpupool::CpuPool;
 use tokio::prelude::*;
+use tokio::runtime::Runtime;
 use tokio::timer::{Delay, Timeout};
 use tokio_core::reactor::Core;
 
@@ -123,17 +124,17 @@ pub fn start_server() {
 
     debug!("Started creating rabbit connection pool");
 
-    let mut core = Core::new().expect("Can not create tokio core");
-    let rabbit_connection_manager = core
-        .run(RabbitConnectionManager::create(&config_clone))
+    let mut rt = Runtime::new().expect("Could not create tokio runtime");
+    let rabbit_connection_manager = rt
+        .block_on(RabbitConnectionManager::create(&config_clone))
         .map_err(|e| {
             log_error(&e);
         })
         .expect("Can not create rabbit connection manager");
     debug!("Finished creating rabbit connection manager");
     let channel = Arc::new(rabbit_connection_manager.get_channel().expect("Can not get channel from pool"));
-    let publisher = core
-        .run(
+    let publisher = rt
+        .block_on(
             db_executor
                 .execute(move || -> Result<Vec<UserId>, ReposError> { users_repo.get_all().map(|u| u.into_iter().map(|u| u.id).collect()) })
                 .map_err(|e| {
@@ -164,8 +165,8 @@ pub fn start_server() {
         publisher_clone,
     );
     let consumer = TransactionConsumerImpl::new(rabbit_connection_manager);
-    let consumer_and_chans = core
-        .run(consumer.subscribe())
+    let consumer_and_chans = rt
+        .block_on(consumer.subscribe())
         .expect("Can not create subscribers for transactions in rabbit");
     debug!("Subscribing to rabbit");
     let fetcher_clone = fetcher.clone();
@@ -208,8 +209,11 @@ pub fn start_server() {
     });
 
     let subscription = future::join_all(futures).map(|_| ());
-    core.handle().spawn(subscription);
-    api::start_server(core, config, publisher);
+    rt.spawn(subscription);
+
+    rt.spawn(api::server(config, publisher));
+
+    rt.shutdown_on_idle().wait().expect("Tokio runtime shutdown failed");
 }
 
 fn get_config() -> Config {
