@@ -74,22 +74,24 @@ impl ClassifierServiceImpl {
         let spending = spending
             .checked_add(from_value)
             .ok_or(ectx!(try err ErrorContext::BalanceOverflow, ErrorKind::Internal))?;
-        let limit = match account.currency {
-            Currency::Btc => self.btc_satoshi_limit,
-            Currency::Eth => self.eth_wei_limit,
-            Currency::Stq => self.stq_wei_limit,
+        if account.daily_limit_type == DailyLimitType::DefaultLimit {
+            let limit = match account.currency {
+                Currency::Btc => self.btc_satoshi_limit,
+                Currency::Eth => self.eth_wei_limit,
+                Currency::Stq => self.stq_wei_limit,
+            };
+            if spending > limit {
+                let mut errors = ValidationErrors::new();
+                let mut error = ValidationError::new("exceeded_daily_limit");
+                error.message = Some("daily limit for the account exceeded".into());
+                error.add_param("limit".into(), &limit.to_super_unit(account.currency).to_string());
+                error.add_param("currency".into(), &account.currency.to_string().to_uppercase());
+                errors.add("value", error);
+                return Err(
+                    ectx!(err ErrorContext::LimitExceeded, ErrorKind::InvalidInput(serde_json::to_string(&errors).unwrap_or_default()) => spending, limit),
+                );
+            }
         };
-        if spending > limit {
-            let mut errors = ValidationErrors::new();
-            let mut error = ValidationError::new("exceeded_daily_limit");
-            error.message = Some("daily limit for the account exceeded".into());
-            error.add_param("limit".into(), &limit.to_super_unit(account.currency).to_string());
-            error.add_param("currency".into(), &account.currency.to_string().to_uppercase());
-            errors.add("value", error);
-            return Err(
-                ectx!(err ErrorContext::LimitExceeded, ErrorKind::InvalidInput(serde_json::to_string(&errors).unwrap_or_default()) => spending, limit),
-            );
-        }
         Ok(())
     }
 

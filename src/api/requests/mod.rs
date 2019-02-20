@@ -41,6 +41,7 @@ pub struct PostAccountsRequest {
     pub user_id: UserId,
     pub currency: Currency,
     pub name: String,
+    pub daily_limit_type: Option<DailyLimitType>,
 }
 
 impl From<PostAccountsRequest> for CreateAccount {
@@ -50,6 +51,7 @@ impl From<PostAccountsRequest> for CreateAccount {
             name: req.name,
             currency: req.currency,
             user_id: req.user_id,
+            daily_limit_type: req.daily_limit_type,
         }
     }
 }

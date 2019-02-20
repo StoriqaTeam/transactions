@@ -17,6 +17,7 @@ pub struct Account {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub erc20_approved: bool,
+    pub daily_limit_type: DailyLimitType,
 }
 
 impl Default for Account {
@@ -31,6 +32,7 @@ impl Default for Account {
             created_at: ::chrono::Utc::now().naive_utc(),
             updated_at: ::chrono::Utc::now().naive_utc(),
             erc20_approved: false,
+            daily_limit_type: DailyLimitType::DefaultLimit,
         }
     }
 }
@@ -60,6 +62,7 @@ pub struct NewAccount {
     #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
     pub name: Option<String>,
     pub kind: AccountKind,
+    pub daily_limit_type: Option<DailyLimitType>,
 }
 
 impl Default for NewAccount {
@@ -71,6 +74,7 @@ impl Default for NewAccount {
             currency: Currency::Eth,
             address: BlockchainAddress::default(),
             kind: AccountKind::Cr,
+            daily_limit_type: None,
         }
     }
 }
@@ -84,6 +88,7 @@ impl NewAccount {
             currency: self.currency,
             address: self.address.clone(),
             kind: AccountKind::Dr,
+            daily_limit_type: self.daily_limit_type,
         }
     }
 }
@@ -110,6 +115,7 @@ pub struct CreateAccount {
     pub currency: Currency,
     #[validate(length(min = "1", max = "40", message = "Name must not be empty "))]
     pub name: String,
+    pub daily_limit_type: Option<DailyLimitType>,
 }
 
 impl Default for CreateAccount {
@@ -119,6 +125,7 @@ impl Default for CreateAccount {
             user_id: UserId::generate(),
             currency: Currency::Eth,
             name: String::default(),
+            daily_limit_type: None,
         }
     }
 }
@@ -132,6 +139,7 @@ impl From<(CreateAccount, BlockchainAddress)> for NewAccount {
             currency: create.0.currency,
             kind: AccountKind::Cr,
             address: create.1,
+            daily_limit_type: create.0.daily_limit_type,
         }
     }
 }

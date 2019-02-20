@@ -534,6 +534,7 @@ fn upsert_system_account(
                         address: account_address.clone(),
                         name: Some(name.clone()),
                         kind: AccountKind::Cr,
+                        daily_limit_type: Some(DailyLimitType::Unlimited),
                     };
                     let dr_account_id = account_id.derive_system_dr_id();
                     let new_dr_account = NewAccount {
@@ -543,6 +544,7 @@ fn upsert_system_account(
                         address: account_address.clone(),
                         name: Some(format!("{}_deposit", name.clone())),
                         kind: AccountKind::Dr,
+                        daily_limit_type: Some(DailyLimitType::Unlimited),
                     };
                     accounts_repo.create(new_cr_account)?;
                     accounts_repo.create(new_dr_account)?;
