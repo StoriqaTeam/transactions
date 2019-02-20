@@ -9,6 +9,7 @@ table! {
         created_at -> Timestamp,
         updated_at -> Timestamp,
         erc20_approved -> Bool,
+        daily_limit_type -> Varchar,
     }
 }
 

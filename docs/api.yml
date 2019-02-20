@@ -659,6 +659,10 @@ components:
           type: string
           description: Short name for the account
           example: My main account
+        dailyLimitType:
+          type: string
+          enum: [defaultlimit|unlimited]
+          example: defaultlimit
     AccountUpdateInput:
       type: object
       required:
