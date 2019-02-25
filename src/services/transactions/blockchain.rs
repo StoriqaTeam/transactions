@@ -26,7 +26,7 @@ pub trait BlockchainService: Send + Sync + 'static {
         to: BlockchainAddress,
         value: Amount,
         fee_price: f64,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error>>;
+    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
     fn create_ethereum_tx(
         &self,
         from: BlockchainAddress,
@@ -34,13 +34,13 @@ pub trait BlockchainService: Send + Sync + 'static {
         value: Amount,
         fee_price: f64,
         currency: Currency,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error>>;
+    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send>;
     fn estimate_withdrawal_fee(
         &self,
         input_gross_fee: Amount,
         input_fee_currency: Currency,
         withdrawal_currency: Currency,
-    ) -> Box<Future<Item = FeeEstimate, Error = Error>>;
+    ) -> Box<Future<Item = FeeEstimate, Error = Error> + Send>;
 }
 
 #[derive(Clone)]
@@ -87,7 +87,7 @@ impl<E: DbExecutor> BlockchainService for BlockchainServiceImpl<E> {
         input_gross_fee: Amount,
         input_fee_currency: Currency,
         withdrawal_currency: Currency,
-    ) -> Box<Future<Item = FeeEstimate, Error = Error>> {
+    ) -> Box<Future<Item = FeeEstimate, Error = Error> + Send> {
         let estimate_currency = match withdrawal_currency {
             Currency::Btc => Currency::Btc,
             Currency::Eth => Currency::Eth,
@@ -120,7 +120,7 @@ impl<E: DbExecutor> BlockchainService for BlockchainServiceImpl<E> {
                             exchange_client
                                 .rate(input_rate.clone(), Role::System)
                                 .map_err(ectx!(ErrorKind::Internal => input_rate))
-                                .map(|Rate { rate, .. }| {
+                                .map(move |Rate { rate, .. }| {
                                     total_blockchain_fee_native_currency.convert(input_fee_currency, estimate_currency, rate)
                                 }),
                         )
@@ -154,7 +154,7 @@ impl<E: DbExecutor> BlockchainService for BlockchainServiceImpl<E> {
         to: BlockchainAddress,
         value: Amount,
         fee_price: f64,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error>> {
+    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         let from_clone = from.clone();
         let db_executor = self.db_executor.clone();
         let blockchain_client = self.blockchain_client.clone();
@@ -201,9 +201,11 @@ impl<E: DbExecutor> BlockchainService for BlockchainServiceImpl<E> {
         value: Amount,
         fee_price: f64,
         currency: Currency,
-    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error>> {
+    ) -> Box<Future<Item = BlockchainTransactionId, Error = Error> + Send> {
         let db_executor = self.db_executor.clone();
+        let db_executor_clone = self.db_executor.clone();
         let blockchain_client = self.blockchain_client.clone();
+        let blockchain_client_clone = self.blockchain_client.clone();
         let keys_client = self.keys_client.clone();
         let pending_blockchain_transactions_repo = self.pending_blockchain_transactions_repo.clone();
         let key_values_repo = self.key_values_repo.clone();
@@ -218,6 +220,7 @@ impl<E: DbExecutor> BlockchainService for BlockchainServiceImpl<E> {
                 ));
             }
         };
+        let from_clone = from.clone();
         Box::new(
             db_executor
                 .execute(move || match currency {
@@ -279,20 +282,20 @@ impl<E: DbExecutor> BlockchainService for BlockchainServiceImpl<E> {
                 })
                 .and_then(move |nonce| {
                     // creating blockchain transactions array
-                    let create_blockchain_input = CreateBlockchainTx::new(from, to, currency, value, fee_price, Some(nonce), None);
+                    let create_blockchain_input = CreateBlockchainTx::new(from_clone, to, currency, value, fee_price, Some(nonce), None);
 
                     let create_blockchain = create_blockchain_input.clone();
 
                     keys_client
                         .sign_transaction(create_blockchain_input.clone(), Role::User)
                         .map_err(ectx!(convert => create_blockchain_input))
-                        .and_then(|raw_tx| {
-                            blockchain_client
+                        .and_then(move |raw_tx| {
+                            blockchain_client_clone
                                 .post_ethereum_transaction(raw_tx.clone())
                                 .map_err(ectx!(convert => raw_tx))
                         })
                         .and_then(move |tx_id| {
-                            db_executor.execute(move || {
+                            db_executor_clone.execute(move || {
                                 let tx_id = match currency {
                                     Currency::Eth => tx_id,
                                     // Erc-20 token, we need event log number here, to make a tx_id unique

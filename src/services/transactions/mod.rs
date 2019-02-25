@@ -161,7 +161,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         create_tx_input: CreateTransactionInput,
         dr_account: Account,
         cr_account: Account,
-    ) -> impl Future<Item = Transaction, Error = Error> {
+    ) -> impl Future<Item = Transaction, Error = Error> + Send {
         let tx = NewTransaction {
             id: create_tx_input.id,
             gid: create_tx_input.id,
@@ -199,7 +199,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         // by default the fee is written off from_account. However you can override this
         // using this param
         fee_payer_account_id: Option<AccountId>,
-    ) -> impl Future<Item = Vec<Transaction>, Error = Error> {
+    ) -> impl Future<Item = Vec<Transaction>, Error = Error> + Send {
         if from_account.currency != to_currency {
             return Either::A(future::err(
                 ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => from_account, to_blockchain_address, to_currency),
@@ -215,6 +215,9 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         let system_service = self.system_service.clone();
         let blockchain_service = self.blockchain_service.clone();
         let self_clone = self.clone();
+        let user_id_clone = input.user_id.clone();
+        let from_account_clone = from_account.clone();
+        let input_fee = input.fee.clone();
         Either::B(self
             .blockchain_service
             .estimate_withdrawal_fee(input.fee, fee_currency, to_currency)
@@ -266,60 +269,67 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 })
             })
             .and_then(move |(fees_account, current_tx_id, withdrawal_accs_with_balance, fee_price_est)|{
-                let mut new_db_transactions: Vec<(NewTransaction, Account, Account)> = Vec::new();
-                futures::stream::iter_ok(withdrawal_accs_with_balance).fold((current_tx_id, new_db_transactions), move |(current_tx_id, acc_), AccountWithBalance {account: acc,balance: value}| {
+                let new_db_transactions: Vec<(NewTransaction, Account, Account)> = Vec::new();
+                futures::stream::iter_ok(withdrawal_accs_with_balance).fold((current_tx_id, new_db_transactions), move |(current_tx_id, mut acc_), AccountWithBalance {account: acc,balance: value}| {
                     let to = to_blockchain_address.clone();
+                    let acc_address = acc.address.clone();
+                    let gid = gid.clone();
+                    let user_id_clone = user_id_clone.clone();
+                    let from_account = from_account.clone();
+                    let to_currency = to_currency.clone();
+                    let tx_kind = tx_kind.clone();
+                    let tx_group_kind = tx_group_kind.clone();
                     match to_currency {
                         x if x == Currency::Eth || x == Currency::Stq =>
                             Either::A(blockchain_service
                             .create_ethereum_tx(acc.address.clone(), to.clone(), value, fee_price_est, x)
-                            .map_err(ectx!(ErrorKind::Internal => acc.address, to, value, fee_price_est, x))),
-                        Currency::Btc =>
+                            .map_err(ectx!(ErrorKind::Internal => acc_address, to, value, fee_price_est, x))),
+                        x if x == Currency::Btc =>
                             Either::B(blockchain_service
                             .create_bitcoin_tx(acc.address.clone(), to.clone(), value, fee_price_est)
-                            .map_err(ectx!(ErrorKind::Internal => acc.address, to, value, fee_price_est))),
-                    }.then(move |res|
-                    match res {
-                        Ok(blockchain_tx_id_res) => {
-                            current_tx_id = current_tx_id.next();
-                            let new_tx = NewTransaction {
-                                id: current_tx_id,
-                                gid,
-                                user_id: input.user_id,
-                                dr_account_id: from_account.id,
-                                cr_account_id: acc.id,
-                                currency: to_currency,
-                                value: value,
-                                status: TransactionStatus::Pending,
-                                blockchain_tx_id: Some(blockchain_tx_id_res),
-                                kind: tx_kind.unwrap_or(TransactionKind::Withdrawal),
-                                group_kind: tx_group_kind.unwrap_or(TransactionGroupKind::Withdrawal),
-                                related_tx: None,
-                                meta: None,
-                            };
-                            acc_.push((new_tx, from_account.clone(), acc.clone()));
-                            Ok((current_tx_id, acc_))
-                        },
-                        Err(e) => {
-                            log_and_capture_error(e);
-                            Err((e, acc_))
+                            .map_err(ectx!(ErrorKind::Internal => acc_address, to, value, fee_price_est))),
+                        _ => unreachable!()
+                    }.then(move |res| {
+                        match res {
+                            Ok(blockchain_tx_id_res) => {
+                                let current_tx_id = current_tx_id.next();
+                                let new_tx = NewTransaction {
+                                    id: current_tx_id,
+                                    gid,
+                                    user_id: user_id_clone.clone(),
+                                    dr_account_id: from_account.id.clone(),
+                                    cr_account_id: acc.id.clone(),
+                                    currency: to_currency,
+                                    value: value,
+                                    status: TransactionStatus::Pending,
+                                    blockchain_tx_id: Some(blockchain_tx_id_res),
+                                    kind: tx_kind.unwrap_or(TransactionKind::Withdrawal),
+                                    group_kind: tx_group_kind.unwrap_or(TransactionGroupKind::Withdrawal),
+                                    related_tx: None,
+                                    meta: None,
+                                };
+                                acc_.push((new_tx, from_account.clone(), acc.clone()));
+                                Ok((current_tx_id, acc_))
+                            },
+                            Err(e) => {
+                                Err((e, acc_))
+                            }
                         }
-                    }
-                    )
+                    })
                 })
                 .then(move |res| {
                     match res {
                         Ok((_, new_db_transactions)) =>
-                        Either::A(db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
+                        Either::A(db_executor_.execute_transaction_with_isolation(Isolation::Serializable, move || {
                             let mut result = vec![];
                             let fee_tx = NewTransaction {
                                 id: current_tx_id,
                                 gid,
-                                user_id: input.user_id,
-                                dr_account_id: fee_payer_account_id.unwrap_or(from_account.id),
+                                user_id: user_id_clone.clone(),
+                                dr_account_id: fee_payer_account_id.unwrap_or(from_account_clone.id),
                                 cr_account_id: fees_account.id,
                                 currency: fee_currency,
-                                value: input.fee,
+                                value: input_fee,
                                 status: TransactionStatus::Done,
                                 blockchain_tx_id: None,
                                 kind: TransactionKind::Fee,
@@ -328,7 +338,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                                 meta: None,
                             };
                             // first - we are adding fee transaction
-                            result.push(self_clone.create_base_tx(fee_tx, from_account.clone(), fees_account.clone())?);
+                            result.push(self_clone.create_base_tx(fee_tx, from_account_clone.clone(), fees_account.clone())?);
                             // adding all blockchain transactions
                             for (new_tx, dr, cr) in new_db_transactions {
                                 result.push(self_clone.create_base_tx(new_tx, dr, cr)?);
@@ -338,17 +348,18 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                         Err((e, new_db_transactions)) => Either::B({
                             // if we have more then zero db_transactions - so we have at least one blockchain transaction sent.
                             if new_db_transactions.len() > 0 {
-                                Either::A(db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
+                                log_and_capture_error(e);
+                                Either::A(db_executor_.execute_transaction_with_isolation(Isolation::Serializable, move || {
 
                                     let mut result = vec![];
                                     let fee_tx = NewTransaction {
                                         id: current_tx_id,
                                         gid,
-                                        user_id: input.user_id,
-                                        dr_account_id: fee_payer_account_id.unwrap_or(from_account.id),
+                                        user_id: user_id_clone.clone(),
+                                        dr_account_id: fee_payer_account_id.unwrap_or(from_account_clone.id),
                                         cr_account_id: fees_account.id,
                                         currency: fee_currency,
-                                        value: input.fee,
+                                        value: input_fee,
                                         status: TransactionStatus::Done,
                                         blockchain_tx_id: None,
                                         kind: TransactionKind::Fee,
@@ -357,7 +368,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                                         meta: None,
                                     };
                                     // first - we are adding fee transaction
-                                    result.push(self_clone.create_base_tx(fee_tx, from_account.clone(), fees_account.clone())?);
+                                    result.push(self_clone.create_base_tx(fee_tx, from_account_clone.clone(), fees_account.clone())?);
                                     // adding all blockchain transactions successfully sent
                                     for (new_tx, dr, cr) in new_db_transactions {
                                         result.push(self_clone.create_base_tx(new_tx, dr, cr)?);
@@ -380,72 +391,10 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
         to_account: Account,
         exchange_id: ExchangeId,
         exchange_rate: f64,
-    ) -> Result<Vec<Transaction>, Error> {
-        let mut res: Vec<Transaction> = Vec::new();
-
-        let (from_value, to_value) = if from_account.currency == input.value_currency {
-            (
-                input.value,
-                input.value.convert(from_account.currency, to_account.currency, exchange_rate),
-            )
-        } else if to_account.currency == input.value_currency {
-            (
-                input.value.convert(to_account.currency, from_account.currency, 1.0 / exchange_rate),
-                input.value,
-            )
-        } else {
-            return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => input, from_account, to_account));
-        };
-
-        let current_tx_id = input.id;
-
-        // Moving money from `from` account to system liquidity account
-        let from_acct_currency = from_account.currency.clone();
-        let from_counterpart_acc = self
-            .system_service
-            .get_system_liquidity_account(from_acct_currency.clone())
-            .map_err(ectx!(try ErrorKind::Internal => from_acct_currency))?;
-        let from_tx = NewTransaction {
-            id: current_tx_id,
-            gid: input.id,
-            user_id: input.user_id,
-            dr_account_id: from_account.id,
-            cr_account_id: from_counterpart_acc.id,
-            currency: from_account.currency,
-            value: from_value,
-            status: TransactionStatus::Done,
-            blockchain_tx_id: None,
-            kind: TransactionKind::MultiFrom,
-            group_kind: TransactionGroupKind::InternalMulti,
-            related_tx: None,
-            meta: None,
-        };
-        res.push(self.create_base_tx(from_tx, from_account.clone(), from_counterpart_acc)?);
-
-        // Moving money from system liquidity account to `to` account
-        let current_tx_id = current_tx_id.next();
-        let to_acct_currency = to_account.currency.clone();
-        let to_counterpart_acc = self
-            .system_service
-            .get_system_liquidity_account(to_acct_currency.clone())
-            .map_err(ectx!(try ErrorKind::Internal => to_acct_currency))?;
-        let to_tx = NewTransaction {
-            id: current_tx_id,
-            gid: input.id,
-            user_id: input.user_id,
-            dr_account_id: to_counterpart_acc.id,
-            cr_account_id: to_account.id,
-            currency: to_account.currency,
-            value: to_value,
-            status: TransactionStatus::Done,
-            blockchain_tx_id: None,
-            kind: TransactionKind::MultiTo,
-            group_kind: TransactionGroupKind::InternalMulti,
-            related_tx: None,
-            meta: None,
-        };
-        res.push(self.create_base_tx(to_tx, to_counterpart_acc, to_account.clone())?);
-
+    ) -> impl Future<Item = Vec<Transaction>, Error = Error> + Send {
+        let db_executor = self.db_executor.clone();
+        let system_service = self.system_service.clone();
+        let self_clone = self.clone();
         let exchange_input = ExchangeInput {
             id: exchange_id,
             from: from_account.currency,
@@ -455,13 +404,76 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             amount_currency: input.value_currency,
         };
         let exchange_input_clone = exchange_input.clone();
-        let _ = self
-            .exchange_client
+        self.exchange_client
             .exchange(exchange_input, Role::User)
-            .map_err(ectx!(try convert => exchange_input_clone))
-            .wait()?;
+            .map_err(ectx!(convert => exchange_input_clone))
+            .and_then(move |_| {
+                db_executor.execute_transaction_with_isolation(Isolation::Serializable, move || {
+                    let mut res: Vec<Transaction> = Vec::new();
 
-        Ok(res)
+                    let (from_value, to_value) = if from_account.currency == input.value_currency {
+                        (
+                            input.value,
+                            input.value.convert(from_account.currency, to_account.currency, exchange_rate),
+                        )
+                    } else if to_account.currency == input.value_currency {
+                        (
+                            input.value.convert(to_account.currency, from_account.currency, 1.0 / exchange_rate),
+                            input.value,
+                        )
+                    } else {
+                        return Err(ectx!(err ErrorContext::InvalidCurrency, ErrorKind::Internal => input, from_account, to_account));
+                    };
+
+                    let current_tx_id = input.id;
+
+                    // Moving money from `from` account to system liquidity account
+                    let from_acct_currency = from_account.currency.clone();
+                    let from_counterpart_acc = system_service
+                        .get_system_liquidity_account(from_acct_currency.clone())
+                        .map_err(ectx!(try ErrorKind::Internal => from_acct_currency))?;
+                    let from_tx = NewTransaction {
+                        id: current_tx_id,
+                        gid: input.id,
+                        user_id: input.user_id,
+                        dr_account_id: from_account.id,
+                        cr_account_id: from_counterpart_acc.id,
+                        currency: from_account.currency,
+                        value: from_value,
+                        status: TransactionStatus::Done,
+                        blockchain_tx_id: None,
+                        kind: TransactionKind::MultiFrom,
+                        group_kind: TransactionGroupKind::InternalMulti,
+                        related_tx: None,
+                        meta: None,
+                    };
+                    res.push(self_clone.create_base_tx(from_tx, from_account.clone(), from_counterpart_acc)?);
+
+                    // Moving money from system liquidity account to `to` account
+                    let current_tx_id = current_tx_id.next();
+                    let to_acct_currency = to_account.currency.clone();
+                    let to_counterpart_acc = system_service
+                        .get_system_liquidity_account(to_acct_currency.clone())
+                        .map_err(ectx!(try ErrorKind::Internal => to_acct_currency))?;
+                    let to_tx = NewTransaction {
+                        id: current_tx_id,
+                        gid: input.id,
+                        user_id: input.user_id,
+                        dr_account_id: to_counterpart_acc.id,
+                        cr_account_id: to_account.id,
+                        currency: to_account.currency,
+                        value: to_value,
+                        status: TransactionStatus::Done,
+                        blockchain_tx_id: None,
+                        kind: TransactionKind::MultiTo,
+                        group_kind: TransactionGroupKind::InternalMulti,
+                        related_tx: None,
+                        meta: None,
+                    };
+                    res.push(self_clone.create_base_tx(to_tx, to_counterpart_acc, to_account.clone())?);
+                    Ok(res)
+                })
+            })
     }
 
     // #[allow(dead_code)]
@@ -520,6 +532,8 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
         let publisher = self.publisher.clone();
         let self_clone = self.clone();
         let self_clone2 = self.clone();
+        let self_clone3 = self.clone();
+        let input_clone = input.clone();
         Box::new(
             self.auth_service
                 .authenticate(token.clone())
@@ -530,13 +544,16 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                             self_clone.classifier_service.validate_and_classify_transaction(&input)
                         })
                         .and_then(move |tx_type| {
+                            type BoxedFuture = Box<Future<Item = Vec<Transaction>, Error = Error> + Send>;
                             match tx_type.clone() {
-                                TransactionType::Internal(from_account, to_account) => self_clone
-                                    .create_internal_mono_currency_tx(input, from_account, to_account)
-                                    .map(|tx| vec![tx]),
-                                TransactionType::Withdrawal(from_account, to_blockchain_address, currency) => self_clone
-                                    .create_external_mono_currency_tx(
-                                        input,
+                                TransactionType::Internal(from_account, to_account) => Box::new(
+                                    self_clone3
+                                        .create_internal_mono_currency_tx(input_clone, from_account, to_account)
+                                        .map(|tx| vec![tx]),
+                                ) as BoxedFuture,
+                                TransactionType::Withdrawal(from_account, to_blockchain_address, currency) => {
+                                    Box::new(self_clone3.create_external_mono_currency_tx(
+                                        input_clone,
                                         from_account,
                                         to_blockchain_address,
                                         currency,
@@ -545,9 +562,11 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                                         None,
                                         None,
                                         None,
-                                    ),
+                                    )) as BoxedFuture
+                                }
                                 TransactionType::InternalExchange(from, to, exchange_id, rate) => {
-                                    self_clone.create_internal_multi_currency_tx(input, from, to, exchange_id, rate)
+                                    Box::new(self_clone3.create_internal_multi_currency_tx(input_clone, from, to, exchange_id, rate))
+                                        as BoxedFuture
                                 }
                                 TransactionType::WithdrawalExchange(_from, _to_blockchain_address, _to_currency, _exchange_id, _rate) => {
                                     // This function is implemented but not tested. For now we disable it,
@@ -560,7 +579,7 @@ impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {
                                     //     exchange_id,
                                     //     rate,
                                     // )
-                                    Err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput))
+                                    Box::new(future::err(ectx!(err ErrorContext::NotSupported, ErrorKind::MalformedInput))) as BoxedFuture
                                 }
                             }
                             .map(|tx_group| (tx_group, tx_type))
