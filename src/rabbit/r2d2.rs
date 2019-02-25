@@ -5,7 +5,6 @@ use std::thread;
 use std::time::Duration;
 
 use failure;
-use lapin_async::connection::ConnectionState;
 use lapin_futures::channel::{BasicQosOptions, Channel, ConfirmSelectOptions};
 use lapin_futures::client::{Client, ConnectionOptions, HeartbeatHandle};
 use tokio_core::reactor::Core;
@@ -21,7 +20,7 @@ use utils::log_error;
 
 // large limits may force RabbitMQ to close connection
 // (in case of socket buffer overflow)
-const CONSUMER_PREFETCH_COUNT: u16 = 1;
+const CONSUMER_PREFETCH_COUNT: u16 = 10;
 
 #[derive(Clone)]
 pub struct RabbitConnectionManager {
@@ -125,15 +124,12 @@ impl RabbitConnectionManager {
             .and_then(move |(client, mut heartbeat)| {
                 info!("Connected to rabbit");
                 let handle = heartbeat.handle();
-                let client_clone = client.clone();
                 // due to lapin docs heartbeat must be run on another thread
                 thread::spawn(move || {
                     let mut core = Core::new().unwrap();
                     let _ = core.run(heartbeat.map_err(move |e| {
                         let e: Error = ectx!(err e, ErrorContext::Heartbeat, ErrorKind::Internal);
                         log_error(&e);
-                        let mut transport = client_clone.transport.lock().unwrap();
-                        transport.conn.state = ConnectionState::Error;
                     }));
                 });
                 handle
