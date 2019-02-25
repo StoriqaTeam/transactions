@@ -107,6 +107,7 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
             pending_transactions_repo.clone(),
             key_values_repo.clone(),
             system_service.clone(),
+            db_executor.clone(),
         ));
         let converter_service = Arc::new(ConverterServiceImpl::new(
             accounts_repo.clone(),
