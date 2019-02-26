@@ -11,7 +11,7 @@ pipeline:
 ###
 
   test:
-    image: rust:1.31-stretch
+    image: rust:1.32-stretch
     environment:
     - RUN_MODE=test
     - DATABASE_HOST=db-postgresql
@@ -42,7 +42,7 @@ pipeline:
 ###
 
   build:
-    image: rust:1.31-stretch
+    image: rust:1.32-stretch
     environment:
     - CARGO_HOME=deps
     commands:
@@ -52,7 +52,7 @@ pipeline:
     when:
       event: push
   build:
-    image: rust:1.31-stretch
+    image: rust:1.32-stretch
     environment:
     - CARGO_HOME=deps
     commands:
