@@ -475,51 +475,6 @@ impl<E: DbExecutor> TransactionsServiceImpl<E> {
                 })
             })
     }
-
-    // #[allow(dead_code)]
-    // fn create_external_multi_currency_tx(
-    //     &self,
-    //     input: CreateTransactionInput,
-    //     from_account: Account,
-    //     to_blockchain_address: BlockchainAddress,
-    //     to_currency: Currency,
-    //     exchange_id: ExchangeId,
-    //     exchange_rate: f64,
-    // ) -> Result<Vec<Transaction>, Error> {
-    //     let transfer_account = self.system_service.get_system_transfer_account(to_currency)?;
-    //     let mut res: Vec<Transaction> = Vec::new();
-    //     let txs = self.create_internal_multi_currency_tx(
-    //         input.clone(),
-    //         from_account.clone(),
-    //         transfer_account.clone(),
-    //         exchange_id,
-    //         exchange_rate,
-    //     )?;
-    //     let withdrawal_value = txs.iter().find(|tx| tx.kind == TransactionKind::MultiTo).unwrap().value;
-    //     res.extend(txs.into_iter());
-    //     let gid = input.id;
-    //     let id = input.id.next().next(); // create_internal_multi_currency_tx took 2 ids
-    //     let input = CreateTransactionInput {
-    //         id,
-    //         from: transfer_account.id,
-    //         value: withdrawal_value,
-    //         value_currency: to_currency,
-    //         ..input
-    //     };
-    //     let txs = self.create_external_mono_currency_tx(
-    //         input,
-    //         transfer_account,
-    //         to_blockchain_address,
-    //         to_currency,
-    //         Some(gid),
-    //         Some(TransactionKind::Withdrawal),
-    //         Some(TransactionGroupKind::WithdrawalMulti),
-    //         Some(from_account.currency),
-    //         Some(from_account.id),
-    //     )?;
-    //     res.extend(txs.into_iter());
-    //     Ok(res)
-    // }
 }
 
 impl<E: DbExecutor> TransactionsService for TransactionsServiceImpl<E> {

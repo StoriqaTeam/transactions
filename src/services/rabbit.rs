@@ -186,9 +186,6 @@ impl<E: DbExecutor> BlockchainFetcher<E> {
                                 };
                                 accounts_repo.update(account.id, changeset.clone())?;
                                 // We don't need the notion of approved credit account anymore, as all debit accounts get approved
-                                // if let Some(cr_account) = self.accounts_repo.get_by_address(from, Currency::Stq, AccountKind::Cr)? {
-                                //     self.accounts_repo.update(cr_account.id, changeset)?;
-                                // }
                                 blockchain_transactions_repo.create(blockchain_tx.clone().into())?;
                                 pending_blockchain_transactions_repo.delete(blockchain_tx.hash.clone())?;
                                 seen_hashes_repo.create(NewSeenHashes {
